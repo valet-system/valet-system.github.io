@@ -1,0 +1,52 @@
+project_id = "valet-system"
+
+# ═══════════════════════════════════════════════════════════════════════
+# EDGE FUNCTIONS
+#
+# verify_jwt controls whether SUPABASE'S GATEWAY checks the JWT before our
+# code runs at all.
+# ═══════════════════════════════════════════════════════════════════════
+
+[functions.admin-users]
+# verify_jwt = false — and this is deliberate, not a shortcut.
+#
+# WHY: a browser does NOT send the Authorization header on a CORS preflight.
+# That is per spec — preflights are deliberately credential-free. So with
+# verify_jwt = true the gateway can reject the OPTIONS request for having no
+# token, and the browser reports it as:
+#
+#   "Response to preflight request doesn't pass access control check:
+#    It does not have HTTP ok status"
+#
+# which reads like a CORS bug and sends you hunting through response headers
+# that are already correct.
+#
+# THE FUNCTION STILL VERIFIES THE JWT ITSELF. identifyCaller() in
+# _shared/caller.ts calls admin.auth.getUser(jwt), which asks GoTrue to check
+# the token's SIGNATURE server-side, then reads the caller's role from the
+# database. An unauthenticated request reaches our code and is answered with
+# 401 immediately.
+#
+# >>> If you ever edit admin-users, identifyCaller() MUST stay as the first
+# >>> thing every action does. With verify_jwt = false it is the ONLY thing
+# >>> standing between this endpoint and the internet.
+verify_jwt = false
+
+
+# ── Not built yet. Listed so the intent is recorded. ──────────────────
+
+[functions.wa-send]
+# Called from the browser, so the same preflight reasoning applies. It will
+# verify the caller in code.
+verify_jwt = false
+
+[functions.wa-webhook]
+# Meta calls this server-to-server. Meta has no Supabase JWT, so verification
+# must be off — there is no alternative here. Authenticity is proven instead by
+# the X-Hub-Signature-256 HMAC, which the function checks before doing anything
+# with the payload.
+verify_jwt = false
+
+[functions.wa-dispatch]
+# Drains public.wa_outbox. Invoked by a scheduler, not by a user.
+verify_jwt = false

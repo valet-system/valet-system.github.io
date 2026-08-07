@@ -1,0 +1,226 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ══════════════════════════════════════════════════════════════════
+   DESIGN TOKENS
+   Values are "R G B" (space separated, no rgb() wrapper) so Tailwind
+   can inject an alpha channel: bg-brand/10 works, and so does
+   text-brand. See tailwind.config.js.
+
+   Palette intent: near-black navy for chrome and primary actions
+   (reads as premium hospitality software, not a consumer app), a
+   restrained gold reserved exclusively for VIP, and a single saturated
+   colour per status so an operator can read a card at arm's length.
+   ══════════════════════════════════════════════════════════════════ */
+:root {
+  /* Surfaces */
+  --c-surface:        255 255 255;
+  --c-surface-sunken: 246 247 249;
+  --c-surface-raised: 255 255 255;
+
+  /* Text. 4 steps is enough; more than that and hierarchy turns to mush. */
+  --c-ink:         15  23  42;   /* headings, numbers          */
+  --c-ink-muted:   71  85 105;   /* body copy                  */
+  --c-ink-subtle: 130 141 158;   /* labels, timestamps, hints  */
+  --c-ink-inverse:248 250 252;   /* on dark surfaces           */
+
+  /* Borders */
+  --c-line:        226 232 240;
+  --c-line-strong: 203 213 225;
+
+  /* Brand — primary actions and app chrome */
+  --c-brand:       15  23  42;
+  --c-brand-hover: 30  41  59;
+  --c-brand-soft: 241 245 249;
+
+  /* Gold — VIP only. Using it anywhere else destroys its signal value. */
+  --c-accent:      180 118   9;
+  --c-accent-soft: 254 247 224;
+
+  /* Semantic */
+  --c-success:       5 150 105;
+  --c-success-hover: 4 120  87;
+  --c-success-soft:236 253 245;
+
+  --c-danger:      220  38  38;
+  --c-danger-hover:185  28  28;
+  --c-danger-soft: 254 242 242;
+
+  --c-warning:     217 119   6;
+  --c-warning-soft:255 251 235;
+
+  --c-info:         37  99 235;
+  --c-info-soft:   239 246 255;
+
+  --c-vip:         180 118   9;
+  --c-vip-soft:    254 247 224;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   BASE
+   ══════════════════════════════════════════════════════════════════ */
+@layer base {
+  * {
+    @apply border-line;
+  }
+
+  html {
+    /* Operators tap fast and repeatedly; the 300ms tap highlight and
+       double-tap-to-zoom delay both feel like the app is lagging. */
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    /* Prevent iOS Safari from inflating text in landscape. */
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /**
+   * ── NEVER SCROLL SIDEWAYS ──────────────────────────────────────────────
+   *
+   * On html AND body, both with `clip`. Every part of that was arrived at by
+   * measurement, and every simpler version of it is wrong:
+   *
+   *   html alone, clip   sticky survives, page STILL SCROLLS 400px. Shipped
+   *                      first; did nothing at all.
+   *   body alone, clip   same — still scrolls. (A first test said otherwise;
+   *                      that test was confounded, because the html rule was
+   *                      still in the stylesheet underneath it.)
+   *   body alone, hidden scrolling stops, but `hidden` makes body a scroll
+   *                      container and the sticky top bar scrolls away with
+   *                      the page.
+   *   BOTH, clip         scrolling stops AND sticky survives, because clip does
+   *                      not create a scroll container. This is the one.
+   *
+   * This is a SAFETY NET, not a fix. Every route is measured clean from 280px
+   * to 440px, so nothing is being hidden today — what it stops is the next
+   * unshrinkable element becoming a page that slides under an operator's thumb
+   * mid-token. Because clipping hides the cause too,
+   * src/utils/overflowGuard.js names the element in development. Do not remove
+   * one without the other.
+   */
+  html,
+  body {
+    overflow-x: clip;
+  }
+
+  /**
+   * `clip` needs Chrome 90 / Firefox 81 / Safari 16. Older than that and the
+   * declaration is dropped, so those browsers get `hidden` instead and lose
+   * the sticky top bar. That is the right way round: a header that scrolls
+   * away is a nuisance, a page that slides sideways while you are tapping a
+   * token loses the tap.
+   */
+  @supports not (overflow-x: clip) {
+    html,
+    body {
+      overflow-x: hidden;
+    }
+  }
+
+  body {
+    @apply bg-surface-sunken text-ink font-sans antialiased;
+    /* Spec rule 20: never below 16px. Also stops iOS Safari from
+       auto-zooming when an input is focused. */
+    font-size: 16px;
+    line-height: 1.5;
+    /* Respect the iPhone home-indicator / notch. */
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* A visible, consistent focus ring. Keyboard users and screen readers
+     depend on this; :focus-visible means mouse users never see it. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-brand/40 ring-offset-2 ring-offset-surface;
+  }
+
+  /* All digits the same width, so token numbers and countdowns do not
+     shift the layout as they change. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum';
+  }
+
+  /* Kill the number-input spinners — thumbs, not scroll wheels. */
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type='number'] {
+    -moz-appearance: textfield;
+  }
+
+  /* Honour the OS "reduce motion" setting. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   SCROLLBAR — desktop admin views only; mobile has none anyway.
+   ══════════════════════════════════════════════════════════════════ */
+@layer utilities {
+  /**
+   * Full height that is actually full on a phone.
+   *
+   * 100vh on a mobile browser is measured with the address bar HIDDEN, so it
+   * is taller than what you can see while the bar is showing. Anything sized
+   * to it hangs below the fold: a centred login card sits low and half-cut,
+   * every page scrolls a little even when it fits, and the bottom tab bar is
+   * pushed under the browser chrome. On a laptop none of this happens, which
+   * is why it survives so long.
+   *
+   * 100dvh is the height that is really visible and follows the bar as it
+   * hides and shows. The two declarations are deliberate, not a duplicate:
+   * a browser too old for dvh drops that line and keeps the vh fallback,
+   * which is the current behaviour rather than no height at all.
+   */
+  .min-h-app {
+    /* --app-h is kept accurate by src/utils/appHeight.js, so a browser too old
+       for dvh still gets the right number. The plain 100vh is only for the
+       instant before that script runs. */
+    min-height: 100vh;
+    min-height: var(--app-h, 100vh);
+    min-height: 100dvh;
+  }
+
+  /**
+   * The same rule as a fixed HEIGHT, for overlays.
+   *
+   * `position: fixed; inset: 0` sizes to the LAYOUT viewport, which on a phone
+   * is taller than what you can see while the address bar is showing. A drawer
+   * built that way puts its bottom section — the language switch and who you
+   * are signed in as — underneath the browser chrome, and no amount of
+   * scrolling inside it helps, because the panel is not what overflows.
+   *
+   * Neither DevTools device mode nor headless Chrome has an address bar, so
+   * this is invisible in every emulator and obvious on every real phone.
+   */
+  .h-app {
+    height: 100vh;
+    height: var(--app-h, 100vh);
+    height: 100dvh;
+  }
+
+  .scrollbar-slim::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  .scrollbar-slim::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-slim::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-line-strong;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  .scrollbar-slim::-webkit-scrollbar-thumb:hover {
+    @apply bg-ink-subtle;
+  }
+}

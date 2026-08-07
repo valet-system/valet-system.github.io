@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+
+    <!--
+      viewport-fit=cover  -> lets us pad around the iPhone notch and home
+                             indicator using env(safe-area-inset-*) in CSS.
+      No maximum-scale     -> pinch-zoom stays available. Blocking it is an
+                             accessibility failure, and iOS ignores it anyway.
+    -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+
+    <title>Valet Ops</title>
+    <meta name="description" content="Valet parking management for Ambria properties." />
+
+    <!-- Colours the phone's status bar / browser chrome to match the app bar. -->
+    <meta name="theme-color" content="#0f172a" />
+
+    <!-- ── PWA ────────────────────────────────────────────────────────
+         The manifest is what makes the app installable. iOS Safari still
+         ignores most of it, so the apple-* tags below repeat the same
+         information in the form iOS understands.
+    -->
+    <link rel="manifest" href="/manifest.json" />
+
+    <meta name="mobile-web-app-capable" content="yes" />
+    <!-- iOS: run without Safari's chrome when launched from the home screen. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Valet Ops" />
+
+    <!-- ── icons ──────────────────────────────────────────────────────
+         SVG first for crisp tabs on modern browsers; the PNGs are the
+         fallback and are also what Chrome requires for installability.
+         All generated from favicon.svg by `npm run icons`.
+    -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+
+    <!-- Internal ops tool: keep it out of search results entirely. -->
+    <meta name="robots" content="noindex, nofollow" />
+  </head>
+
+  <body>
+    <div id="root"></div>
+
+    <!--
+      No-JS fallback. This app cannot work without JavaScript, so say so
+      plainly instead of presenting a blank white page.
+    -->
+    <noscript>
+      <div style="font-family: system-ui, sans-serif; padding: 2rem; text-align: center">
+        <h1 style="font-size: 1.125rem">JavaScript is required</h1>
+        <p style="color: #475569">Please enable JavaScript to use Valet Ops.</p>
+      </div>
+    </noscript>
+
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

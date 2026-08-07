@@ -1,0 +1,49 @@
+{
+  "id": "/?source=pwa",
+  "name": "Valet Ops — Parking Management",
+  "short_name": "Valet Ops",
+  "description": "Check in cars, park them, and manage retrieval requests.",
+
+  "start_url": "/?source=pwa",
+  "scope": "/",
+
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+
+  "orientation": "portrait-primary",
+
+  "background_color": "#f6f7f9",
+  "theme_color": "#0f172a",
+
+  "lang": "en-IN",
+  "dir": "ltr",
+
+  "categories": ["business", "productivity", "utilities"],
+
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+
+  "shortcuts": [
+    {
+      "name": "Check in a car",
+      "short_name": "Check In",
+      "description": "Open the check-in form",
+      "url": "/operator/checkin?source=shortcut",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "My tasks",
+      "short_name": "Tasks",
+      "description": "Active parking and retrieval tasks",
+      "url": "/operator/tasks?source=shortcut",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ],
+
+  "prefer_related_applications": false
+}

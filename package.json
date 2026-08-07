@@ -1,0 +1,30 @@
+{
+  "name": "valet-system",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Valet Parking Management System - 4 properties, multi-user, WhatsApp integrated",
+  "scripts": {
+    "dev": "vite",
+    "check": "node scripts/check-undefined.mjs src && node scripts/check-autotranslate.mjs && node scripts/check-i18n.mjs && node scripts/check-select-optional.mjs && node scripts/check-hindi-input.mjs && node scripts/check-service-day.mjs",
+    "test:push": "node --experimental-strip-types --no-warnings scripts/test-webpush.mjs",
+    "vapid": "node scripts/generate-vapid.mjs",
+    "build": "npm run check && vite build",
+    "preview": "vite preview",
+    "icons": "node scripts/generate-icons.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.4",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-router-dom": "^7.18.2"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.4.1",
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.3",
+    "sharp": "^0.35.3",
+    "tailwindcss": "^3.4.17",
+    "vite": "^6.3.5"
+  }
+}
