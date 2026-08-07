@@ -589,8 +589,22 @@ export const en = {
   'spaces.nothingYet': 'Nothing here yet',
   'spaces.nothingYetBody':
     'Add them on the left — whatever you call the places cars go. Until then operators type the location by hand, which works but spells the same place four different ways.',
-  'spaces.explainer':
-    'Spaces is how many cars a place holds — change it and the operator’s chips update straight away. The count beside it is live: parking a car fills a space, handing it back frees one, and nothing is stored that could drift. A full place cannot be chosen by an operator — they have to use “Somewhere else” and say where the car really went, so a stacked car is still recorded. An open eye means operators can see it; only a place already out of service can be deleted.',
+  // Column headings for the list. One heading beats the same word repeated on
+  // every row — see the note in admin/Spaces.
+  'spaces.placeColumn': 'Place',
+  'spaces.capacityColumn': 'Spaces',
+
+  // Four separate facts. They used to be one paragraph, which is four lines of
+  // grey prose nobody finishes — and the fact you need is never the first one.
+  'spaces.howThisWorks': 'How this works',
+  'spaces.explainCapacity':
+    'Spaces is how many cars a place holds. Change it and the operator’s chips update straight away.',
+  'spaces.explainLive':
+    'The count beside it is live — parking a car fills a space, handing it back frees one. Nothing is stored that could drift.',
+  'spaces.explainFull':
+    'A full place cannot be chosen by an operator. They use “Somewhere else” and say where the car really went, so a stacked car is still recorded.',
+  'spaces.explainEye':
+    'An open eye means operators can see it. Only a place already out of service can be deleted.',
   'spaces.overCapacity': '{inUse} in a {capacity}-car space',
   'spaces.full': 'Full',
   'spaces.freeSuffix': ' · {n} free',
@@ -1285,8 +1299,20 @@ export const hi = {
   'spaces.nothingYet': 'अभी कुछ नहीं है',
   'spaces.nothingYetBody':
     'बाईं ओर से जोड़िए — जिन जगहों पर गाड़ियाँ जाती हैं, उन्हें जो भी नाम आप देते हैं। तब तक ऑपरेटर जगह हाथ से लिखेंगे, जिससे एक ही जगह चार तरह से लिखी जाती है।',
-  'spaces.explainer':
-    '"जगह" यानी वहाँ कितनी गाड़ियाँ आ सकती हैं — बदलते ही ऑपरेटर के चिप्स अपडेट हो जाते हैं। साथ की गिनती लाइव है: गाड़ी पार्क होते ही एक जगह भरती है, वापस देते ही खाली हो जाती है, और ऐसा कुछ स्टोर नहीं होता जो गलत हो सके। भरी हुई जगह ऑपरेटर चुन नहीं सकता — उसे “कोई और जगह” से बताना पड़ेगा कि गाड़ी असल में कहाँ गई, ताकि ऊपर लगाई गाड़ी भी दर्ज रहे। खुली आँख का मतलब ऑपरेटर उसे देख सकते हैं; सिर्फ़ बंद की हुई जगह ही हटाई जा सकती है।',
+  // "जगह" दो जगह इस्तेमाल हो रहा था — कॉलम का नाम और क्षमता, दोनों। हिंदी में वही
+  // शब्द दो कॉलम पर पढ़ना उलझाता है, इसलिए क्षमता वाला कॉलम "क्षमता" है।
+  'spaces.placeColumn': 'जगह',
+  'spaces.capacityColumn': 'क्षमता',
+
+  'spaces.howThisWorks': 'यह कैसे काम करता है',
+  'spaces.explainCapacity':
+    '"क्षमता" यानी वहाँ कितनी गाड़ियाँ आ सकती हैं। बदलते ही ऑपरेटर के चिप्स अपडेट हो जाते हैं।',
+  'spaces.explainLive':
+    'साथ की गिनती लाइव है — गाड़ी पार्क होते ही एक जगह भरती है, वापस देते ही खाली हो जाती है। ऐसा कुछ स्टोर नहीं होता जो गलत हो सके।',
+  'spaces.explainFull':
+    'भरी हुई जगह ऑपरेटर चुन नहीं सकता। उसे “कोई और जगह” से बताना पड़ेगा कि गाड़ी असल में कहाँ गई, ताकि ऊपर लगाई गाड़ी भी दर्ज रहे।',
+  'spaces.explainEye':
+    'खुली आँख का मतलब ऑपरेटर उसे देख सकते हैं। सिर्फ़ बंद की हुई जगह ही हटाई जा सकती है।',
   'spaces.overCapacity': '{capacity} की जगह में {inUse} गाड़ियाँ',
   'spaces.full': 'भरी है',
   'spaces.freeSuffix': ' · {n} खाली',

@@ -62,6 +62,20 @@ import useRealtime from '@/hooks/useRealtime'
 import { supabase, describeDbError } from '@/supabase'
 import { cn } from '@/utils/cn'
 
+/**
+ * The heading row and every place row share this, so the number boxes line up
+ * down the list instead of each row finding its own edge.
+ *
+ * The last two columns are FIXED WIDTHS, not `auto`, and that is the whole
+ * point: each row is its own grid, so `auto` is measured per row — and the
+ * delete button only exists on out-of-service rows. With `auto` the number
+ * boxes would sit at a different x on those rows. 5.75rem is two icon-md
+ * buttons (2.75rem each) plus the gap-1 between them.
+ */
+const ROW_GRID = 'grid grid-cols-[minmax(0,1fr)_4rem_5.75rem] items-center gap-3'
+
+const COLUMN_LABEL = 'text-[0.6875rem] font-bold uppercase tracking-wider text-ink-subtle'
+
 export default function Spaces() {
   const t = useT()
   const { propertyId, propertyName } = useAuth()
@@ -225,8 +239,11 @@ export default function Spaces() {
         />
       </StatRow>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] xl:items-start">
-        <div>
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,24rem)_minmax(0,1fr)] xl:items-start">
+        {/* Sticky on wide screens so a long list can be scrolled while the box
+            you type into stays put. top-20 clears the h-16 app header — the
+            desktop sidebar pins itself at top-16 for the same reason. */}
+        <div className="xl:sticky xl:top-20">
           <SectionHeading title={t('spaces.addPlaces')} icon="plus" />
           <AddSpaces onAdded={load} />
         </div>
@@ -252,33 +269,77 @@ export default function Spaces() {
               description={t('spaces.nothingYetBody')}
             />
           ) : (
-            <div className="space-y-4">
+            /* Capped, because a row needs about this much and no more. Left to
+               fill an xl screen it became a name pinned to one edge and a number
+               box pinned to the other with a hand-width of nothing between them,
+               which reads as two unrelated controls rather than one row. */
+            <div className="max-w-3xl space-y-4">
               {/* ROWS, not chips. A chip fitted a name; it cannot also carry a
                   fill bar, a live count and an editable capacity without
                   becoming unreadable. One flat list in the order the admin typed
                   them — no zones or levels, because the admin names the places
                   and this app has no business modelling their car park. */}
-              <Card padded={false} className="divide-y divide-line">
-                {spaces.map((space) => (
-                  <SpaceRow
-                    key={space.id}
-                    space={space}
-                    onCapacity={(n) => setCapacity(space, n)}
-                    onToggle={() => toggle(space)}
-                    onRemove={() => remove(space)}
-                  />
-                ))}
-              </Card>
+              <div>
+                {/* Headings once, instead of the word "Spaces" set beside every
+                    single number box. With four places that was four labels
+                    saying the same thing and no gain in clarity. */}
+                <div className={cn(ROW_GRID, 'px-4 pb-2')}>
+                  <span className={COLUMN_LABEL}>{t('spaces.placeColumn')}</span>
+                  <span className={cn(COLUMN_LABEL, 'text-center')}>
+                    {t('spaces.capacityColumn')}
+                  </span>
+                  <span />
+                </div>
 
-              <p className="flex max-w-2xl items-start gap-2 text-xs leading-relaxed text-ink-subtle">
-                <Icon name="info" size={13} className="mt-0.5 shrink-0" />
-                <span>{t('spaces.explainer')}</span>
-              </p>
+                <Card padded={false} className="divide-y divide-line">
+                  {spaces.map((space) => (
+                    <SpaceRow
+                      key={space.id}
+                      space={space}
+                      onCapacity={(n) => setCapacity(space, n)}
+                      onToggle={() => toggle(space)}
+                      onRemove={() => remove(space)}
+                    />
+                  ))}
+                </Card>
+              </div>
+
+              {/* Four facts, one per line. As a single paragraph this was four
+                  lines of small grey prose, and the one you needed was never
+                  the first — so it got skipped whole. */}
+              {/* The BOX is full width so its right edge lines up with the list
+                  above it; the TEXT inside is held to a readable measure. Capping
+                  the box instead left it visibly short of the card, which looked
+                  like a mistake rather than a reading width. */}
+              <div className="rounded-xl border border-line bg-surface-sunken/60 px-3.5 py-3">
+                <p className={cn(COLUMN_LABEL, 'mb-2 flex items-center gap-1.5')}>
+                  <Icon name="info" size={12} />
+                  {t('spaces.howThisWorks')}
+                </p>
+                <ul className="max-w-2xl space-y-1.5 text-xs leading-relaxed text-ink-muted">
+                  <Fact>{t('spaces.explainCapacity')}</Fact>
+                  <Fact>{t('spaces.explainLive')}</Fact>
+                  <Fact>{t('spaces.explainFull')}</Fact>
+                  <Fact>{t('spaces.explainEye')}</Fact>
+                </ul>
+              </div>
             </div>
           )}
         </div>
       </div>
     </>
+  )
+}
+
+/** One line of the "how this works" note. */
+function Fact({ children }) {
+  return (
+    <li className="flex gap-2">
+      {/* bg-ink-subtle, not bg-line-strong: at 4px the lighter tone rendered as
+          almost nothing and the lines read as an unbulleted block. */}
+      <span aria-hidden="true" className="mt-[0.4rem] h-1 w-1 shrink-0 rounded-full bg-ink-subtle" />
+      <span>{children}</span>
+    </li>
   )
 }
 
@@ -310,8 +371,8 @@ function SpaceRow({ space, onCapacity, onToggle, onRemove }) {
   const commit = () => onCapacity(draft)
 
   return (
-    <div className={cn('flex items-center gap-3 px-4 py-3', !space.is_active && 'opacity-60')}>
-      <div className="min-w-0 flex-1">
+    <div className={cn(ROW_GRID, 'px-4 py-3', !space.is_active && 'opacity-60')}>
+      <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <span
             className={cn(
@@ -340,7 +401,11 @@ function SpaceRow({ space, onCapacity, onToggle, onRemove }) {
         </div>
 
         <div className="mt-1.5 flex items-center gap-2">
-          <div className="h-1.5 w-32 overflow-hidden rounded-full bg-line">
+          {/* Fills the row. No max-width: capping it at 14rem left a hand-width
+              of nothing between the count and the number box, which is exactly
+              the disconnected look the width cap was meant to fix. The card's
+              own max-w-3xl already stops this getting silly. */}
+          <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-line">
             <div
               className={cn(
                 'h-full rounded-full',
@@ -349,35 +414,54 @@ function SpaceRow({ space, onCapacity, onToggle, onRemove }) {
               style={{ width: `${pct}%` }}
             />
           </div>
-          <span className="tnum text-xs text-ink-subtle">
+          <span className="tnum shrink-0 text-xs text-ink-subtle">
             {space.inUse} / {space.capacity}
             {space.is_active && !full && !over && t('spaces.freeSuffix', { n: free })}
           </span>
         </div>
       </div>
 
-      <label className="flex shrink-0 items-center gap-1.5">
-        <span className="text-[0.6875rem] font-bold uppercase tracking-wider text-ink-subtle">
-          {t('spaces.spacesLabel')}
-        </span>
-        <input
-          type="tel"
-          inputMode="numeric"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value.replace(/\D/g, '').slice(0, 3))}
-          onBlur={commit}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              e.currentTarget.blur()
-            }
-          }}
-          aria-label={t('spaces.howManyFit', { place: space.label })}
-          className="tnum h-10 w-16 rounded-xl border border-line-strong bg-surface px-2 text-center text-base font-bold text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 sm:text-sm"
-        />
-      </label>
+      {/* No visible label of its own — the column heading above the list says
+          "Spaces" once. aria-label still names the PLACE, which a shared column
+          heading cannot do, so screen readers get "How many cars fit in
+          Basement" rather than a bare "Spaces". */}
+      <input
+        type="tel"
+        inputMode="numeric"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value.replace(/\D/g, '').slice(0, 3))}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            e.currentTarget.blur()
+          }
+        }}
+        aria-label={t('spaces.howManyFit', { place: space.label })}
+        className="tnum h-10 w-full rounded-xl border border-line-strong bg-surface px-2 text-center text-base font-bold text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 sm:text-sm"
+      />
 
-      <div className="flex shrink-0 items-center gap-1">
+      {/* Delete FIRST, eye LAST — deliberately, and it looks backwards until you
+          see the list. The eye is on every row; delete is on the rare
+          out-of-service one. Putting delete last pushed the eye left on exactly
+          those rows, so the one control present everywhere was the one that
+          failed to line up, and it read as a rendering fault. Ordered this way
+          the eye holds its column and delete reads as inserted beside it. */}
+      <div className="flex items-center justify-end gap-1">
+        {/* Only once it is out of service, so deleting takes two deliberate
+            steps. A live place is on an operator's screen right now. */}
+        {!space.is_active && (
+          <Button
+            variant="ghost"
+            size="icon-md"
+            icon="x-circle"
+            onClick={onRemove}
+            title={t('spaces.deleteForever')}
+            aria-label={t('spaces.deleteNamed', { place: space.label })}
+            className="hover:bg-danger-soft hover:text-danger"
+          />
+        )}
+
         <Button
           variant="ghost"
           size="icon-md"
@@ -392,20 +476,6 @@ function SpaceRow({ space, onCapacity, onToggle, onRemove }) {
             place: space.label,
           })}
         />
-
-        {/* Only once it is out of service, so deleting takes two deliberate
-            steps. A live place is on an operator's screen right now. */}
-        {!space.is_active && (
-          <Button
-            variant="ghost"
-            size="icon-md"
-            icon="x-circle"
-            onClick={onRemove}
-            title={t('spaces.deleteForever')}
-            aria-label={t('spaces.deleteNamed', { place: space.label })}
-            className="hover:bg-danger-soft hover:text-danger"
-          />
-        )}
       </div>
     </div>
   )
@@ -511,7 +581,7 @@ function AddSpaces({ onAdded }) {
               setText(e.target.value)
               if (error) setError(null)
             }}
-            rows={7}
+            rows={5}
             // Deliberately mixed examples. This app does not decide how a car
             // park is organised — a name is whatever the admin says it is.
             placeholder={'Basement\nPorch\nFront row\nBehind the kitchen\nL2 B4'}
