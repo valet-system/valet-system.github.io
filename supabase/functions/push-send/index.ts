@@ -137,7 +137,18 @@ Deno.serve(async (req) => {
     .order('created_at', { ascending: true })
     .limit(50)
 
-  if (error) return Response.json({ ok: false, error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[push-send] could not read the outbox:', error.message)
+    return Response.json({ ok: false, error: error.message }, { status: 500 })
+  }
+
+  // Logged at every step, deliberately. Everything from here on happens on a
+  // server nobody watches, and the failure mode that matters — a push the
+  // service accepts and the phone never shows — leaves no trace anywhere else.
+  // Without these lines the only way to find out where delivery stops is to
+  // guess, and guessing cost real days on this feature.
+  console.log(`[push-send] invoked. queued rows in this batch: ${queued?.length ?? 0}`)
+
   if (!queued?.length) return Response.json({ ok: true, sent: 0, note: 'queue empty' })
 
   let sent = 0
@@ -149,6 +160,10 @@ Deno.serve(async (req) => {
       .from('push_subscriptions')
       .select('id, endpoint, p256dh, auth')
       .eq('user_role_id', msg.user_role_id)
+
+    console.log(
+      `[push-send] msg ${msg.id} for role ${msg.user_role_id}: ${subs?.length ?? 0} device(s)`,
+    )
 
     if (!subs?.length) {
       // Not a failure. They have simply never granted permission or have no
@@ -176,6 +191,19 @@ Deno.serve(async (req) => {
     for (const sub of subs as Subscription[]) {
       try {
         const { status, text } = await sendOne(sub, payload, vapidKey, vapidPublic, vapidSubject)
+
+        // The endpoint's host is the useful part — it says WHICH push service
+        // answered (fcm.googleapis.com for Chrome/Android, web.push.apple.com
+        // for iOS) and platforms fail differently. The rest of the endpoint is
+        // a device secret and is deliberately not logged.
+        const host = (() => {
+          try {
+            return new URL(sub.endpoint).host
+          } catch {
+            return 'unparseable endpoint'
+          }
+        })()
+        console.log(`[push-send]   -> ${host} answered ${status}${text ? ` ${text.slice(0, 120)}` : ''}`)
 
         if (status >= 200 && status < 300) {
           anyDelivered = true
@@ -216,6 +244,13 @@ Deno.serve(async (req) => {
       failed += 1
     }
   }
+
+  // A 2xx from the push service means it ACCEPTED the message, not that the
+  // phone showed it. Said plainly here so "sent: 1" in the logs is not read as
+  // proof the operator was told.
+  console.log(
+    `[push-send] done. accepted=${sent} failed=${failed} no_device=${noDevice} batch=${queued.length}`,
+  )
 
   return Response.json({ ok: true, sent, failed, no_device: noDevice, batch: queued.length })
 })
