@@ -255,6 +255,41 @@ export function formatTime(value) {
   })
 }
 
+/**
+ * A whole clock hour, 12-hour: hour12(15) -> "3 pm", hour12(0) -> "12 am".
+ *
+ * am/pm stays in English in Hindi too, and that is not an oversight —
+ * formatTime() above pins 'en-IN' for every timestamp in the app, so a Records
+ * row already reads "9:42 pm" on a Hindi screen. Translating it only here would
+ * make one chart disagree with every other time the operator sees.
+ *
+ * @param compact drops the space, for a crowded chart axis: "3pm".
+ */
+export function hour12(hour, { compact = false } = {}) {
+  const h = ((Number(hour) % 24) + 24) % 24
+  const shown = h % 12 === 0 ? 12 : h % 12
+  const half = h < 12 ? 'am' : 'pm'
+  return compact ? `${shown}${half}` : `${shown} ${half}`
+}
+
+/**
+ * One clock hour as a range: hourRange12(15) -> "3–4 pm".
+ *
+ * The am/pm is written once when both ends share it, because "3 pm – 4 pm" is
+ * the same fact said twice. It is written twice when the hour crosses noon or
+ * midnight — "11 am – 12 pm", "11 pm – 12 am" — where collapsing it would be
+ * ambiguous or plainly wrong.
+ */
+export function hourRange12(hour) {
+  const h = ((Number(hour) % 24) + 24) % 24
+  const next = (h + 1) % 24
+  const from = h % 12 === 0 ? 12 : h % 12
+  const to = next % 12 === 0 ? 12 : next % 12
+
+  if (h < 12 === next < 12) return `${from}–${to} ${h < 12 ? 'am' : 'pm'}`
+  return `${from} ${h < 12 ? 'am' : 'pm'} – ${to} ${next < 12 ? 'am' : 'pm'}`
+}
+
 /** "31 Jul 2026" */
 export function formatDate(value) {
   if (!value) return '—'

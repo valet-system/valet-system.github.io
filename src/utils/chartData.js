@@ -23,6 +23,7 @@
  */
 
 import { pickLang } from '@/i18n/activeLang'
+import { hour12, hourRange12 } from '@/utils/format'
 
 /** @param perDay [{ d: 'YYYY-MM-DD', cars: number }] */
 export function toDayChart(perDay = [], days = 30) {
@@ -41,8 +42,10 @@ export function toDayChart(perDay = [], days = 30) {
 /** @param perHour [{ h: 0..23, cars: number }] */
 export function toHourChart(perHour = []) {
   return perHour.map((point) => ({
-    label: point.h % 3 === 0 ? String(point.h).padStart(2, '0') : '',
-    full: `${String(point.h).padStart(2, '0')}:00–${String((point.h + 1) % 24).padStart(2, '0')}:00`,
+    // Every third hour, compact — eight labels have to share the axis width,
+    // and on a phone "12am 3am 6am" only fits without the space.
+    label: point.h % 3 === 0 ? hour12(point.h, { compact: true }) : '',
+    full: hourRange12(point.h),
     value: point.cars,
   }))
 }
@@ -53,10 +56,10 @@ export function peakHour(perHour = []) {
   return perHour.reduce((best, point) => (point.cars > best.cars ? point : best)).h
 }
 
-/** "14:00–15:00", for a caption. */
+/** "2–3 pm", for a caption. */
 export function hourLabel(hour) {
   if (hour == null) return null
-  return `${String(hour).padStart(2, '0')}:00–${String((hour + 1) % 24).padStart(2, '0')}:00`
+  return hourRange12(hour)
 }
 
 /**
