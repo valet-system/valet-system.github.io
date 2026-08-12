@@ -46,6 +46,7 @@ import NavDrawer from '@/components/NavDrawer'
 import { formatPhone, initials, personName } from '@/utils/format'
 import { ROLES } from '@/types'
 import { cn } from '@/utils/cn'
+import { subscribeToPush } from '@/lib/pushApi'
 import { isStandalone, onInstallable, promptInstall } from '@/pwa'
 import { primeAudio } from '@/utils/sounds'
 import { useT } from '@/i18n'
@@ -83,12 +84,14 @@ const NAV_ITEMS = {
 }
 
 export default function AppShell() {
-  const { role, displayName, displayNameHi, phone, propertyName, signOut } = useAuth()
+  const { role, displayName, displayNameHi, phone, propertyName, signOut, operatorId } = useAuth()
   const t = useT()
   const items = NAV_ITEMS[role] ?? []
   const [drawerOpen, setDrawerOpen] = useState(false)
 
   useAudioPriming()
+  // Every open, not only at login — see the hook for why that mattered.
+  usePushRefresh(operatorId)
 
   return (
     <div className="min-h-app bg-surface-sunken">
@@ -188,6 +191,43 @@ export default function AppShell() {
  * tap the user makes and then removes itself. Both pointerdown and keydown,
  * because a desktop admin may never touch the screen.
  */
+/**
+ * Re-registers this device for push whenever the app opens.
+ *
+ * ── WHY THIS WAS MISSING AND WHY IT MATTERS ──
+ *   subscribeToPush() was called from ONE place: the login screen. Operators
+ *   do not log in — the session persists, so they open the app for weeks
+ *   without ever passing through it. The subscription written on the day they
+ *   first signed in was never checked again.
+ *
+ *   That is a SILENT failure. A push subscription can be rotated by the
+ *   browser, and push-send deletes one outright on a 404/410 from the push
+ *   service. Either way the row is gone, every later push is recorded
+ *   'no_device', and the operator simply stops being told about cars. Nothing
+ *   on their screen says so, and the only cure was signing out and back in.
+ *
+ * ── WHY CALLING IT ON EVERY OPEN IS SAFE ──
+ *   subscribeToPush() is idempotent by design: it reuses an existing
+ *   subscription rather than replacing it, and it returns early WITHOUT
+ *   prompting when permission has not been granted — so this cannot burn the
+ *   one chance Chrome gives to ask. Re-saving refreshes last_seen_at.
+ */
+function usePushRefresh(operatorId) {
+  const done = useRef(null)
+
+  useEffect(() => {
+    if (!operatorId || done.current === operatorId) return
+    // Recorded before awaiting, so a re-render mid-flight cannot fire a second.
+    done.current = operatorId
+
+    subscribeToPush().then((result) => {
+      // Never surfaced to the operator. There is nothing they can do about it
+      // from here, and the admin can see who has no device registered.
+      if (!result?.ok) console.info('[push] not registered on this device:', result?.state)
+    })
+  }, [operatorId])
+}
+
 function useAudioPriming() {
   useEffect(() => {
     const prime = () => primeAudio()
