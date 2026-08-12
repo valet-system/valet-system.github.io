@@ -188,7 +188,14 @@ export default function Login() {
       {/* The toggle is ABOVE the form and before any of the words it changes.
           Somebody who cannot read this page has to be able to fix that
           without first reading it — see components/LanguageToggle. */}
-      <div className="flex justify-end px-4 pt-4">
+      {/* The padding ADDS the iOS safe area rather than replacing it.
+          index.html sets apple-mobile-web-app-status-bar-style to
+          black-translucent, so once installed the page runs UNDER the status
+          bar — on a notched iPhone that is 47-59px of clock and battery. A
+          plain pt-4 put this toggle inside it. Android reserves that space
+          itself, which is why it only showed up on iPhone.
+          env() is 0 everywhere else, so this is a no-op off iOS. */}
+      <div className="flex justify-end px-4 pt-[calc(1rem+env(safe-area-inset-top))]">
         <LanguageToggle tone="light" />
       </div>
 

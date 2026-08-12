@@ -119,7 +119,13 @@ export default function AppShell() {
             the real boundary between "a tablet or a window" and "a phone".
             NavDrawer is md:hidden, so the two can never both be on screen. */}
         <aside className="hidden w-56 shrink-0 md:block">
-          <nav className="sticky top-16 space-y-1 px-3 py-6" aria-label={t('common.mainNav')}>
+          {/* 4rem is the header row; the inset is the strip added above it for
+              the iOS status bar. Left at a bare top-16 this would tuck under
+              the header by exactly the inset on an installed iPad PWA. */}
+          <nav
+            className="sticky top-[calc(4rem+env(safe-area-inset-top))] space-y-1 px-3 py-6"
+            aria-label={t('common.mainNav')}
+          >
             {/* Props passed one by one, NOT spread. Every NAV_ITEMS entry has a
                 `key` field — the translation key — and spreading it hands React
                 its own reserved `key` prop, which React warns about and which
@@ -207,7 +213,12 @@ function TopBar({ displayName, phone, propertyName, roleLabel, onSignOut, onOpen
   return (
     // sticky, not fixed: sticky stays in the normal flow, so it cannot overlap
     // content and <main> needs no compensating top margin.
-    <header className="sticky top-0 z-40 border-b border-black/10 bg-brand">
+    // pt-[env(safe-area-inset-top)] so the dark bar still fills the area
+    // behind the iOS status bar — which is what makes the white clock legible
+    // — while the ROW below it starts under the clock instead of behind it.
+    // Without this the hamburger and the property name sat beneath the time
+    // and battery on an installed iPhone PWA. Zero on Android and desktop.
+    <header className="sticky top-0 z-40 border-b border-black/10 bg-brand pt-[env(safe-area-inset-top)]">
       {/* Full width, matching the shell below. Capping this at 1280px while
           the dark bar itself spanned the screen left the logo floating in the
           middle of its own header, out of line with the sidebar under it. */}
