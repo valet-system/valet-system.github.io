@@ -314,18 +314,34 @@ self.addEventListener('push', (event) => {
 
   const rawTitle = payload.title || 'Ambria Valet'
   const rawBody = payload.body || 'You have a new task.'
+  // ══ KEPT MINIMAL ON PURPOSE — DO NOT ADD OPTIONS BACK WITHOUT TESTING ══
+  //
+  // This used to also set renotify, requireInteraction and vibrate. They were
+  // reasonable — keep the alert on screen, buzz for a waiting guest — and they
+  // were the ONLY difference left between this handler and the Ambria Admin
+  // app's, which delivers reliably on iPhone and Android with the app closed.
+  // Everything else had been checked and matched: the encryption (tested),
+  // the VAPID signature, TTL and Urgency, the subscribe flow, the deployed
+  // worker.
+  //
+  // Platforms are supposed to IGNORE options they do not support. In practice
+  // an unsupported option can make showNotification() reject, and a rejection
+  // inside waitUntil means the push is lost with nothing shown and nothing
+  // logged — exactly the symptom being chased. So the options are now the ones
+  // known to work everywhere.
+  //
+  // If you want the buzz back, add ONE option, ship it, and test with the app
+  // fully closed on a real iPhone AND a real Android before adding another. An
+  // alert that never appears is worse than one that does not vibrate.
   const options = {
+    body: rawBody,
     icon: payload.icon || '/icon-192.png',
     badge: '/icon-192.png',
     // A tag replaces an earlier notification instead of stacking, so five
-    // events about one car do not become five notifications on the lock
-    // screen. renotify makes the replacement still buzz.
+    // events about one car do not become five notifications on the lock screen.
     tag: payload.tag || 'valet',
-    renotify: true,
-    requireInteraction: Boolean(payload.critical),
     // Survives into notificationclick, which is where the routing happens.
     data: { url: payload.url || '/', taskId: payload.taskId || null },
-    vibrate: payload.critical ? [400, 150, 400] : [200],
   }
 
   // waitUntil is not optional: without it the worker can be killed before the
@@ -347,7 +363,19 @@ self.addEventListener('push', (event) => {
       } catch {
         // Fall through with the English the server sent.
       }
-      await self.registration.showNotification(title, { ...options, body })
+      try {
+        await self.registration.showNotification(title, { ...options, body })
+      } catch (err) {
+        // LAST RESORT, and the reason it exists: if showNotification rejects —
+        // an option this platform dislikes, a badge it cannot load — the push is
+        // gone. Nothing appears, nothing is written down, and the operator is
+        // never told about a car with a guest standing next to it.
+        //
+        // So try again with the two fields no platform can refuse. An ugly
+        // notification beats a silent one.
+        console.error('[sw] showNotification failed, retrying bare:', err)
+        await self.registration.showNotification(title, { body })
+      }
     })(),
   )
 })

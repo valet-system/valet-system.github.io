@@ -81,6 +81,17 @@ function fingerprint() {
   // reading every file back would be slower and prove the same thing.
   for (const name of names) hash.update(name)
 
+  // ── AND THE WORKER'S OWN SOURCE ──────────────────────────────────────
+  //
+  // Missing this was a real bug. public/sw.js is copied to dist/ ROOT, not into
+  // dist/assets, so editing the service worker — the push handler, the caching
+  // rules, the one file whose version this is — left the fingerprint unchanged.
+  // A build where sw.js grew by 1600 bytes still stamped the previous id.
+  //
+  // The VERSION line is stripped before hashing, or this could never settle: the
+  // hash would go into the file, changing the file, changing the hash.
+  hash.update(source.replace(PATTERN, ''))
+
   return hash.digest('hex').slice(0, 12)
 }
 
