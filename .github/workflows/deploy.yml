@@ -1,0 +1,109 @@
+# ═══════════════════════════════════════════════════════════════════════
+# Builds the app and publishes it to GitHub Pages.
+#
+# Runs on every push to main. The site ends up at the repository's Pages
+# URL, which for a repo named <owner>.github.io is the domain ROOT — and
+# that matters: src/pwa.js registers the service worker at '/sw.js' with
+# scope '/', and public/manifest.json has start_url '/' and absolute icon
+# paths. Hosted under a subfolder those all 404, the PWA stops installing,
+# and nothing says why. Root hosting is load-bearing, not a preference.
+#
+# ── SECRETS THIS NEEDS ──
+#   VITE_SUPABASE_URL
+#   VITE_SUPABASE_ANON_KEY
+#   VITE_VAPID_PUBLIC_KEY
+#
+# Settings -> Secrets and variables -> Actions.
+#
+# Every VITE_* value is COMPILED INTO THE BUNDLE and is publicly readable
+# on the live site. That is correct for these three — the anon key is meant
+# to be public and RLS is what protects the data. The service_role key must
+# never appear here; it belongs in `supabase secrets` only.
+#
+# Two more are set inline below rather than as secrets, because their values
+# are the defaults already baked into the code and are not sensitive.
+# ═══════════════════════════════════════════════════════════════════════
+
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  # Lets you re-run a deploy from the Actions tab without pushing a commit,
+  # which is what you want after adding or fixing a secret.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time. Two pushes in quick succession would otherwise race,
+# and the older build could land last and overwrite the newer site.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # `npm ci`, not `npm install`: it installs exactly what the lockfile
+      # says and fails loudly if the lockfile and package.json disagree,
+      # instead of quietly resolving something different from local.
+      - run: npm ci
+
+      # `npm run build` is `npm run check && vite build`, so all six checks
+      # run first — i18n parity across both languages, the 05:30 IST service
+      # day, HindiInput, selectOptional, unbound identifiers, autotranslate.
+      # A failing check fails the job, so a broken translation cannot reach
+      # production. That is the point of putting the build behind them.
+      - run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_VAPID_PUBLIC_KEY: ${{ secrets.VITE_VAPID_PUBLIC_KEY }}
+
+          # NOT a secret, and pinned deliberately. src/lib/phoneAuth.js turns
+          # a phone number into the auth email using this domain, so every
+          # existing account was created against it. Change it and nobody can
+          # log in — their accounts are at the old domain. It matches the
+          # code's own fallback; it is written out so it can never drift
+          # silently.
+          VITE_PHONE_EMAIL_DOMAIN: phone.invalid
+
+          # Also the code's default. Change it here to change the no-show
+          # timer without touching source.
+          VITE_PICKUP_TIMEOUT_MINUTES: '10'
+
+      # GitHub Pages serves static files and has no SPA rewrite, so a request
+      # for /admin/spaces looks for a folder that does not exist and gets
+      # GitHub's own 404 page. Refreshing on any inner screen would break.
+      #
+      # Serving the app itself as 404.html fixes it: Pages returns the app for
+      # the unknown path, the URL in the address bar is untouched, and React
+      # Router then reads it and renders the right screen. Do not remove this
+      # line — the failure it prevents looks like the app is broken, not the
+      # hosting.
+      - run: cp dist/index.html dist/404.html
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
