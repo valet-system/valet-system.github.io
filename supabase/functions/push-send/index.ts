@@ -97,7 +97,18 @@ async function sendOne(
 // ═══════════════════════════════════════════════════════════════════
 
 Deno.serve(async (req) => {
+  // FIRST LINE, before any check that can return.
+  //
+  // The logging added earlier sat after four early exits — the method check,
+  // the VAPID presence check, and importVapidKey throwing. Any of those answered
+  // 500 and wrote NOTHING, so the Logs tab showed only "booted" and "shutdown"
+  // and looked as if the function had never run. A webhook never shows anyone
+  // the response body, so a log that only happens on the happy path is no log
+  // at all.
+  console.log(`[push-send] invoked: ${req.method}`)
+
   if (req.method !== 'POST' && req.method !== 'GET') {
+    console.warn(`[push-send] refused method ${req.method}`)
     return new Response('Method not allowed', { status: 405 })
   }
 
@@ -105,7 +116,22 @@ Deno.serve(async (req) => {
   const vapidPrivate = Deno.env.get('VAPID_PRIVATE_KEY') ?? ''
   const vapidSubject = Deno.env.get('VAPID_SUBJECT') ?? 'mailto:admin@example.com'
 
+  // The PUBLIC key is printed in full, and that is not a leak: it is compiled
+  // into the frontend bundle and handed to every browser that subscribes. It is
+  // printed because the failure it causes cannot be diagnosed any other way —
+  // FCM answers a mismatch with `403 {"reason":"BadJwtToken"}` and says nothing
+  // about which key it expected. Compare this line against .env's
+  // VITE_VAPID_PUBLIC_KEY; if they differ, that is the bug.
+  //
+  // The PRIVATE key is a length only, always. It is the one value here that
+  // must never be written anywhere.
+  console.log(`[push-send] vapid public  = ${vapidPublic}`)
+  console.log(
+    `[push-send] vapid private len = ${vapidPrivate.length}, subject = ${vapidSubject}`,
+  )
+
   if (!vapidPublic || !vapidPrivate) {
+    console.error('[push-send] VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY are not set — stopping')
     return Response.json(
       { ok: false, error: 'VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY are not set' },
       { status: 500 },
@@ -124,6 +150,10 @@ Deno.serve(async (req) => {
   try {
     vapidKey = await importVapidKey(vapidPublic, vapidPrivate)
   } catch (err) {
+    // The likeliest cause by far: the keys are a valid pair but not in the
+    // base64url form this expects — a public key that is not a 65-byte point,
+    // or a private key with padding or whitespace. It threw silently before.
+    console.error('[push-send] VAPID keys were rejected:', String(err))
     return Response.json({ ok: false, error: String(err) }, { status: 500 })
   }
 
@@ -147,7 +177,7 @@ Deno.serve(async (req) => {
   // service accepts and the phone never shows — leaves no trace anywhere else.
   // Without these lines the only way to find out where delivery stops is to
   // guess, and guessing cost real days on this feature.
-  console.log(`[push-send] invoked. queued rows in this batch: ${queued?.length ?? 0}`)
+  console.log(`[push-send] queued rows in this batch: ${queued?.length ?? 0}`)
 
   if (!queued?.length) return Response.json({ ok: true, sent: 0, note: 'queue empty' })
 

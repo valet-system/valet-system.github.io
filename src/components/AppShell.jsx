@@ -43,6 +43,7 @@ import Button from '@/components/ui/Button'
 import RouteSkeleton from '@/components/ui/PageSkeleton'
 import NotificationBell from '@/components/NotificationBell'
 import NavDrawer from '@/components/NavDrawer'
+import PushToggle from '@/components/PushToggle'
 import { formatPhone, initials, personName } from '@/utils/format'
 import { ROLES } from '@/types'
 import { cn } from '@/utils/cn'
@@ -379,6 +380,12 @@ function UserMenu({ displayName, phone, onSignOut }) {
           </div>
 
           <div className="space-y-1 p-2">
+            {/* First item, above Change PIN. An operator who cannot be reached
+                when a guest is waiting is a bigger problem than one who wants a
+                different PIN — and until this existed, an operator who had said
+                no to the prompt once had no way to ever say yes. */}
+            <PushToggle />
+
             <Button
               variant="ghost"
               size="md"

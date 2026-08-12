@@ -703,6 +703,24 @@ export const en = {
   'pin.save': 'Change PIN',
   'pin.saving': 'Saving…',
   'pwa.noInternet': 'No internet connection — changes will not save',
+  // ── Push notifications, in the account menu ──────────────────────────
+  // Every one of these is read by an operator standing on a porch, so they say
+  // what to DO, not what the state is called.
+  'push.title': 'Push notifications',
+  // The whole reason an operator would tap Enable. Says the ONE thing they
+  // cannot work out for themselves — that this is the channel which survives
+  // the app being shut.
+  'push.hint': 'Get alerts on this phone even when the app is closed.',
+  'push.enable': 'Enable',
+  'push.turnOff': 'Turn off',
+  'push.turningOn': 'Turning on…',
+  'push.turningOff': 'Turning off…',
+  'push.blockedHint':
+    'Blocked in browser settings. Allow notifications for this site, then open this menu again.',
+  'push.installHint':
+    'On iPhone these only arrive once the app is added to the Home Screen and opened from there.',
+  'push.failed': 'Could not turn them on. Check you are online and try again.',
+
   'pwa.newVersion': 'New version available',
   'pwa.finishFirst': 'Finish your current task first, then update.',
   'pwa.later': 'Later',
@@ -1411,6 +1429,18 @@ export const hi = {
   'pin.save': 'पिन बदलें',
   'pin.saving': 'सेव हो रहा है…',
   'pwa.noInternet': 'इंटरनेट नहीं है — कुछ भी सेव नहीं होगा',
+  'push.title': 'पुश नोटिफिकेशन',
+  'push.hint': 'ऐप बंद होने पर भी इस फ़ोन पर अलर्ट पाइए।',
+  'push.enable': 'चालू करें',
+  'push.turnOff': 'बंद करें',
+  'push.turningOn': 'चालू हो रहा है…',
+  'push.turningOff': 'बंद हो रहा है…',
+  'push.blockedHint':
+    'ब्राउज़र सेटिंग में बंद हैं। इस साइट के लिए नोटिफिकेशन चालू कीजिए, फिर यह मेन्यू दोबारा खोलिए।',
+  'push.installHint':
+    'iPhone पर ये तभी आते हैं जब ऐप होम स्क्रीन पर जोड़ी जाए और वहीं से खोली जाए।',
+  'push.failed': 'चालू नहीं हो सके। इंटरनेट देखिए और दोबारा कोशिश कीजिए।',
+
   'pwa.newVersion': 'नया वर्ज़न आ गया है',
   'pwa.finishFirst': 'पहले चालू काम पूरा कीजिए, फिर अपडेट कीजिए।',
   'pwa.later': 'बाद में',
