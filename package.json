@@ -9,7 +9,7 @@
     "check": "node scripts/check-undefined.mjs src && node scripts/check-autotranslate.mjs && node scripts/check-i18n.mjs && node scripts/check-select-optional.mjs && node scripts/check-hindi-input.mjs && node scripts/check-service-day.mjs",
     "test:push": "node --experimental-strip-types --no-warnings scripts/test-webpush.mjs",
     "vapid": "node scripts/generate-vapid.mjs",
-    "build": "npm run check && vite build",
+    "build": "npm run check && vite build && node scripts/stamp-sw.mjs",
     "preview": "vite preview",
     "icons": "node scripts/generate-icons.mjs"
   },

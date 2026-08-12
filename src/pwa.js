@@ -48,6 +48,72 @@ let registration = null
 /** The waiting worker — a new version that is installed but not yet active. */
 let waitingWorker = null
 
+/**
+ * When the operator last typed anything, anywhere.
+ *
+ * Not "does a field have a value" — that was the first attempt and it was
+ * wrong. Plenty of screens render inputs that are ALREADY filled from data:
+ * the capacity boxes on Parking spaces always hold a number. Testing for a
+ * non-empty value therefore reported "busy" for ever on those screens, and an
+ * automatic update would never have applied there.
+ *
+ * Actual typing is the honest signal for "there is unsaved work here".
+ */
+let lastTypedAt = 0
+
+/** How long after the last keystroke the app still counts as in use. */
+const TYPING_GRACE_MS = 60_000
+
+/** How often to ask the server whether a new version exists. */
+const UPDATE_CHECK_MS = 15 * 60_000
+
+/** How often to re-test whether it has become safe to apply a waiting update. */
+const APPLY_RETRY_MS = 30_000
+
+/** applyUpdate has been started. Stops the timer re-entering it. */
+let applying = false
+
+/** reload() has been called. Stops a repeated controllerchange reloading twice. */
+let reloading = false
+
+/**
+ * True when reloading right now would take something away from the operator.
+ *
+ * A reload during check-in loses the car's details and the guest is standing
+ * there — so an automatic update waits rather than being clever about it.
+ */
+function isMidTask() {
+  // Focused in a field: they are working in it this second.
+  const active = document.activeElement
+  if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return true
+
+  // A dialog on screen is a decision part-made — an edit form, a confirm.
+  if (document.querySelector('[role="dialog"]')) return true
+
+  return Date.now() - lastTypedAt < TYPING_GRACE_MS
+}
+
+/**
+ * Applies a waiting update the moment it is safe to, and not before.
+ *
+ * Called when an update arrives, when the tab is returned to, and on a timer —
+ * so a version that arrives mid-check-in is not dropped, it just lands once the
+ * operator has finished and moved on. The PwaStatus card stays on screen the
+ * whole time, so they can always force it themselves.
+ */
+function tryAutoApply() {
+  if (!waitingWorker) return
+  if (isMidTask()) return
+  applyUpdate()
+}
+
+/** One place to record a waiting version, so auto-apply cannot be forgotten. */
+function markUpdateReady(worker) {
+  waitingWorker = worker
+  emit(updateListeners, true)
+  tryAutoApply()
+}
+
 /** Chrome's stashed install event. Single-use: it cannot be prompted twice. */
 let installPrompt = null
 
@@ -95,8 +161,7 @@ export async function registerServiceWorker() {
 
     // Case A: a new version is already waiting when the page loads.
     if (registration.waiting && navigator.serviceWorker.controller) {
-      waitingWorker = registration.waiting
-      emit(updateListeners, true)
+      markUpdateReady(registration.waiting)
     }
 
     // Case B: a new version is found while the page is open.
@@ -109,17 +174,35 @@ export async function registerServiceWorker() {
         // first install. Without that check, every first-time visitor would
         // be shown an "update available" banner immediately.
         if (installing.state === 'installed' && navigator.serviceWorker.controller) {
-          waitingWorker = installing
-          emit(updateListeners, true)
+          markUpdateReady(installing)
         }
       })
     })
 
-    // Check for a new version when the operator returns to the tab. Shifts run
-    // for hours, so relying on a page reload to pick up a fix is not enough.
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') registration?.update().catch(() => {})
+    // Any keystroke, anywhere. Capture phase so it is seen even where a
+    // component stops propagation. passive: it never calls preventDefault.
+    document.addEventListener('input', () => (lastTypedAt = Date.now()), {
+      capture: true,
+      passive: true,
     })
+
+    // Returning to the tab: ask for a new version, and apply one already
+    // waiting. Coming back is the safest possible moment to reload — they were
+    // somewhere else a second ago.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') return
+      registration?.update().catch(() => {})
+      tryAutoApply()
+    })
+
+    // A tab that is left OPEN and visible never fires visibilitychange, so
+    // without this an admin dashboard on a back-office screen would sit on an
+    // old build all day. It is one small request for sw.js.
+    setInterval(() => registration?.update().catch(() => {}), UPDATE_CHECK_MS)
+
+    // And keep testing whether it has become safe to apply, so an update that
+    // arrived mid-check-in lands as soon as the operator is done.
+    setInterval(tryAutoApply, APPLY_RETRY_MS)
 
     return registration
   } catch (error) {
@@ -151,13 +234,21 @@ export function onUpdateReady(callback) {
  * once and the page reloads in a loop.
  */
 export function applyUpdate() {
+  // MODULE level, not per call. The guard used to be a local `let reloading`,
+  // which was enough while the only caller was a button nobody taps twice.
+  // tryAutoApply() runs on a timer, so a worker that is slow to activate would
+  // get a fresh listener — each with its own local flag — on every retry, and
+  // every one of them would call reload() when the controller finally changed.
+  if (applying) return
+  applying = true
+
   if (!waitingWorker) {
     window.location.reload()
     return
   }
 
-  let reloading = false
   navigator.serviceWorker.addEventListener('controllerchange', () => {
+    // Chrome can fire this more than once; reload() must happen at most once.
     if (reloading) return
     reloading = true
     window.location.reload()
