@@ -237,9 +237,39 @@ export default function NotificationBell() {
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-12 z-50 w-[21rem] max-w-[calc(100vw-1.5rem)] animate-slide-up overflow-hidden rounded-xl border border-line bg-surface shadow-pop"
+          className={cn(
+            // ── PHONE: pinned to the VIEWPORT, not to the bell ──────────
+            //
+            // It used to be `absolute right-0 w-[21rem] max-w-[calc(100vw-1.5rem)]`
+            // and that combination cannot work. `right-0` measures from the
+            // BELL's right edge, but 100vw measures the whole screen — and the
+            // bell is not at the screen edge, it has the avatar, the chevron
+            // and the header's px-4 to its right, about 90px of them. So on a
+            // 390px phone the panel was allowed to be 366px wide starting 90px
+            // in from the right, putting its left edge 66px OFF-SCREEN. The
+            // heading read "tifications".
+            //
+            // Anchoring to the viewport removes the arithmetic entirely: two
+            // equal margins, whatever the header contains.
+            'fixed inset-x-3 top-[calc(4rem+env(safe-area-inset-top)+0.375rem)]',
+
+            // ── TABLET AND UP: a normal dropdown under the bell ─────────
+            // There is room here, and a full-width sheet on a desktop would
+            // look like a mistake.
+            'sm:absolute sm:inset-x-auto sm:right-0 sm:top-12 sm:w-[21rem]',
+
+            // Bounded by the viewport and laid out as a column, so the footer
+            // ("Today only — the list clears at 5:30 am") can never be pushed
+            // off the bottom of the screen where nothing can reach it. The
+            // list below scrolls instead.
+            'flex max-h-[calc(var(--app-h,100vh)-5.5rem)] flex-col sm:max-h-[32rem]',
+
+            'z-50 animate-slide-up overflow-hidden rounded-xl border border-line bg-surface shadow-pop',
+          )}
         >
-          <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
+          {/* shrink-0: the title row keeps its height and the LIST gives way,
+              which is the only arrangement where the footer stays reachable. */}
+          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-4 py-3">
             <p className="text-sm font-semibold text-ink">
               {t('bell.title')}
               {unread > 0 && (
@@ -289,7 +319,12 @@ export default function NotificationBell() {
             </div>
           ) : (
             <>
-              <ul className="scrollbar-slim max-h-[26rem] divide-y divide-line overflow-y-auto">
+              {/* min-h-0 is load-bearing: a flex child will not shrink below
+                  its content without it, so the list would push the footer out
+                  of the panel instead of scrolling. The 26rem cap is gone —
+                  the PANEL is now what bounds the height, and it bounds it by
+                  the viewport. */}
+              <ul className="scrollbar-slim min-h-0 flex-1 divide-y divide-line overflow-y-auto">
                 {items.map((item) => (
                   <li key={item.id}>
                     <button
@@ -336,7 +371,7 @@ export default function NotificationBell() {
                 ))}
               </ul>
 
-              <p className="border-t border-line px-4 py-2.5 text-[0.6875rem] leading-relaxed text-ink-subtle">
+              <p className="shrink-0 border-t border-line px-4 py-2.5 text-[0.6875rem] leading-relaxed text-ink-subtle">
                 {t('bell.lastFew')}
               </p>
             </>
