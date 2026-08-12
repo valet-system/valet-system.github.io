@@ -138,7 +138,12 @@ export function ToastProvider({ children }) {
           spans the width of the screen, so without this it would swallow taps
           aimed at whatever is underneath it. */}
       <div
-        className="pointer-events-none fixed inset-x-0 top-0 z-[100] flex flex-col items-center gap-2 px-3 pt-3 sm:pt-4"
+        // The padding ADDS the iOS safe area. This is fixed to top-0 and the
+        // app runs under the status bar once installed (index.html sets
+        // black-translucent), so a plain pt-3 put the toast across the clock
+        // and the battery. Android reserves that strip itself, which is why it
+        // only showed on iPhone. env() is 0 everywhere else.
+        className="pointer-events-none fixed inset-x-0 top-0 z-[100] flex flex-col items-center gap-2 px-3 pt-[calc(0.75rem+env(safe-area-inset-top))] sm:pt-[calc(1rem+env(safe-area-inset-top))]"
         aria-live="polite"
         aria-atomic="false"
       >
