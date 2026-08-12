@@ -33,6 +33,29 @@ project_id = "valet-system"
 verify_jwt = false
 
 
+[functions.push-send]
+# verify_jwt = false, and this is what makes push work at all.
+#
+# push-send is called by a DATABASE WEBHOOK on push_outbox INSERT. A webhook is
+# Postgres talking to an HTTP endpoint — there is no signed-in user anywhere in
+# that path, so there is no user JWT to send. With verification left on, every
+# webhook call is rejected 401 before our code runs, the row stays 'queued', and
+# no phone is ever told. The app looks like it works, because a notification
+# still appears while the page is alive — that one comes from the PAGE, not from
+# push. The failure only shows up once the app is closed, which is the exact
+# case push exists for.
+#
+# The Ambria Admin app hit this and documents the same fix:
+#   supabase functions deploy send-push --no-verify-jwt
+#
+# WHAT THIS EXPOSES, AND WHY IT IS ACCEPTABLE
+#   Anyone can now POST to this endpoint. All they can make it do is deliver
+#   messages that are ALREADY queued, to the devices those messages were already
+#   addressed to. It accepts no input — it reads the queue and reports counts.
+#   There is nothing to leak and nothing to inject.
+verify_jwt = false
+
+
 # ── Not built yet. Listed so the intent is recorded. ──────────────────
 
 [functions.wa-send]
