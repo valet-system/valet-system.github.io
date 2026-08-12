@@ -40,6 +40,7 @@ import Icon from '@/components/ui/Icon'
 import { useAutoT, useT } from '@/i18n'
 import { useAuth } from '@/context/AuthContext'
 import useRealtime from '@/hooks/useRealtime'
+import { alertOnce } from '@/lib/taskAlerts'
 import { supabase } from '@/supabase'
 import { cn } from '@/utils/cn'
 import { istDayStart, timeAgo } from '@/utils/format'
@@ -78,6 +79,15 @@ export default function NotificationBell() {
   const [loadError, setLoadError] = useState(null)
   const ref = useRef(null)
 
+  /**
+   * Notification ids already announced. NULL until the first load has landed.
+   *
+   * That null is the guard against the worst version of this: signing in and
+   * being blasted with an alert for every notification of the day at once. The
+   * first load only records what is there.
+   */
+  const announced = useRef(null)
+
   const load = useCallback(async () => {
     if (!operatorId) return
 
@@ -96,7 +106,10 @@ export default function NotificationBell() {
     // This is a display window, not a retention policy.
     const { data, error } = await supabase
       .from('push_outbox')
-      .select('id, title, body, url, tag, critical, created_at, read_at, status')
+      // task_id is selected only so the alert can be keyed on it — it is the
+      // one id that operator/MyTasks also has, which is what lets the two
+      // detectors recognise the same event. See lib/taskAlerts.
+      .select('id, task_id, title, body, url, tag, critical, created_at, read_at, status')
       .gte('created_at', istDayStart())
       .order('created_at', { ascending: false })
       .limit(PAGE)
@@ -122,8 +135,37 @@ export default function NotificationBell() {
       return
     }
 
+    const rows = data ?? []
     setLoadError(null)
-    setItems(data ?? [])
+    setItems(rows)
+
+    // ── SOUND, on every screen ────────────────────────────────────────
+    //
+    // This is the bell's real job beyond the badge. It is mounted in AppShell,
+    // so it is the only listener the operator carries with them from Check In
+    // to My Tasks to Today's cars. Before this, the alert lived only on the
+    // My Tasks screen and an operator standing at the porch with a guest heard
+    // nothing at all when a car was dispatched to them.
+    if (announced.current) {
+      const fresh = rows.filter((n) => !announced.current.has(n.id))
+
+      for (const n of fresh) {
+        // Age check, not just "unseen". A refetch can surface an older row —
+        // after a reconnect, or when a read receipt reorders nothing but
+        // returns everything — and announcing the day's backlog at once would
+        // be worse than silence.
+        if (Date.now() - new Date(n.created_at).getTime() > 120_000) continue
+
+        alertOnce(n.task_id ?? `push:${n.id}`, {
+          critical: n.critical,
+          title: n.title,
+          body: n.body,
+          tag: n.tag,
+          url: n.url,
+        })
+      }
+    }
+    announced.current = new Set(rows.map((n) => n.id))
   }, [operatorId, t])
 
   useEffect(() => {

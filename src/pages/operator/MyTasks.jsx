@@ -75,7 +75,8 @@ import {
   startPickup,
 } from '@/lib/valetApi'
 import { supabase, describeDbError } from '@/supabase'
-import { alertLoud, playSuccess, playWarning } from '@/utils/sounds'
+import { alertOnce } from '@/lib/taskAlerts'
+import { playSuccess, playWarning } from '@/utils/sounds'
 import {
   formatDuration,
   formatTime,
@@ -175,24 +176,32 @@ export default function MyTasks() {
       const fresh = rows.filter((t) => !knownIds.current.has(t.id))
       if (fresh.length > 0) {
         const first = fresh[0]
-        alertLoud(
-          fresh.length === 1
-            ? t('tasks.alarmOne')
-            : t('tasks.alarmMany', { n: fresh.length }),
-          fresh.length === 1
-            ? t('tasks.alarmBody', {
-                token: first.parked_vehicles?.token_number,
-                car: prettyCarNumber(first.parked_vehicles?.car_number),
-              })
-            : t('tasks.alarmOpen'),
+        // alertOnce, not alertLoud: NotificationBell now alerts too, from
+        // push_outbox, so that an operator on ANY screen hears a dispatch. On
+        // this screen both detectors see the same event, and keying on the task
+        // id means it sounds once. See lib/taskAlerts.
+        alertOnce(first.id, {
+          // A dispatched retrieval always means a guest is waiting for a car.
+          critical: true,
+          title:
+            fresh.length === 1
+              ? t('tasks.alarmOne')
+              : t('tasks.alarmMany', { n: fresh.length }),
+          body:
+            fresh.length === 1
+              ? t('tasks.alarmBody', {
+                  token: first.parked_vehicles?.token_number,
+                  car: prettyCarNumber(first.parked_vehicles?.car_number),
+                })
+              : t('tasks.alarmOpen'),
           // A tag means a second alert replaces the first in the tray rather
           // than stacking — the operator wants the current state, not history.
-          'valet-new-task',
+          tag: 'valet-new-task',
           // Where a tap lands. Without it every notification opens the app's
           // home page, and the operator has to navigate to the task they were
           // just told about.
-          '/operator/tasks',
-        )
+          url: '/operator/tasks',
+        })
       }
     }
     knownIds.current = ids
