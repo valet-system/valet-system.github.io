@@ -234,6 +234,37 @@ export default function Spaces() {
   }
 
   /**
+   * Called after a bulk add, with the label -> Hindi map the form built while the
+   * admin was typing.
+   *
+   * The Hindi is saved BEFORE load(), deliberately. The backfill effect above
+   * reacts to `spaces`, so reloading first would let it start converting these
+   * very labels a second time — two network calls each and a race over who
+   * writes last. Saving first means the effect sees them already filled and
+   * skips them.
+   */
+  async function handleAdded(hindiByLabel = {}) {
+    const pairs = Object.entries(hindiByLabel).filter(([, hi]) => hi)
+
+    if (pairs.length > 0) {
+      // Read fresh rather than using `spaces`: the rows were created a moment
+      // ago by add_parking_spaces and are not in state yet.
+      const { data } = await supabase.rpc('parking_space_usage')
+
+      for (const [label, hi] of pairs) {
+        const row = (data ?? []).find((s) => s.label === label && !s.label_hi)
+        if (!row) continue
+        await supabase.rpc('admin_set_space_label_hi', {
+          p_space_id: row.id,
+          p_label_hi: hi,
+        })
+      }
+    }
+
+    await load()
+  }
+
+  /**
    * The Hindi spelling. Written through an RPC rather than a table update,
    * because parking_spaces has no policy that lets an admin write it — the same
    * reason admin_set_staff_name_hi exists. See migration 0029.
@@ -333,7 +364,7 @@ export default function Spaces() {
             desktop sidebar pins itself at top-16 for the same reason. */}
         <div className="xl:sticky xl:top-20">
           <SectionHeading title={t('spaces.addPlaces')} icon="plus" />
-          <AddSpaces onAdded={load} />
+          <AddSpaces onAdded={handleAdded} />
         </div>
 
         <div>
@@ -650,6 +681,15 @@ function AddSpaces({ onAdded }) {
   const [error, setError] = useState(null)
 
   /**
+   * label -> Hindi spelling, built while the admin is still typing.
+   *
+   * Shown below the box so the conversion is visible BEFORE anything is
+   * created, and handed to onAdded so the same values are what get saved —
+   * converting again after the insert would double every network call.
+   */
+  const [hindi, setHindi] = useState({})
+
+  /**
    * Split on commas AND newlines, so a pasted column from a spreadsheet and a
    * hand-typed "Basement, Porch, Front row" both work without the admin having
    * to know which one this field wanted.
@@ -662,6 +702,34 @@ function AddSpaces({ onAdded }) {
         .filter(Boolean),
     [text],
   )
+
+  /**
+   * Converts anything new, 400ms after typing stops.
+   *
+   * Debounced because this runs on every keystroke of a twenty-line paste, and
+   * sequential because twenty parallel calls to the transliteration service is
+   * how you get rate-limited and end up with none of them.
+   */
+  useEffect(() => {
+    const missing = labels.filter((l) => !(l in hindi))
+    if (missing.length === 0) return
+
+    let cancelled = false
+    const timer = setTimeout(async () => {
+      for (const label of missing) {
+        const hi = await hindiNameFor(label)
+        if (cancelled) return
+        // Recorded even when null, so a label the service cannot read is not
+        // retried on the next keystroke. null renders as "no Hindi".
+        setHindi((prev) => ({ ...prev, [label]: hi }))
+      }
+    }, 400)
+
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [labels, hindi])
 
   async function submit() {
     if (labels.length === 0) {
@@ -700,7 +768,9 @@ function AddSpaces({ onAdded }) {
     )
 
     setText('')
-    await onAdded()
+    // The map goes with it: the page saves these rather than converting again.
+    await onAdded(hindi)
+    setHindi({})
   }
 
   return (
@@ -749,6 +819,23 @@ function AddSpaces({ onAdded }) {
             )}
           />
         </Field>
+
+        {/* What will actually be created. Read-only on purpose: corrections
+            belong in the list on the right, where they persist and where every
+            place — not only the ones being added right now — can be fixed. */}
+        {labels.length > 0 && (
+          <div className="max-h-40 space-y-1 overflow-y-auto rounded-xl border border-line bg-surface-sunken/60 px-3 py-2">
+            {labels.map((label) => (
+              <p key={label} className="flex items-center gap-2 text-xs">
+                <span className="min-w-0 flex-1 truncate text-ink-muted">{label}</span>
+                <Icon name="chevron-right" size={12} className="shrink-0 text-ink-subtle" />
+                <span className="min-w-0 flex-1 truncate font-medium text-ink">
+                  {hindi[label] === undefined ? '…' : (hindi[label] ?? '—')}
+                </span>
+              </p>
+            ))}
+          </div>
+        )}
 
         {labels.length > 0 && (
           <p className="flex items-center gap-2 text-xs text-ink-subtle">

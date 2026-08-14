@@ -71,11 +71,15 @@ import { noteServerTime } from '@/lib/serverClock'
 import { supabase, describeDbError } from '@/supabase'
 import { formatCarNumber, formatTime, groupPhone, istToday, normalisePhone, personName, prettyCarNumber, skipPhoneSeparator } from '@/utils/format'
 import { ACTIVE_TASK_STATUSES, CAR_TIERS, CAR_TIER_LIST, PHONE_REGEX, TASK_TYPES } from '@/types'
+import HindiInput from '@/components/ui/HindiInput'
 import { cn } from '@/utils/cn'
 import { useT } from '@/i18n'
 
 const BLANK = {
   guestName: '',
+  // Follows guestName as it is typed, and is editable. See the field below for
+  // why this is on the form now rather than filled in silently afterwards.
+  guestNameHi: '',
   guestPhone: '',
   carNumber: '',
   carTier: CAR_TIERS.STANDARD,
@@ -258,6 +262,8 @@ export default function CheckIn() {
   const submitCheckIn = async () => {
     const result = await checkIn({
       guestName: form.guestName.trim(),
+      // What the operator SAW and possibly corrected — not a fresh conversion.
+      guestNameHi: form.guestNameHi.trim(),
       guestPhone: normalisePhone(form.guestPhone),
       carNumber: formatCarNumber(form.carNumber),
       carTier: form.carTier,
@@ -379,6 +385,24 @@ export default function CheckIn() {
             value={form.guestName}
             error={errors.guestName}
             onChange={(e) => setField('guestName', e.target.value)}
+          />
+
+          {/* ── the Hindi spelling, VISIBLE ────────────────────────────
+              It used to be generated silently after check-in. Shown here
+              instead, and editable, because transliteration gets Indian names
+              wrong often enough to be worth a glance — and a name nobody can
+              check is a name nobody can trust.
+
+              It costs no time at submit: this follows guestName while the
+              operator is still filling in the phone and the car, so by the time
+              they press the button the conversion has already happened.
+              Nothing is awaited on the hot path. */}
+          <HindiInput
+            id="guest-name-hi"
+            label={t('checkin.guestNameHi')}
+            source={form.guestName}
+            value={form.guestNameHi}
+            onChange={(v) => setField('guestNameHi', v)}
           />
 
           <Input

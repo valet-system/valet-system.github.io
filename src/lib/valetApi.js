@@ -246,7 +246,14 @@ function capitalise(text) {
  *
  * Resolves { ok: true, token_number, vehicle_id, task_id, car_number, ... }.
  */
-export async function checkIn({ guestName, guestPhone, carNumber, carTier, notes }) {
+export async function checkIn({
+  guestName,
+  guestNameHi,
+  guestPhone,
+  carNumber,
+  carTier,
+  notes,
+}) {
   const result = await call('operator_check_in', {
     p_guest_name: guestName,
     p_guest_phone: guestPhone,
@@ -257,46 +264,28 @@ export async function checkIn({ guestName, guestPhone, carNumber, carTier, notes
 
   // ── the Hindi spelling, AFTER the token is issued and NOT awaited ──
   //
-  // Deliberately fire-and-forget. Check-in is the hottest path in the app: the
-  // guest is standing at the porch and the operator is holding their keys.
-  // Transliteration is a network call, so awaiting it here would add its
-  // latency — and its failures — to the one action that must never be slow.
+  // Sent as a SECOND call rather than as an argument to operator_check_in,
+  // because that function allocates a token, creates the vehicle and opens the
+  // parking task in one transaction — the piece that guarantees a burnt token
+  // cannot exist without a car behind it. Restating it to thread one more
+  // argument through is not worth the risk. See migration 0030.
   //
-  // The token is already on screen by the time this runs. If it fails, or the
-  // phone is offline, guest_name_hi stays NULL and every screen shows the
-  // English name, which is exactly the fallback. Nothing is retried: this is a
-  // convenience on a row that empties at 05:30 IST, not a fact worth chasing.
-  //
-  // See migration 0030 for why operator_check_in itself was left alone.
-  if (result.ok && result.vehicle_id) {
-    fillGuestNameHi(result.vehicle_id, guestName)
+  // Not awaited, so the token is on screen before this runs. It carries no
+  // network conversion — the value came from the FORM, where it was generated
+  // while the operator was still typing the phone number — so all this does is
+  // one small write. A failure leaves guest_name_hi NULL and every screen shows
+  // the English name, which is the intended fallback.
+  if (result.ok && result.vehicle_id && guestNameHi) {
+    supabase
+      .rpc('set_guest_name_hi', { p_vehicle_id: result.vehicle_id, p_name_hi: guestNameHi })
+      .then(({ error }) => {
+        // Logged, never surfaced. The operator has moved on to the next car and
+        // there is nothing for them to do about it.
+        if (error) console.info('[checkin] could not store the Hindi name:', error.message)
+      })
   }
 
   return result
-}
-
-/**
- * Transliterates a guest name and stores it. Never throws, never awaited.
- *
- * Imported lazily so the transliteration code and its 20 KB of nothing-else are
- * not in the bundle that has to load before the first check-in of a shift.
- */
-function fillGuestNameHi(vehicleId, guestName) {
-  import('@/lib/hindiText')
-    .then(({ hindiNameFor }) => hindiNameFor(guestName))
-    .then((hi) => {
-      // null means already Devanagari, or the lookup failed. Either is fine.
-      if (!hi) return
-      return supabase.rpc('set_guest_name_hi', {
-        p_vehicle_id: vehicleId,
-        p_name_hi: hi,
-      })
-    })
-    .catch((err) => {
-      // Logged, not surfaced. The operator has moved on and there is nothing
-      // for them to do about it.
-      console.info('[checkin] could not store the Hindi name:', err?.message ?? err)
-    })
 }
 
 // ═══════════════════════════════════════════════════════════════════
