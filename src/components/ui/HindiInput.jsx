@@ -48,6 +48,11 @@
  * │                                                                     │
  * │ USED BY                                                             │
  * │   pages/StaffManager — the Add and Edit dialogs                      │
+ * │   pages/operator/CheckIn — the guest's name, beside the English one   │
+ * │                                                                     │
+ * │   That second caller is why the placeholder shows `source` rather     │
+ * │   than an example name: "राजेश कुमार" under a guest's name read as a    │
+ * │   suggestion for the person standing at the porch.                    │
  * │                                                                     │
  * │ DEPENDS ON                                                          │
  * │   lib/hindiText, ui/Field, ui/Icon, src/i18n, utils/cn               │
@@ -266,7 +271,13 @@ export default function HindiInput({
           disabled={!trimmed}
           title={t('hindiName.refresh')}
           aria-label={t('hindiName.refresh')}
-          className="shrink-0"
+          // Matched to the input, which is h-touch (56px). size="icon-md" is
+          // 44px, and a 12px difference beside a field this wide reads as a
+          // misaligned control rather than a smaller one.
+          //
+          // The bang is required: icon-md already sets h-11 w-11, and cn() joins
+          // classes without resolving Tailwind conflicts — see utils/cn.
+          className="shrink-0 !h-touch !w-touch"
         />
       </div>
 
