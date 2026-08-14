@@ -231,7 +231,14 @@ export default function HindiInput({
           }}
           // lang so the browser and any screen reader treat this as Devanagari.
           lang="hi"
-          placeholder={t('hindiName.placeholder')}
+          // The ENGLISH name this follows, not a made-up example.
+          //
+          // It used to be a fixed "राजेश कुमार", which was fine when this field
+          // only existed in the staff dialog and confusing everywhere else: on a
+          // check-in it read as a suggestion for the guest in front of you.
+          // Showing the source says what the field is actually for, and an empty
+          // box is honest when there is nothing to follow yet.
+          placeholder={source?.trim() ?? ''}
           maxLength={80}
           autoComplete="off"
           spellCheck={false}
