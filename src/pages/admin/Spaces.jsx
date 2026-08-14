@@ -47,6 +47,7 @@ import Button from '@/components/ui/Button'
 import Card, { CardHeader, SectionHeading } from '@/components/ui/Card'
 import EmptyState from '@/components/ui/EmptyState'
 import { Field } from '@/components/ui/Field'
+import { ConfirmModal } from '@/components/ui/Modal'
 import Icon from '@/components/ui/Icon'
 import {
   HeaderSkeleton,
@@ -67,11 +68,10 @@ import { cn } from '@/utils/cn'
  * The heading row and every place row share this, so the number boxes line up
  * down the list instead of each row finding its own edge.
  *
- * The last two columns are FIXED WIDTHS, not `auto`, and that is the whole
- * point: each row is its own grid, so `auto` is measured per row — and the
- * delete button only exists on out-of-service rows. With `auto` the number
- * boxes would sit at a different x on those rows. 5.75rem is two icon-md
- * buttons (2.75rem each) plus the gap-1 between them.
+ * The last two columns are FIXED WIDTHS, not `auto`. Each row is its own grid,
+ * so `auto` is measured per row and any difference in content — a badge, a
+ * longer name — would put the number boxes at a different x on that row.
+ * 5.75rem is two icon-md buttons (2.75rem each) plus the gap-1 between them.
  *
  * On a phone the Hindi name drops to its own line under the place name, because
  * four columns inside 390px leaves nothing readable. From sm up it gets a column
@@ -92,6 +92,8 @@ export default function Spaces() {
   const toast = useToast()
 
   const [spaces, setSpaces] = useState([])
+  /** The place the admin has asked to delete, until they confirm or cancel. */
+  const [pendingDelete, setPendingDelete] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -294,6 +296,10 @@ export default function Spaces() {
   async function remove(space) {
     const { error: err } = await supabase.from('parking_spaces').delete().eq('id', space.id)
 
+    // Closed either way. Leaving it open on failure would hide the toast that
+    // says what went wrong.
+    setPendingDelete(null)
+
     if (err) toast.error(describeDbError(err, t('spaces.couldNotDelete')))
     else {
       toast.success(t('spaces.removed', { place: space.label }))
@@ -421,7 +427,7 @@ export default function Spaces() {
                       onCapacity={(n) => setCapacity(space, n)}
                       onLabelHi={(v) => setLabelHi(space, v)}
                       onToggle={() => toggle(space)}
-                      onRemove={() => remove(space)}
+                      onRemove={() => setPendingDelete(space)}
                     />
                   ))}
                 </Card>
@@ -450,6 +456,29 @@ export default function Spaces() {
           )}
         </div>
       </div>
+
+      {/* The guard that replaced "take it out of service first".
+          It names the place, because a mis-tapped row and the right row look
+          identical once a dialog is covering the list — and it says out loud
+          when cars are parked there, which is the one case where deleting
+          actually costs something. */}
+      <ConfirmModal
+        open={Boolean(pendingDelete)}
+        onClose={() => setPendingDelete(null)}
+        onConfirm={() => remove(pendingDelete)}
+        title={t('spaces.deleteTitle', { place: pendingDelete?.label ?? '' })}
+        description={
+          pendingDelete?.inUse > 0
+            ? t(
+                pendingDelete.inUse === 1
+                  ? 'spaces.deleteWhileParked'
+                  : 'spaces.deleteWhileParked_plural',
+                { place: pendingDelete.label, n: pendingDelete.inUse },
+              )
+            : t('spaces.deleteBody', { place: pendingDelete?.label ?? '' })
+        }
+        confirmLabel={t('spaces.deleteConfirm')}
+      />
     </>
   )
 }
@@ -627,25 +656,32 @@ function SpaceRow({ space, onCapacity, onLabelHi, onToggle, onRemove }) {
       />
 
       {/* Delete FIRST, eye LAST — deliberately, and it looks backwards until you
-          see the list. The eye is on every row; delete is on the rare
-          out-of-service one. Putting delete last pushed the eye left on exactly
-          those rows, so the one control present everywhere was the one that
-          failed to line up, and it read as a rendering fault. Ordered this way
-          the eye holds its column and delete reads as inserted beside it. */}
+          see the list. Both are on every row now, and the eye is the one people
+          reach for constantly, so it holds the right-hand column and delete sits
+          beside it. */}
       <div className="flex items-center justify-end gap-1">
-        {/* Only once it is out of service, so deleting takes two deliberate
-            steps. A live place is on an operator's screen right now. */}
-        {!space.is_active && (
-          <Button
-            variant="ghost"
-            size="icon-md"
-            icon="x-circle"
-            onClick={onRemove}
-            title={t('spaces.deleteForever')}
-            aria-label={t('spaces.deleteNamed', { place: space.label })}
-            className="hover:bg-danger-soft hover:text-danger"
-          />
-        )}
+        {/* ON EVERY ROW NOW.
+            It used to appear only once a place was already out of service, so
+            deleting took two deliberate steps — and that WAS the confirmation,
+            because remove() asks nothing before it fires. Two steps to undo a
+            typo made thirty seconds ago is a bad trade, so the guard moved to
+            where it belongs: a dialog that names the place, and says out loud
+            when cars are parked in it. */}
+        <Button
+          variant="ghost"
+          size="icon-md"
+          icon="trash"
+          onClick={onRemove}
+          title={t('spaces.deleteForever')}
+          aria-label={t('spaces.deleteNamed', { place: space.label })}
+          // !text-danger, and the bang is NOT decoration. The ghost variant sets
+          // text-ink-muted, and both are colour utilities of equal specificity, so
+          // which one wins is decided by their order in the GENERATED stylesheet —
+          // not by which is later in this class attribute. Measured: without the
+          // bang this icon rendered rgb(71,85,105), identical to the eye beside
+          // it. cn() joins strings and does not merge Tailwind conflicts.
+          className="!text-danger hover:bg-danger-soft"
+        />
 
         <Button
           variant="ghost"

@@ -15,9 +15,24 @@
  * │   "undefined" in the class attribute when a condition is falsy.      │
  * │                                                                     │
  * │ WHY NOT clsx + tailwind-merge                                        │
- * │   Those are two dependencies to solve a conflict problem we avoid by │
- * │   construction: every component in ui/ puts the caller's `className` │
- * │   LAST, so a caller override always wins the CSS cascade already.    │
+ * │   Two dependencies, and most overrides do not need them. But be      │
+ * │   clear about what this does NOT do: it does not resolve conflicts.  │
+ * │                                                                     │
+ * │ ── IT WILL NOT WIN A CONFLICT FOR YOU ───────────────────────────────│
+ * │   This used to claim that because ui/ components put the caller's    │
+ * │   `className` LAST, a caller override "always wins the cascade".     │
+ * │   That is not how CSS works. Order inside the class ATTRIBUTE means  │
+ * │   nothing; for two utilities of equal specificity the winner is      │
+ * │   whichever comes later in the GENERATED STYLESHEET.                 │
+ * │                                                                     │
+ * │   Measured, on the delete button in admin/Spaces: Button's `ghost`   │
+ * │   variant sets text-ink-muted, the caller passed text-danger, and    │
+ * │   the icon rendered rgb(71,85,105) — the variant's colour. The fix   │
+ * │   is the important modifier, `!text-danger`.                          │
+ * │                                                                     │
+ * │   So: adding a class this component does not already set works fine. │
+ * │   REPLACING one it does set needs `!`, and needs checking in the     │
+ * │   browser rather than assuming.                                      │
  * │                                                                     │
  * │ USED BY                                                             │
  * │   Every component in src/components.                                 │

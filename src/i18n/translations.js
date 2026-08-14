@@ -594,6 +594,19 @@ export const en = {
   // every row — see the note in admin/Spaces.
   'spaces.placeColumn': 'Place',
   'spaces.capacityColumn': 'Spaces',
+  'spaces.deleteTitle': 'Delete “{place}”?',
+  'spaces.deleteBody':
+    'It disappears from every operator’s screen. Cars already parked there keep the location they were recorded under — nothing in your reports changes.',
+  // The one case where deleting costs something, so it is said plainly rather
+  // than left for the admin to work out afterwards.
+  //
+  // Two forms, not "car(s)". This is the sentence an admin reads most carefully
+  // in the whole screen, and a placeholder plural reads as unfinished.
+  'spaces.deleteWhileParked':
+    'One car is parked in “{place}” right now. Deleting it does not move the car — it keeps the location it was recorded under — but this place will no longer be counted or shown to operators. Take it out of service instead if you only want to stop new cars going there.',
+  'spaces.deleteWhileParked_plural':
+    '{n} cars are parked in “{place}” right now. Deleting it does not move them — they keep the location they were recorded under — but this place will no longer be counted or shown to operators. Take it out of service instead if you only want to stop new cars going there.',
+  'spaces.deleteConfirm': 'Delete',
   'spaces.hindiColumn': 'Hindi name',
   'spaces.hindiFor': 'Hindi name for {place}',
   'spaces.convertAgain': 'Convert to Hindi again',
@@ -1328,6 +1341,14 @@ export const hi = {
   // शब्द दो कॉलम पर पढ़ना उलझाता है, इसलिए क्षमता वाला कॉलम "क्षमता" है।
   'spaces.placeColumn': 'जगह',
   'spaces.capacityColumn': 'क्षमता',
+  'spaces.deleteTitle': '“{place}” हटा दें?',
+  'spaces.deleteBody':
+    'यह हर ऑपरेटर की स्क्रीन से हट जाएगी। जो गाड़ियाँ पहले से वहाँ पार्क हैं, उनकी जगह वैसी ही दर्ज रहेगी — रिपोर्ट में कुछ नहीं बदलेगा।',
+  'spaces.deleteWhileParked':
+    'अभी “{place}” में एक गाड़ी खड़ी है। हटाने से वह कहीं नहीं जाएगी — उसकी जगह वैसी ही दर्ज रहेगी — लेकिन यह जगह गिनी नहीं जाएगी और ऑपरेटर को दिखेगी नहीं। सिर्फ़ नई गाड़ियाँ रोकनी हों तो इसे बंद कर दीजिए, हटाइए नहीं।',
+  'spaces.deleteWhileParked_plural':
+    'अभी “{place}” में {n} गाड़ियाँ खड़ी हैं। हटाने से वे कहीं नहीं जाएँगी — उनकी जगह वैसी ही दर्ज रहेगी — लेकिन यह जगह गिनी नहीं जाएगी और ऑपरेटर को दिखेगी नहीं। सिर्फ़ नई गाड़ियाँ रोकनी हों तो इसे बंद कर दीजिए, हटाइए नहीं।',
+  'spaces.deleteConfirm': 'हटा दें',
   'spaces.hindiColumn': 'हिंदी नाम',
   'spaces.hindiFor': '{place} का हिंदी नाम',
   'spaces.convertAgain': 'दोबारा हिंदी में बदलें',

@@ -75,6 +75,12 @@ const PATHS = {
   'check-circle': <><circle cx="12" cy="12" r="9" /><path d="m8.2 12.2 2.6 2.6 5-5" /></>,
   x:           <><path d="M18 6 6 18M6 6l12 12" /></>,
   'x-circle':  <><circle cx="12" cy="12" r="9" /><path d="m15 9-6 6M9 9l6 6" /></>,
+  // Delete. x-circle was standing in for this and reads as "cancel" or "close" —
+  // the two things it means everywhere else in this set — so an admin had to
+  // learn that one ⊗ in one list removes a row for good. A bin does not need
+  // learning. Four strokes: rim, lid handle, body, and the two inner lines that
+  // stop it reading as a plain cup at 20px.
+  trash:       <><path d="M4 7h16" /><path d="M9.5 7V4.8a.8.8 0 0 1 .8-.8h3.4a.8.8 0 0 1 .8.8V7" /><path d="M6.5 7l.9 12.2a2 2 0 0 0 2 1.8h5.2a2 2 0 0 0 2-1.8L17.5 7" /><path d="M10.5 11v6M13.5 11v6" /></>,
   alert:       <><path d="M10.3 3.9 2 18.2A2 2 0 0 0 3.7 21h16.6a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0Z" /><path d="M12 9.5v4M12 17.2h.01" /></>,
   info:        <><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 7.8h.01" /></>,
   bell:        <><path d="M6 8.5a6 6 0 0 1 12 0c0 5.5 2 7.5 2 7.5H4s2-2 2-7.5Z" /><path d="M10.2 19.5a2 2 0 0 0 3.6 0" /></>,
