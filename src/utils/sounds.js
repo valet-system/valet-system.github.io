@@ -145,14 +145,40 @@ function sequence(notes, { volume = 0.22, type = 'sine' } = {}) {
 export function playLoud() {
   sequence(
     [
-      { freq: 784, at: 0.0, duration: 0.13 }, // G5
-      { freq: 988, at: 0.14, duration: 0.13 }, // B5
-      { freq: 1319, at: 0.28, duration: 0.2 }, // E6
-      { freq: 784, at: 0.56, duration: 0.13 },
-      { freq: 988, at: 0.7, duration: 0.13 },
-      { freq: 1319, at: 0.84, duration: 0.26 },
+      // ── SAME RISING SHAPE, AN OCTAVE UP ──
+      // The shape is deliberately unchanged: rising still means "come here" and
+      // stays the opposite of playWarning's falling pair, which is the whole
+      // reason the four alerts are distinguishable without looking. Only the
+      // loudness moved.
+      { freq: 1568, at: 0.0, duration: 0.12 }, // G6
+      { freq: 1976, at: 0.13, duration: 0.12 }, // B6
+      { freq: 2637, at: 0.26, duration: 0.18 }, // E7
+      { freq: 1568, at: 0.52, duration: 0.12 },
+      { freq: 1976, at: 0.65, duration: 0.12 },
+      { freq: 2637, at: 0.78, duration: 0.18 },
+      // A THIRD round. A guest is waiting; another 0.5s of noise is cheaper
+      // than the operator missing it and the car being fetched five minutes
+      // late.
+      { freq: 1568, at: 1.04, duration: 0.12 },
+      { freq: 1976, at: 1.17, duration: 0.12 },
+      { freq: 2637, at: 1.3, duration: 0.22 },
     ],
-    { volume: 0.3, type: 'triangle' },
+    // ── WHY THIS IS LOUDER, AND WHY GAIN IS THE SMALLEST PART OF IT ──
+    //
+    // 1. SQUARE, not triangle. A square wave packs far more harmonic energy at
+    //    the same peak amplitude, so it is heard as dramatically louder — and it
+    //    buzzes, which is what an alert should do. A triangle is a chime.
+    //
+    // 2. AN OCTAVE UP. Human hearing peaks around 2-4 kHz, and a phone's tiny
+    //    speaker is also most efficient there while rolling off badly below
+    //    ~500 Hz. The old figure sat at 784-1319 Hz, under both curves. Moving
+    //    it to 1568-2637 Hz gains real perceived volume at no extra amplitude.
+    //
+    // 3. GAIN 0.3 -> 0.8. Safe because the notes do not overlap: each has
+    //    decayed before the next begins, so nothing sums past full scale. Two
+    //    simultaneous notes at 0.8 WOULD clip, which is why this is a sequence
+    //    and not a chord.
+    { volume: 0.8, type: 'square' },
   )
 }
 
