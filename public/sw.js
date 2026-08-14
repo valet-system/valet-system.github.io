@@ -149,7 +149,11 @@ function toHindi(text) {
  * JS/CSS bundles are not listed because their names are not known until build
  * time; strategy 1 picks them up on first visit instead.
  */
-const SHELL_FILES = ['/', '/index.html', '/manifest.json', '/favicon.svg', '/icon-192.png']
+// favicon-32.png, not favicon.svg: the SVG is no longer the app's logo and is
+// referenced nowhere else — see index.html. Every entry here must EXIST, because
+// cache.addAll() rejects as a whole on a single 404 and the install then fails
+// silently, leaving no offline shell at all.
+const SHELL_FILES = ['/', '/index.html', '/manifest.json', '/favicon-32.png', '/icon-192.png']
 
 /** Hosts whose responses must always come from the network. */
 function isLiveData(url) {

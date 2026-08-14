@@ -128,8 +128,15 @@ export default function NavDrawer({ open, onClose, items }) {
       >
         {/* ── brand ─────────────────────────────────────────────────── */}
         <div className="flex shrink-0 items-center gap-3 px-4 py-5">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand text-accent">
-            <Icon name="car" size={22} />
+          <span className="flex h-10 w-[4.5rem] shrink-0 items-center justify-center rounded-xl bg-brand px-2">
+            <img
+              src="/logo-mark.png"
+              alt=""
+              aria-hidden="true"
+              width={664}
+              height={242}
+              className="h-auto w-full"
+            />
           </span>
           <div className="min-w-0">
             <p className="truncate font-semibold leading-tight text-ink">{t('login.brand')}</p>

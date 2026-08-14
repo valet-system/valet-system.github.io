@@ -201,10 +201,27 @@ export default function Login() {
 
       <main className="flex flex-1 items-center justify-center px-4 pb-10 pt-4">
         <div className="w-full max-w-sm">
-          {/* ── brand ─────────────────────────────────────────────────── */}
+          {/* ── brand ─────────────────────────────────────────────────────
+              The real lockup, not the old car glyph in a rounded square.
+
+              It sits on a DARK PLATE because it has to: the "AMBRIA" wordmark
+              is white, and this screen's background is light — on the bare page
+              the company name would be invisible while the gold car stayed
+              readable, which looks like a half-loaded image.
+
+              alt is empty and aria-hidden: the h1 underneath already says the
+              name, and a screen reader announcing "Ambria" twice in a row is
+              noise. The image is decoration here, not information. */}
           <div className="mb-8 text-center">
-            <span className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-brand text-accent shadow-raised">
-              <Icon name="car" size={30} />
+            <span className="mx-auto mb-4 flex w-52 items-center justify-center rounded-2xl bg-brand px-5 py-4 shadow-raised">
+              <img
+                src="/logo-lockup.png"
+                alt=""
+                aria-hidden="true"
+                width={919}
+                height={444}
+                className="h-auto w-full"
+              />
             </span>
             <h1 className="text-2xl font-bold tracking-tight text-ink">{t('login.brand')}</h1>
             <p className="mt-1 text-sm text-ink-subtle">{t('login.tagline')}</p>

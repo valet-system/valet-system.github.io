@@ -278,6 +278,19 @@ function TopBar({ displayName, phone, propertyName, roleLabel, onSignOut, onOpen
             <Icon name="menu" size={22} />
           </button>
 
+          {/* A SQUARE with the glyph, not the brand mark — and this was tried
+              the other way first.
+
+              The mark is 2.7:1, so showing it properly needs a ~64px plate
+              instead of a 36px square. Measured at 320px with the longest
+              property name: the row overflowed by 22px and "Ambria Pushpanjali
+              Banquets" was squeezed to 46px. This file calls that name "the most
+              important label in the whole app" and it is right — an operator
+              covering two sites must never be unsure which one they are acting
+              on. A logo is not worth that.
+
+              The brand lives where there is room for it: the login lockup, the
+              drawer, the install card, and every OS icon. */}
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-accent">
             <Icon name="car" size={20} />
           </span>

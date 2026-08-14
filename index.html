@@ -31,12 +31,21 @@
     <meta name="apple-mobile-web-app-title" content="Valet Ops" />
 
     <!-- ── icons ──────────────────────────────────────────────────────
-         SVG first for crisp tabs on modern browsers; the PNGs are the
-         fallback and are also what Chrome requires for installability.
-         All generated from favicon.svg by `npm run icons`.
+         All generated from public/logo-mark.png by `npm run icons` — the
+         Ambria car mark, keyed out of the brand lockup in
+         public/valet logo.png.
+
+         NO SVG LINK, deliberately. There used to be one, listed FIRST,
+         and browsers that accept SVG prefer it — so the old hand-drawn
+         car glyph in favicon.svg would have kept showing in the tab while
+         every other icon showed the new brand. The brand arrived as a
+         raster; two sources for one logo is how they drift apart.
+
+         Two sizes so a high-DPI tab and a pinned tab both get pixels
+         rather than an upscaled 32.
     -->
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="180x180" href="/favicon-180.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
 
     <!-- Internal ops tool: keep it out of search results entirely. -->

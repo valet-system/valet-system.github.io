@@ -11,7 +11,8 @@
     "vapid": "node scripts/generate-vapid.mjs",
     "build": "npm run check && vite build && node scripts/stamp-sw.mjs",
     "preview": "vite preview",
-    "icons": "node scripts/generate-icons.mjs"
+    "icons": "node scripts/generate-icons.mjs",
+    "logo": "node scripts/extract-logo.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.4",

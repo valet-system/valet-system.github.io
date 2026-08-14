@@ -52,13 +52,13 @@ import {
 } from '@/components/ui/PageSkeleton'
 import { TierBadge, VehicleStatusBadge } from '@/components/ui/Badge'
 import { useToast } from '@/context/ToastContext'
+import RangePicker, { PRESETS, presetRange } from '@/components/ui/RangePicker'
 import { useT } from '@/i18n'
 import { supabase, describeDbError } from '@/supabase'
 import {
   downloadCsv,
   formatDate,
   formatPhone,
-  istDaysAgo,
   istToday,
   personName,
   prettyCarNumber,
@@ -74,14 +74,13 @@ const PAGE = 100
  */
 const EXPORT_MAX = 5000
 
-// labelKey, not label: module scope runs once, before a language is chosen.
-const RANGES = [
-  { days: 1, labelKey: 'range.today' },
-  { days: 7, labelKey: 'range.7d' },
-  { days: 30, labelKey: 'range.30d' },
-  { days: 90, labelKey: 'records.90d' },
-  { days: 365, labelKey: 'records.1y' },
-]
+/**
+ * The pills this screen offers — the full catalogue, unlike Analytics.
+ *
+ * A year of records is a list you page through, not an aggregate query, so the
+ * long ranges are cheap here in a way they are not there.
+ */
+const RANGE_PRESETS = PRESETS
 
 export default function Records() {
   const t = useT()
@@ -91,12 +90,24 @@ export default function Records() {
   const [total, setTotal] = useState(0)
   const [properties, setProperties] = useState([])
 
-  // Seeded from ?days= so "Cars today" elsewhere lands on today rather than on
-  // a 30-day list the reader then has to narrow themselves.
+  /**
+   * The range, as the dates the RPC actually takes. `to: null` means "up to
+   * today" — the server treats a missing end that way (migration 0018), so a
+   * preset does not have to be recomputed at midnight.
+   *
+   * Was a `days` number. Dates instead, because a number cannot express "3rd to
+   * 7th of last month", which is the whole point of the custom picker.
+   *
+   * ?days=1 is still honoured: Properties links here with it to mean "cars
+   * today", and that link must keep landing on today rather than on a 30-day
+   * list the reader then has to narrow themselves.
+   */
   const [params] = useSearchParams()
-  const [days, setDays] = useState(() => {
+  const [range, setRange] = useState(() => {
     const wanted = Number(params.get('days'))
-    return RANGES.some((r) => r.days === wanted) ? wanted : 30
+    if (wanted === 1) return presetRange('today')
+    const match = RANGE_PRESETS.find((r) => r.back === wanted - 1)
+    return match ? presetRange(match.key) : presetRange('30d')
   })
   const [propertyId, setPropertyId] = useState('all')
   const [query, setQuery] = useState('')
@@ -119,7 +130,7 @@ export default function Records() {
 
   // Any filter change invalidates the page number. Without this, narrowing a
   // range while on page 4 shows an empty table that looks like "no records".
-  useEffect(() => setPage(0), [days, propertyId])
+  useEffect(() => setPage(0), [range, propertyId])
 
   useEffect(() => {
     supabase
@@ -131,12 +142,13 @@ export default function Records() {
 
   const args = useMemo(
     () => ({
-      p_from: istDaysAgo(days - 1),
-      p_to: istToday(),
+      p_from: range.from,
+      // null, not today: see the range state above.
+      p_to: range.to,
       p_property_id: propertyId === 'all' ? null : propertyId,
       p_query: term || null,
     }),
-    [days, propertyId, term],
+    [range, propertyId, term],
   )
 
   const load = useCallback(async () => {
@@ -285,22 +297,17 @@ export default function Records() {
           inputMode="search"
         />
 
-        <div className="flex flex-wrap gap-2">
-          {RANGES.map((r) => (
-            <button
-              key={r.days}
-              type="button"
-              onClick={() => setDays(r.days)}
-              aria-pressed={days === r.days}
-              className={
-                days === r.days
-                  ? 'rounded-full bg-brand px-3.5 py-2 text-sm font-semibold text-ink-inverse'
-                  : 'rounded-full border border-line-strong bg-surface px-3.5 py-2 text-sm font-medium text-ink-muted transition-colors hover:bg-surface-sunken'
-              }
-            >
-              {t(r.labelKey)}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-start gap-2">
+          {/* The same control Analytics uses, so a custom range behaves
+              identically on both — and so the custom date fields did not have to
+              be written twice. */}
+          <RangePicker
+            from={range.from}
+            to={range.to}
+            onChange={setRange}
+            presets={RANGE_PRESETS}
+            className="mb-0"
+          />
 
           <select
             value={propertyId}

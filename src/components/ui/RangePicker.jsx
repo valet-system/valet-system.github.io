@@ -51,13 +51,33 @@ import { cn } from '@/utils/cn'
  * both ends: Today is 0 (from === to), "7 days" is 6 — today plus the six
  * before it. Using 7 there would quietly return eight days.
  */
+/**
+ * Every preset this component knows how to compute — the CATALOGUE, not the list
+ * any one screen shows. presetRange() and the active-pill match both look here,
+ * so a key must exist in this array even if only one screen renders it.
+ *
+ * labelKey, not label: this array is evaluated once at import time, so a literal
+ * would freeze whichever language happened to load first.
+ *
+ * The 90d and 1y labels reuse the records.* keys they were already translated
+ * under. Slightly odd naming for a shared component, and better than a second
+ * pair of keys saying the same words.
+ */
 export const PRESETS = [
-  // labelKey, not label: this array is evaluated once at import time, so a
-  // literal would freeze whichever language happened to load first.
   { key: 'today', labelKey: 'range.today', back: 0 },
   { key: '7d', labelKey: 'range.7d', back: 6 },
   { key: '30d', labelKey: 'range.30d', back: 29 },
+  { key: '90d', labelKey: 'records.90d', back: 89 },
+  { key: '1y', labelKey: 'records.1y', back: 364 },
 ]
+
+/**
+ * What a screen gets if it does not choose: the three short ranges.
+ *
+ * Analytics aggregates server-side over whatever it is given, and offering a
+ * year there by default would invite a slow query nobody asked for.
+ */
+export const SHORT_PRESETS = PRESETS.slice(0, 3)
 
 /**
  * The {from, to} for a preset key, in IST — never the device's timezone.
@@ -74,7 +94,21 @@ export function presetRange(key) {
   return { from: istDaysAgo(preset.back), to: null }
 }
 
-export default function RangePicker({ from, to, onChange, className = '' }) {
+export default function RangePicker({
+  from,
+  to,
+  onChange,
+  /**
+   * Which pills to offer. Defaults to PRESETS.
+   *
+   * A prop and not a constant, because Records wants 90 days and a year and
+   * Analytics does not. Adding those to the shared PRESETS would have changed
+   * the Analytics screen too, which nobody asked for — a shared component
+   * growing options for one caller is how the other caller's UI drifts.
+   */
+  presets = SHORT_PRESETS,
+  className = '',
+}) {
   const t = useT()
   const [custom, setCustom] = useState(false)
 
@@ -90,9 +124,11 @@ export default function RangePicker({ from, to, onChange, className = '' }) {
     // was hand-picked even if the start happens to match a preset.
     if (to) return null
 
-    const match = PRESETS.find((p) => presetRange(p.key).from === from)
+    // `presets`, not the catalogue: a range matching a preset this screen does
+    // not offer is a custom range as far as this screen is concerned.
+    const match = presets.find((p) => presetRange(p.key).from === from)
     return match?.key ?? null
-  }, [from, to])
+  }, [from, to, presets])
 
   // Open the custom fields when the range arrives already custom, so the dates
   // on screen are the dates in effect rather than a collapsed panel.
@@ -107,7 +143,7 @@ export default function RangePicker({ from, to, onChange, className = '' }) {
       {/* aria-pressed, not aria-selected: these are toggle buttons, not tabs —
           there is no tabpanel for them to control. */}
       <div className="flex flex-wrap gap-2" role="group" aria-label={t('range.label')}>
-        {PRESETS.map((option) => (
+        {presets.map((option) => (
           <button
             key={option.key}
             type="button"

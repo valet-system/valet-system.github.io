@@ -170,8 +170,17 @@ export function InstallPrompt({ className = '' }) {
         className,
       )}
     >
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand text-accent">
-        <Icon name="car" size={20} />
+      {/* On the login screen this card sits directly under the new lockup, so
+          the old glyph here was the most visible mismatch of the three. */}
+      <span className="flex h-10 w-[4.5rem] shrink-0 items-center justify-center rounded-lg bg-brand px-2">
+        <img
+              src="/logo-mark.png"
+              alt=""
+              aria-hidden="true"
+              width={664}
+              height={242}
+              className="h-auto w-full"
+            />
       </span>
 
       <div className="min-w-0 flex-1">
