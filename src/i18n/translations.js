@@ -593,6 +593,11 @@ export const en = {
   // every row — see the note in admin/Spaces.
   'spaces.placeColumn': 'Place',
   'spaces.capacityColumn': 'Spaces',
+  'spaces.hindiColumn': 'Hindi name',
+  'spaces.hindiFor': 'Hindi name for {place}',
+  'spaces.convertAgain': 'Convert to Hindi again',
+  'spaces.convertAgainNamed': 'Convert {place} to Hindi again',
+  'spaces.couldNotHindi': 'Could not save the Hindi name',
 
   // Four separate facts. They used to be one paragraph, which is four lines of
   // grey prose nobody finishes — and the fact you need is never the first one.
@@ -1321,6 +1326,11 @@ export const hi = {
   // शब्द दो कॉलम पर पढ़ना उलझाता है, इसलिए क्षमता वाला कॉलम "क्षमता" है।
   'spaces.placeColumn': 'जगह',
   'spaces.capacityColumn': 'क्षमता',
+  'spaces.hindiColumn': 'हिंदी नाम',
+  'spaces.hindiFor': '{place} का हिंदी नाम',
+  'spaces.convertAgain': 'दोबारा हिंदी में बदलें',
+  'spaces.convertAgainNamed': '{place} को दोबारा हिंदी में बदलें',
+  'spaces.couldNotHindi': 'हिंदी नाम सेव नहीं हो सका',
 
   'spaces.howThisWorks': 'यह कैसे काम करता है',
   'spaces.explainCapacity':

@@ -69,16 +69,7 @@ import useRealtime from '@/hooks/useRealtime'
 import { checkIn, completeParking } from '@/lib/valetApi'
 import { noteServerTime } from '@/lib/serverClock'
 import { supabase, describeDbError } from '@/supabase'
-import {
-  formatCarNumber,
-  formatTime,
-  groupPhone,
-  istToday,
-  normalisePhone,
-  personName,
-  prettyCarNumber,
-  skipPhoneSeparator,
-} from '@/utils/format'
+import { formatCarNumber, formatTime, groupPhone, istToday, normalisePhone, personName, prettyCarNumber, skipPhoneSeparator } from '@/utils/format'
 import { ACTIVE_TASK_STATUSES, CAR_TIERS, CAR_TIER_LIST, PHONE_REGEX, TASK_TYPES } from '@/types'
 import { cn } from '@/utils/cn'
 import { useT } from '@/i18n'
@@ -138,7 +129,7 @@ export default function CheckIn() {
     const [recentRes, countRes, rangeRes, unparkedRes] = await Promise.all([
       supabase
         .from('parked_vehicles')
-        .select('id, token_number, car_number, car_tier, guest_name, status, parked_at')
+        .select('id, token_number, car_number, car_tier, guest_name, guest_name_hi, status, parked_at')
         .eq('property_id', propertyId)
         .eq('service_date', today)
         .order('parked_at', { ascending: false })
@@ -166,7 +157,7 @@ export default function CheckIn() {
             .from('valet_tasks')
             .select(
               `id, created_at,
-               parked_vehicles ( id, token_number, car_number, car_tier, guest_name, notes )`,
+               parked_vehicles ( id, token_number, car_number, car_tier, guest_name, guest_name_hi, notes )`,
             )
             .eq('assigned_operator_id', operatorId)
             .eq('task_type', TASK_TYPES.PARKING)
@@ -663,7 +654,11 @@ function TokenIssued({ issued, onNext, buttonRef, onParked, spaces }) {
           </span>
           <TierBadge tier={issued.car_tier} />
         </div>
-        {issued.guest_name && <p className="mt-1 text-sm text-ink-subtle">{issued.guest_name}</p>}
+        {issued.guest_name && (
+          <p className="mt-1 text-sm text-ink-subtle">
+            {personName(issued.guest_name, issued.guest_name_hi)}
+          </p>
+        )}
 
         {parked ? (
           <>
@@ -804,7 +799,9 @@ function UnparkedCard({ task, spaces, onParked }) {
             <TierBadge tier={vehicle?.car_tier} size="sm" />
           </div>
           {vehicle?.guest_name && (
-            <p className="mt-0.5 truncate text-sm text-ink-subtle">{vehicle.guest_name}</p>
+            <p className="mt-0.5 truncate text-sm text-ink-subtle">
+              {personName(vehicle.guest_name, vehicle.guest_name_hi)}
+            </p>
           )}
 
           {/* A note the operator wrote at check-in — a scratch, a child seat. */}

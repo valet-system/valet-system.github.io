@@ -77,20 +77,13 @@ import {
 import { supabase, describeDbError } from '@/supabase'
 import { alertOnce } from '@/lib/taskAlerts'
 import { playSuccess, playWarning } from '@/utils/sounds'
-import {
-  formatDuration,
-  formatTime,
-  istDayStart,
-  istToday,
-  prettyCarNumber,
-  timeAgo,
-} from '@/utils/format'
+import { formatDuration, formatTime, istDayStart, istToday, personName, prettyCarNumber, timeAgo } from '@/utils/format'
 import { ACTIVE_TASK_STATUSES, TASK_STATUS, TASK_TYPES } from '@/types'
 
 /** Everything the cards need, in one round trip. */
 const TASK_SELECT = `
   id, task_type, status, return_count, assigned_at, pickup_started_at, completed_at, created_at,
-  parked_vehicles ( id, token_number, car_number, car_tier, guest_name, guest_phone,
+  parked_vehicles ( id, token_number, car_number, car_tier, guest_name, guest_name_hi, guest_phone,
                     parking_location, notes, status, parked_at )
 `
 
@@ -397,7 +390,9 @@ function CarHeading({ vehicle, children }) {
           <TierBadge tier={vehicle?.car_tier} size="sm" />
         </div>
         {vehicle?.guest_name && (
-          <p className="mt-0.5 truncate text-sm text-ink-muted">{vehicle.guest_name}</p>
+          <p className="mt-0.5 truncate text-sm text-ink-muted">
+            {personName(vehicle.guest_name, vehicle.guest_name_hi)}
+          </p>
         )}
         {children}
       </div>

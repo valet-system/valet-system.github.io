@@ -40,7 +40,7 @@
  * └─────────────────────────────────────────────────────────────────────┘
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PageHeader } from '@/components/AppShell'
 import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
@@ -59,6 +59,7 @@ import { useAuth } from '@/context/AuthContext'
 import { useT } from '@/i18n'
 import { useToast } from '@/context/ToastContext'
 import useRealtime from '@/hooks/useRealtime'
+import { hindiNameFor } from '@/lib/hindiText'
 import { supabase, describeDbError } from '@/supabase'
 import { cn } from '@/utils/cn'
 
@@ -71,8 +72,17 @@ import { cn } from '@/utils/cn'
  * delete button only exists on out-of-service rows. With `auto` the number
  * boxes would sit at a different x on those rows. 5.75rem is two icon-md
  * buttons (2.75rem each) plus the gap-1 between them.
+ *
+ * On a phone the Hindi name drops to its own line under the place name, because
+ * four columns inside 390px leaves nothing readable. From sm up it gets a column
+ * of its own beside the number box.
  */
-const ROW_GRID = 'grid grid-cols-[minmax(0,1fr)_4rem_5.75rem] items-center gap-3'
+// 11rem, not 9: the Hindi column holds the field AND the convert button, so the
+// field itself only gets what is left. At 9rem that was 104px, and a name like
+// "किचन की दीवार के पीछे" showed as "किचन की दीवा" — readable only by clicking into it.
+const ROW_GRID =
+  'grid grid-cols-[minmax(0,1fr)_4rem_5.75rem] items-center gap-x-3 gap-y-2 ' +
+  'sm:grid-cols-[minmax(0,1fr)_minmax(0,11rem)_4rem_5.75rem]'
 
 const COLUMN_LABEL = 'text-[0.6875rem] font-bold uppercase tracking-wider text-ink-subtle'
 
@@ -103,6 +113,7 @@ export default function Spaces() {
       (data ?? []).map((s) => ({
         id: s.id,
         label: s.label,
+        labelHi: s.label_hi ?? null,
         capacity: Number(s.capacity ?? 1),
         inUse: Number(s.in_use ?? 0),
         is_active: s.is_active,
@@ -115,6 +126,66 @@ export default function Spaces() {
   useEffect(() => {
     load()
   }, [load])
+
+  /**
+   * Ids already put through transliteration this session, whether it worked.
+   *
+   * Without this, a place whose conversion FAILS — offline, or a label the
+   * service cannot read — would be retried on every single reload, and this
+   * screen reloads on every check-in at the property.
+   */
+  const triedHi = useRef(new Set())
+
+  /**
+   * Fills in the Hindi name for any place that has none.
+   *
+   * ── WHY IT RUNS HERE AND NOT AT ADD TIME ──
+   *   add_parking_spaces returns a COUNT, not the rows it created, so the add
+   *   handler has no ids to attach a Hindi name to. Reacting to the reloaded
+   *   list instead needs no change to that function — and it does something
+   *   better: places added before this feature existed get filled in too, which
+   *   is the whole reason "back side" was showing on a Hindi screen.
+   *
+   * ── WHY SEQUENTIAL ──
+   *   A pasted list can be twenty places. Twenty parallel calls to the
+   *   transliteration service is how you get rate-limited and end up with
+   *   nothing.
+   */
+  useEffect(() => {
+    const pending = spaces.filter((s) => !s.labelHi && !triedHi.current.has(s.id))
+    if (pending.length === 0) return
+
+    let cancelled = false
+
+    ;(async () => {
+      let wrote = 0
+      for (const space of pending) {
+        // Marked before awaiting, so a reload arriving mid-flight cannot start a
+        // second pass over the same place.
+        triedHi.current.add(space.id)
+
+        const hi = await hindiNameFor(space.label)
+        if (cancelled) return
+        // null means the label was already Devanagari, or the lookup failed.
+        // Either way, leave it: English is a fine fallback and the admin can
+        // type it or press the refresh button.
+        if (!hi) continue
+
+        const { error: err } = await supabase.rpc('admin_set_space_label_hi', {
+          p_space_id: space.id,
+          p_label_hi: hi,
+        })
+        if (!err) wrote += 1
+      }
+      // One reload for the batch, and only if something changed — otherwise this
+      // effect would re-run itself for nothing.
+      if (!cancelled && wrote > 0) await load()
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [spaces, load])
 
   // The counts are live occupancy, so they go stale the moment an operator parks
   // a car. Throttled inside the hook, so a burst of check-ins is one refetch.
@@ -159,6 +230,23 @@ export default function Spaces() {
       .eq('id', space.id)
 
     if (err) toast.error(describeDbError(err, t('spaces.couldNotCapacity')))
+    else await load()
+  }
+
+  /**
+   * The Hindi spelling. Written through an RPC rather than a table update,
+   * because parking_spaces has no policy that lets an admin write it — the same
+   * reason admin_set_staff_name_hi exists. See migration 0029.
+   */
+  async function setLabelHi(space, labelHi) {
+    if ((labelHi ?? '') === (space.labelHi ?? '')) return
+
+    const { error: err } = await supabase.rpc('admin_set_space_label_hi', {
+      p_space_id: space.id,
+      p_label_hi: labelHi || null,
+    })
+
+    if (err) toast.error(describeDbError(err, t('spaces.couldNotHindi')))
     else await load()
   }
 
@@ -285,6 +373,9 @@ export default function Spaces() {
                     saying the same thing and no gain in clarity. */}
                 <div className={cn(ROW_GRID, 'px-4 pb-2')}>
                   <span className={COLUMN_LABEL}>{t('spaces.placeColumn')}</span>
+                  <span className={cn(COLUMN_LABEL, 'hidden sm:block')}>
+                    {t('spaces.hindiColumn')}
+                  </span>
                   <span className={cn(COLUMN_LABEL, 'text-center')}>
                     {t('spaces.capacityColumn')}
                   </span>
@@ -297,6 +388,7 @@ export default function Spaces() {
                       key={space.id}
                       space={space}
                       onCapacity={(n) => setCapacity(space, n)}
+                      onLabelHi={(v) => setLabelHi(space, v)}
                       onToggle={() => toggle(space)}
                       onRemove={() => remove(space)}
                     />
@@ -347,7 +439,7 @@ function Fact({ children }) {
 // ONE PLACE
 // ═══════════════════════════════════════════════════════════════════
 
-function SpaceRow({ space, onCapacity, onToggle, onRemove }) {
+function SpaceRow({ space, onCapacity, onLabelHi, onToggle, onRemove }) {
   const t = useT()
 
   /**
@@ -360,6 +452,18 @@ function SpaceRow({ space, onCapacity, onToggle, onRemove }) {
   const [draft, setDraft] = useState(String(space.capacity))
 
   useEffect(() => setDraft(String(space.capacity)), [space.capacity])
+
+  /**
+   * The Hindi name while it is being typed, for the same reason as the capacity
+   * above: writing on every keystroke would fire a query per character.
+   * It commits on blur and on Enter.
+   */
+  const [hiDraft, setHiDraft] = useState(space.labelHi ?? '')
+
+  // Re-synced when the row reloads, so a save made elsewhere — or the automatic
+  // conversion that runs after a bulk add — shows up here instead of leaving a
+  // stale draft on screen.
+  useEffect(() => setHiDraft(space.labelHi ?? ''), [space.labelHi])
 
   const free = Math.max(0, space.capacity - space.inUse)
   const over = space.inUse > space.capacity
@@ -419,6 +523,56 @@ function SpaceRow({ space, onCapacity, onToggle, onRemove }) {
             {space.is_active && !full && !over && t('spaces.freeSuffix', { n: free })}
           </span>
         </div>
+      </div>
+
+      {/* ── the Hindi name ────────────────────────────────────────────────
+          Editable, and that is the point. Transliteration of Indian place names
+          is right often enough to be worth doing and wrong often enough that a
+          read-only guess would be worse than English — "back side" can come back
+          as something an operator reads twice. So the app fills it in and the
+          admin fixes what it got wrong.
+
+          Empty is allowed and means "no Hindi spelling": every reader falls back
+          to the English label. */}
+      <div className="col-span-3 flex items-center gap-1 sm:col-span-1">
+        <input
+          type="text"
+          value={hiDraft}
+          onChange={(e) => setHiDraft(e.target.value.slice(0, 40))}
+          onBlur={() => onLabelHi(hiDraft.trim())}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              e.currentTarget.blur()
+            }
+          }}
+          placeholder={space.label}
+          // A long Hindi name — "किचन की दीवार के पीछे" — is wider than this column
+          // on a desktop. Widening the column would steal it from the place name,
+          // which matters more, so hover shows the rest instead. On a phone the
+          // field is full width and nothing is cut.
+          title={hiDraft || space.label}
+          aria-label={t('spaces.hindiFor', { place: space.label })}
+          className="h-10 min-w-0 flex-1 rounded-xl border border-line-strong bg-surface px-2.5 text-sm text-ink outline-none placeholder:text-ink-subtle focus:border-brand focus:ring-2 focus:ring-brand/20"
+        />
+
+        {/* Re-runs the conversion. Needed because the automatic one happens once,
+            when the place is added — an admin who clears the box, or who renamed
+            the place in the database, has no other way to get it back. */}
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          icon="refresh"
+          onClick={async () => {
+            const hi = await hindiNameFor(space.label)
+            if (!hi) return
+            setHiDraft(hi)
+            onLabelHi(hi)
+          }}
+          title={t('spaces.convertAgain')}
+          aria-label={t('spaces.convertAgainNamed', { place: space.label })}
+          className="shrink-0"
+        />
       </div>
 
       {/* No visible label of its own — the column heading above the list says

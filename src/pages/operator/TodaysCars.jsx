@@ -60,7 +60,8 @@ import { useToast } from '@/context/ToastContext'
 import useRealtime from '@/hooks/useRealtime'
 import { requestRetrieval } from '@/lib/valetApi'
 import { supabase, describeDbError } from '@/supabase'
-import { formatPhone, formatTime, istToday, prettyCarNumber, timeAgo } from '@/utils/format'
+import { useParkingSpaces } from '@/components/ui/SpacePicker'
+import { formatPhone, formatTime, istToday, personName, prettyCarNumber, storedPlaceName, timeAgo } from '@/utils/format'
 import { VEHICLE_AT_REST, VEHICLE_STATUS } from '@/types'
 import { cn } from '@/utils/cn'
 
@@ -84,6 +85,11 @@ const FILTERS = [
 const PAGE_SIZE = 200
 
 export default function TodaysCars() {
+  // Loaded only to READ a Hindi place name. parking_location is free text
+  // copied at park time, so the stored English has to be matched back to a
+  // place to find its label_hi — see utils/format storedPlaceName and
+  // migration 0029. The same hook the pickers use, so one fetch either way.
+  const { spaces } = useParkingSpaces()
   const t = useT()
   const { propertyId, propertyName } = useAuth()
   const toast = useToast()
@@ -337,7 +343,12 @@ export default function TodaysCars() {
       ) : (
         <div className="space-y-2.5">
           {visible.map((car) => (
-            <CarRow key={car.id} car={car} onRequest={() => requestCar(car)} />
+            <CarRow
+              key={car.id}
+              car={car}
+              spaces={spaces}
+              onRequest={() => requestCar(car)}
+            />
           ))}
         </div>
       )}
@@ -345,7 +356,7 @@ export default function TodaysCars() {
   )
 }
 
-function CarRow({ car, onRequest }) {
+function CarRow({ car, spaces, onRequest }) {
   const t = useT()
   const atRest = VEHICLE_AT_REST.includes(car.status)
 
@@ -381,7 +392,7 @@ function CarRow({ car, onRequest }) {
           </div>
 
           <p className="mt-1 truncate text-sm text-ink-muted">
-            {car.guest_name || t('common.guest')}
+            {personName(car.guest_name, car.guest_name_hi) || t('common.guest')}
             <span className="text-ink-subtle"> · {formatTime(car.parked_at)}</span>
             <span className="text-ink-subtle"> · {timeAgo(car.parked_at)}</span>
           </p>
@@ -403,7 +414,7 @@ function CarRow({ car, onRequest }) {
           {car.parking_location && (
             <p className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-ink-muted">
               <Icon name="location" size={14} className="text-ink-subtle" />
-              {car.parking_location}
+              {storedPlaceName(car.parking_location, spaces)}
             </p>
           )}
 

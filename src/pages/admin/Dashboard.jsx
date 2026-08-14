@@ -76,7 +76,7 @@ import { ACTIVE_TASK_STATUSES, CAR_TIERS, TASK_TYPES, VEHICLE_STATUS } from '@/t
 const TASK_SELECT_BASE = `
   id, task_type, status, return_count, created_at, assigned_at, pickup_started_at,
   assigned_operator_id,
-  parked_vehicles ( id, token_number, car_number, car_tier, guest_name, guest_phone,
+  parked_vehicles ( id, token_number, car_number, car_tier, guest_name, guest_name_hi, guest_phone,
                     parking_location, notes ),
 `
 const TASK_SELECT = `${TASK_SELECT_BASE} operator:user_roles ( id, name, name_hi, phone )`
@@ -424,7 +424,7 @@ function PendingCard({ task, operators, onAssign }) {
           </div>
 
           <p className="mt-0.5 truncate text-sm text-ink-muted">
-            {vehicle?.guest_name || t('common.guest')}
+            {personName(vehicle?.guest_name, vehicle?.guest_name_hi) || t('common.guest')}
             {vehicle?.guest_phone && (
               <span className="tnum text-ink-subtle"> · {formatPhone(vehicle.guest_phone)}</span>
             )}

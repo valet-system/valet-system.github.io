@@ -373,6 +373,42 @@ export function personName(name, nameHi) {
 }
 
 /**
+ * A parking place's name in the reading language: placeName('back side', 'बैक साइड').
+ *
+ * Same rule as personName above, and the same fallback: no Hindi spelling means
+ * show the English one. A place with no label_hi is normal — the admin may
+ * simply not have got to it — and an empty chip would be far worse than an
+ * untranslated one.
+ */
+export function placeName(label, labelHi) {
+  if (getActiveLang() === 'hi' && labelHi && labelHi.trim()) return labelHi.trim()
+  return label ?? ''
+}
+
+/**
+ * The Hindi name for a place the operator ALREADY parked in.
+ *
+ * parked_vehicles.parking_location is free text copied at park time — see
+ * migration 0016 — so a stored "back side" has to be matched back to a place to
+ * find its Hindi. Matched case- and space-insensitively, the same way
+ * parking_space_usage() counts occupancy, so the two can never disagree.
+ *
+ * Free text the admin never listed ("behind the kitchen", typed by hand) simply
+ * comes back unchanged. That is the escape hatch working: the point is to record
+ * where the car is, not to force it into a list.
+ *
+ * @param spaces [{ label, labelHi }] — from useParkingSpaces
+ */
+export function storedPlaceName(location, spaces) {
+  if (getActiveLang() !== 'hi' || !location) return location ?? ''
+
+  const needle = location.trim().toLowerCase()
+  const match = spaces?.find((s) => (s.label ?? '').trim().toLowerCase() === needle)
+
+  return match?.labelHi?.trim() || location
+}
+
+/**
  * Seconds -> "09:58" for the pickup countdown.
  * Clamped at 0 so an expired timer shows "00:00", never "-00:07".
  */

@@ -58,7 +58,7 @@ import { useAuth } from '@/context/AuthContext'
 import { useT } from '@/i18n'
 import useRealtime from '@/hooks/useRealtime'
 import { supabase, describeDbError } from '@/supabase'
-import { formatPhone, formatTime, istToday, prettyCarNumber, timeAgo } from '@/utils/format'
+import { formatPhone, formatTime, istToday, personName, prettyCarNumber, timeAgo } from '@/utils/format'
 import { VEHICLE_STATUS } from '@/types'
 
 /** See the file header — a page, not the day. */
@@ -393,7 +393,7 @@ function CarRow({ car }) {
           </div>
 
           <p className="mt-1 truncate text-sm text-ink-muted">
-            {car.guest_name || t('common.guest')}
+            {personName(car.guest_name, car.guest_name_hi) || t('common.guest')}
             <span className="text-ink-subtle">{t('status.inAt', { time: formatTime(car.parked_at) })}</span>
             <span className="text-ink-subtle"> · {timeAgo(car.parked_at)}</span>
           </p>

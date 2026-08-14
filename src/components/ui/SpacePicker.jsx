@@ -66,6 +66,7 @@ import { useAuth } from '@/context/AuthContext'
 import { useT } from '@/i18n'
 import { supabase } from '@/supabase'
 import { cn } from '@/utils/cn'
+import { placeName } from '@/utils/format'
 
 /**
  * Loads this property's spaces, and which of them currently hold a car.
@@ -101,7 +102,12 @@ export function useParkingSpaces() {
         .filter((s) => s.is_active)
         .map((s) => ({
           id: s.id,
+          // label stays the CANONICAL name and is what gets written to
+          // parked_vehicles.parking_location. labelHi is for reading only —
+          // storing the Hindi would break the occupancy match, which compares
+          // against `label`. See migration 0029.
           label: s.label,
+          labelHi: s.label_hi ?? null,
           capacity: Number(s.capacity ?? 1),
           inUse: Number(s.in_use ?? 0),
         })),
@@ -148,6 +154,11 @@ export default function SpacePicker({
           <div className="flex flex-wrap gap-2">
             {spaces.map((space) => {
               const selected = value === space.label
+              // What the operator READS. `space.label` stays what gets SAVED —
+              // onChange below, the comparison above, and the free-text box all
+              // use the English label, because that is what the occupancy count
+              // and every stored parking_location match on.
+              const shown = placeName(space.label, space.labelHi)
               const free = Math.max(0, space.capacity - space.inUse)
               // A place already selected stays selectable even if it has since
               // filled up. Otherwise re-opening a re-park card would disable the
@@ -172,11 +183,11 @@ export default function SpacePicker({
                   aria-label={
                     full
                       ? t('places.fullLabel', {
-                          place: space.label,
+                          place: shown,
                           inUse: space.inUse,
                           capacity: space.capacity,
                         })
-                      : `${space.label}, ${free} of ${space.capacity} free`
+                      : `${shown}, ${free} of ${space.capacity} free`
                   }
                   className={cn(
                     // min-h-11 is the tap target, not the text size. This chip is
@@ -200,7 +211,7 @@ export default function SpacePicker({
                   )}
                 >
                   {selected && <Icon name="check" size={14} strokeWidth={2.5} />}
-                  {space.label}
+                  {shown}
 
                   <span
                     className={cn(

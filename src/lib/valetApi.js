@@ -246,14 +246,57 @@ function capitalise(text) {
  *
  * Resolves { ok: true, token_number, vehicle_id, task_id, car_number, ... }.
  */
-export function checkIn({ guestName, guestPhone, carNumber, carTier, notes }) {
-  return call('operator_check_in', {
+export async function checkIn({ guestName, guestPhone, carNumber, carTier, notes }) {
+  const result = await call('operator_check_in', {
     p_guest_name: guestName,
     p_guest_phone: guestPhone,
     p_car_number: carNumber,
     p_car_tier: carTier,
     p_notes: notes || null,
   })
+
+  // ── the Hindi spelling, AFTER the token is issued and NOT awaited ──
+  //
+  // Deliberately fire-and-forget. Check-in is the hottest path in the app: the
+  // guest is standing at the porch and the operator is holding their keys.
+  // Transliteration is a network call, so awaiting it here would add its
+  // latency — and its failures — to the one action that must never be slow.
+  //
+  // The token is already on screen by the time this runs. If it fails, or the
+  // phone is offline, guest_name_hi stays NULL and every screen shows the
+  // English name, which is exactly the fallback. Nothing is retried: this is a
+  // convenience on a row that empties at 05:30 IST, not a fact worth chasing.
+  //
+  // See migration 0030 for why operator_check_in itself was left alone.
+  if (result.ok && result.vehicle_id) {
+    fillGuestNameHi(result.vehicle_id, guestName)
+  }
+
+  return result
+}
+
+/**
+ * Transliterates a guest name and stores it. Never throws, never awaited.
+ *
+ * Imported lazily so the transliteration code and its 20 KB of nothing-else are
+ * not in the bundle that has to load before the first check-in of a shift.
+ */
+function fillGuestNameHi(vehicleId, guestName) {
+  import('@/lib/hindiText')
+    .then(({ hindiNameFor }) => hindiNameFor(guestName))
+    .then((hi) => {
+      // null means already Devanagari, or the lookup failed. Either is fine.
+      if (!hi) return
+      return supabase.rpc('set_guest_name_hi', {
+        p_vehicle_id: vehicleId,
+        p_name_hi: hi,
+      })
+    })
+    .catch((err) => {
+      // Logged, not surfaced. The operator has moved on and there is nothing
+      // for them to do about it.
+      console.info('[checkin] could not store the Hindi name:', err?.message ?? err)
+    })
 }
 
 // ═══════════════════════════════════════════════════════════════════
