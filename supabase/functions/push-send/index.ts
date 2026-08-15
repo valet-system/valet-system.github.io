@@ -162,7 +162,11 @@ Deno.serve(async (req) => {
   // forever, delivering nothing.
   const { data: queued, error } = await supabase
     .from('push_outbox')
-    .select('id, user_role_id, title, body, url, tag, critical, attempts')
+    // task_id travels through to the worker as `taskId`. The outbox has always
+    // carried it; it was simply never selected, so data.taskId in sw.js was
+    // always null. The worker needs it to close the previous nag about the same
+    // car — see the push handler.
+    .select('id, user_role_id, title, body, url, tag, critical, attempts, task_id')
     .eq('status', 'queued')
     .order('created_at', { ascending: true })
     .limit(50)
@@ -213,6 +217,7 @@ Deno.serve(async (req) => {
       url: msg.url ?? '/',
       tag: msg.tag ?? 'valet',
       critical: Boolean(msg.critical),
+      taskId: msg.task_id ?? null,
     })
 
     let anyDelivered = false

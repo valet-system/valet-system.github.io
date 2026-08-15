@@ -367,6 +367,30 @@ self.addEventListener('push', (event) => {
       } catch {
         // Fall through with the English the server sent.
       }
+      // ── clear the previous nag for this car ──────────────────────────
+      //
+      // An unaccepted retrieval is pushed every 30s, and each of those pushes
+      // carries a UNIQUE tag on purpose: re-using one replaces the old
+      // notification SILENTLY on Chrome/Android unless `renotify` is set, and
+      // renotify is exactly what the block above says not to add back. A fresh
+      // tag always alerts.
+      //
+      // The cost of a fresh tag is that they stack — twenty notices about one
+      // car. So the stack is cleared here instead, keyed on the task rather
+      // than the tag. This is ordinary logic before the call, NOT another
+      // option on it, so it cannot make showNotification() reject.
+      try {
+        if (payload.taskId) {
+          const open = await self.registration.getNotifications()
+          for (const n of open) {
+            if (n.data?.taskId === payload.taskId) n.close()
+          }
+        }
+      } catch {
+        // Not supported, or refused. Stacked notifications are a blemish; a
+        // lost alert is a car nobody fetches. Carry on and show it.
+      }
+
       try {
         await self.registration.showNotification(title, { ...options, body })
       } catch (err) {
