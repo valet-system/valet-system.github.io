@@ -94,6 +94,25 @@ export function primeAudio() {
 function tone({ freq, start = 0, duration = 0.16, volume = 0.22, type = 'sine' }) {
   const ctx = getContext()
   if (!ctx || ctx.state !== 'running') return
+  toneAt(ctx.currentTime + start, { freq, duration, volume, type })
+}
+
+/**
+ * The same note, scheduled at an ABSOLUTE point on the audio clock.
+ *
+ * tone() reads ctx.currentTime at the moment it is called, which is right for a
+ * one-off but useless for a loop: each repetition would be laid down relative to
+ * whenever its timer happened to fire, and setInterval drift turns into audible
+ * gaps and overlaps. The continuous alarm below keeps its own cursor on this
+ * clock instead, so repetitions butt up against each other exactly.
+ *
+ * Returns the oscillator so a caller can cut it short — a scheduled note is
+ * otherwise unstoppable, and the alarm has to fall silent the moment the
+ * operator accepts, not when its last scheduled note happens to finish.
+ */
+function toneAt(when, { freq, duration = 0.16, volume = 0.22, type = 'sine' }) {
+  const ctx = getContext()
+  if (!ctx || ctx.state !== 'running') return null
 
   try {
     const osc = ctx.createOscillator()
@@ -102,18 +121,19 @@ function tone({ freq, start = 0, duration = 0.16, volume = 0.22, type = 'sine' }
     osc.type = type
     osc.frequency.value = freq
 
-    const t0 = ctx.currentTime + start
-    gain.gain.setValueAtTime(0.0001, t0)
-    gain.gain.exponentialRampToValueAtTime(volume, t0 + 0.012)
-    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + duration)
+    gain.gain.setValueAtTime(0.0001, when)
+    gain.gain.exponentialRampToValueAtTime(volume, when + 0.012)
+    gain.gain.exponentialRampToValueAtTime(0.0001, when + duration)
 
     osc.connect(gain).connect(ctx.destination)
-    osc.start(t0)
+    osc.start(when)
     // Always stop: an oscillator left running holds an audio thread open, and
     // a few hundred of them over an 8-hour shift will audibly distort.
-    osc.stop(t0 + duration + 0.02)
+    osc.stop(when + duration + 0.02)
+    return osc
   } catch {
     // Spec rule 21 — never let a sound failure surface to the caller.
+    return null
   }
 }
 
@@ -142,44 +162,179 @@ function sequence(notes, { volume = 0.22, type = 'sine' } = {}) {
  * repeat is what carries over traffic noise.
  * Used for: retrieval request arriving (admin), task assigned (operator).
  */
+const LOUD_FIGURE = [
+  // ── SAME RISING SHAPE, AN OCTAVE UP ──
+  // The shape is deliberately unchanged: rising still means "come here" and
+  // stays the opposite of playWarning's falling pair, which is the whole
+  // reason the four alerts are distinguishable without looking. Only the
+  // loudness moved.
+  { freq: 1568, at: 0.0, duration: 0.12 }, // G6
+  { freq: 1976, at: 0.13, duration: 0.12 }, // B6
+  { freq: 2637, at: 0.26, duration: 0.18 }, // E7
+  { freq: 1568, at: 0.52, duration: 0.12 },
+  { freq: 1976, at: 0.65, duration: 0.12 },
+  { freq: 2637, at: 0.78, duration: 0.18 },
+  // A THIRD round. A guest is waiting; another 0.5s of noise is cheaper
+  // than the operator missing it and the car being fetched five minutes
+  // late.
+  { freq: 1568, at: 1.04, duration: 0.12 },
+  { freq: 1976, at: 1.17, duration: 0.12 },
+  { freq: 2637, at: 1.3, duration: 0.22 },
+]
+
+/**
+ * How long the figure runs, end to end: the last note starts at 1.3 and lasts
+ * 0.22. The looping alarm advances its cursor by exactly this, so repetition N+1
+ * begins the instant N finishes and the pattern never breaks.
+ */
+const LOUD_FIGURE_SECONDS = 1.52
+
+// ── WHY THIS IS LOUDER, AND WHY GAIN IS THE SMALLEST PART OF IT ──
+//
+// 1. SQUARE, not triangle. A square wave packs far more harmonic energy at
+//    the same peak amplitude, so it is heard as dramatically louder — and it
+//    buzzes, which is what an alert should do. A triangle is a chime.
+//
+// 2. AN OCTAVE UP. Human hearing peaks around 2-4 kHz, and a phone's tiny
+//    speaker is also most efficient there while rolling off badly below
+//    ~500 Hz. The old figure sat at 784-1319 Hz, under both curves. Moving
+//    it to 1568-2637 Hz gains real perceived volume at no extra amplitude.
+//
+// 3. GAIN 0.3 -> 0.8. Safe because the notes do not overlap: each has
+//    decayed before the next begins, so nothing sums past full scale. Two
+//    simultaneous notes at 0.8 WOULD clip, which is why this is a sequence
+//    and not a chord.
+const LOUD_VOICE = { volume: 0.8, type: 'square' }
+
 export function playLoud() {
-  sequence(
-    [
-      // ── SAME RISING SHAPE, AN OCTAVE UP ──
-      // The shape is deliberately unchanged: rising still means "come here" and
-      // stays the opposite of playWarning's falling pair, which is the whole
-      // reason the four alerts are distinguishable without looking. Only the
-      // loudness moved.
-      { freq: 1568, at: 0.0, duration: 0.12 }, // G6
-      { freq: 1976, at: 0.13, duration: 0.12 }, // B6
-      { freq: 2637, at: 0.26, duration: 0.18 }, // E7
-      { freq: 1568, at: 0.52, duration: 0.12 },
-      { freq: 1976, at: 0.65, duration: 0.12 },
-      { freq: 2637, at: 0.78, duration: 0.18 },
-      // A THIRD round. A guest is waiting; another 0.5s of noise is cheaper
-      // than the operator missing it and the car being fetched five minutes
-      // late.
-      { freq: 1568, at: 1.04, duration: 0.12 },
-      { freq: 1976, at: 1.17, duration: 0.12 },
-      { freq: 2637, at: 1.3, duration: 0.22 },
-    ],
-    // ── WHY THIS IS LOUDER, AND WHY GAIN IS THE SMALLEST PART OF IT ──
-    //
-    // 1. SQUARE, not triangle. A square wave packs far more harmonic energy at
-    //    the same peak amplitude, so it is heard as dramatically louder — and it
-    //    buzzes, which is what an alert should do. A triangle is a chime.
-    //
-    // 2. AN OCTAVE UP. Human hearing peaks around 2-4 kHz, and a phone's tiny
-    //    speaker is also most efficient there while rolling off badly below
-    //    ~500 Hz. The old figure sat at 784-1319 Hz, under both curves. Moving
-    //    it to 1568-2637 Hz gains real perceived volume at no extra amplitude.
-    //
-    // 3. GAIN 0.3 -> 0.8. Safe because the notes do not overlap: each has
-    //    decayed before the next begins, so nothing sums past full scale. Two
-    //    simultaneous notes at 0.8 WOULD clip, which is why this is a sequence
-    //    and not a chord.
-    { volume: 0.8, type: 'square' },
-  )
+  sequence(LOUD_FIGURE, LOUD_VOICE)
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// THE ALARM THAT DOES NOT STOP
+//
+// playLoud() sounds once. This repeats it with NO gap until something
+// explicitly stops it — used while a dispatched car sits unacknowledged, where
+// the operator has to be pulled away from whatever they are doing.
+//
+// WHY NOT setInterval(playLoud, 1520)
+//   Because that is what it replaced, and it broke. A JS timer fires late
+//   whenever the main thread is busy — rendering the very list this alarm is
+//   about, say — and playLoud() then reads the audio clock at that late moment.
+//   Every repetition inherits the drift, so the pattern breathes: a silence
+//   here, two figures overlapping there. Overlap also SUMS, and two square
+//   notes at 0.8 clip.
+//
+//   So the timer no longer decides when anything sounds. It only tops up a
+//   queue: every tick, schedule whatever falls inside the next half second on
+//   the audio clock's own timeline. The clock, not the timer, places the notes,
+//   and a late tick changes nothing as long as it lands within the lookahead.
+// ═══════════════════════════════════════════════════════════════════
+
+/** How often the queue is topped up. Well under the lookahead, so a late or
+ *  throttled tick still arrives before the queue runs dry. */
+const ALARM_TICK_MS = 250
+
+/** How far ahead notes are scheduled. Also the worst-case tail after stopping,
+ *  for anything already handed to the audio thread — see stopLoudAlarm. */
+const ALARM_LOOKAHEAD = 0.5
+
+let alarmTimer = null
+let alarmBuzzTimer = null
+/** Absolute audio-clock time where the NEXT repetition of the figure begins. */
+let alarmCursor = 0
+/** Notes already scheduled, so they can be cut short rather than played out. */
+const alarmVoices = new Set()
+
+/**
+ * Starts the unbroken alarm. Safe to call repeatedly — a second call while it
+ * is already running does nothing, rather than laying a second copy of the
+ * figure on top of the first, which would double the amplitude and clip.
+ */
+export function startLoudAlarm() {
+  if (alarmTimer) return
+
+  const ctx = getContext()
+  if (!ctx) return
+  // The alarm often starts from a push or a realtime event rather than a tap,
+  // so the context may still be locked. Nothing plays until it is running; this
+  // costs nothing and rescues the case where audio was primed a moment ago.
+  if (ctx.state === 'suspended') ctx.resume().catch(() => {})
+
+  // A hair in the future: scheduling AT currentTime races the audio thread and
+  // drops the first note on some browsers.
+  alarmCursor = ctx.currentTime + 0.05
+
+  const pump = () => {
+    const now = ctx.currentTime
+
+    // If the tab was backgrounded the cursor can be far behind — throttled
+    // timers stop firing, the audio clock does not. Catching up would dump
+    // every missed repetition at once. Skip to the present instead.
+    if (alarmCursor < now) alarmCursor = now + 0.02
+
+    while (alarmCursor < now + ALARM_LOOKAHEAD) {
+      for (const note of LOUD_FIGURE) {
+        const osc = toneAt(alarmCursor + note.at, {
+          freq: note.freq,
+          duration: note.duration,
+          ...LOUD_VOICE,
+        })
+        if (osc) {
+          alarmVoices.add(osc)
+          osc.onended = () => alarmVoices.delete(osc)
+        }
+      }
+      alarmCursor += LOUD_FIGURE_SECONDS
+    }
+  }
+
+  pump()
+  alarmTimer = setInterval(pump, ALARM_TICK_MS)
+
+  // Haptics on the same period. navigator.vibrate cannot loop by itself, and
+  // re-issuing it on the 250ms pump would restart the buzz four times a second
+  // — a constant hum rather than a pulse.
+  vibrate()
+  alarmBuzzTimer = setInterval(vibrate, Math.round(LOUD_FIGURE_SECONDS * 1000))
+}
+
+/**
+ * Stops it, now.
+ *
+ * Clearing the timer alone is not enough: up to ALARM_LOOKAHEAD of notes are
+ * already on the audio thread and would play on regardless. An alarm that keeps
+ * going for half a second after the operator has accepted reads as a broken
+ * button, so the scheduled notes are cut short too.
+ */
+export function stopLoudAlarm() {
+  if (alarmTimer) {
+    clearInterval(alarmTimer)
+    alarmTimer = null
+  }
+  if (alarmBuzzTimer) {
+    clearInterval(alarmBuzzTimer)
+    alarmBuzzTimer = null
+  }
+
+  const ctx = getContext()
+  for (const osc of alarmVoices) {
+    try {
+      // stop() in the past is spec'd to stop immediately, and osc.stop() with
+      // no argument does the same. Either way the note dies with the ramp still
+      // in place, so there is no click.
+      osc.stop(ctx ? ctx.currentTime : 0)
+    } catch {
+      /* already stopped — that is the desired state */
+    }
+  }
+  alarmVoices.clear()
+
+  try {
+    if (navigator.vibrate) navigator.vibrate(0)
+  } catch {
+    /* unsupported — ignore */
+  }
 }
 
 /**

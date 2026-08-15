@@ -77,20 +77,9 @@ import {
 } from '@/lib/valetApi'
 import { supabase, describeDbError } from '@/supabase'
 import { alertOnce } from '@/lib/taskAlerts'
-import { alertLoud, playSuccess, playWarning } from '@/utils/sounds'
+import { playSuccess, playWarning, startLoudAlarm, stopLoudAlarm } from '@/utils/sounds'
 import { formatDuration, formatTime, istDayStart, istToday, personName, prettyCarNumber, timeAgo } from '@/utils/format'
 import { ACTIVE_TASK_STATUSES, TASK_STATUS, TASK_TYPES } from '@/types'
-
-/**
- * How often the alarm repeats while a dispatch sits unacknowledged.
- *
- * 20s: short enough that an operator who missed the first one is caught within
- * half a minute, long enough not to be a fire alarm. The whole loud alert —
- * three rounds of rising tone plus the vibration — runs about 2s, so this is a
- * repeat rather than a continuous noise, which is what makes it possible to
- * work through while walking to the car.
- */
-const UNACCEPTED_ALARM_MS = 20_000
 
 /** Everything the cards need, in one round trip. */
 const TASK_SELECT = `
@@ -242,51 +231,39 @@ export default function MyTasks() {
   /**
    * ── THE ALARM THAT DOES NOT GIVE UP ────────────────────────────────
    *
-   * A guest is standing at the porch waiting for a car. A single chime when
-   * the dispatch lands is not enough: the phone is in a pocket, the operator
-   * is parking someone else's car, the screen is off. So it repeats until the
-   * task is acknowledged, and acknowledging is a server-side status change —
-   * a reload cannot silence it.
+   * A guest is standing at the porch waiting for a car. A single chime when the
+   * dispatch lands is not enough: the phone is in a pocket, the operator is
+   * parking someone else's car, the screen is off. So it sounds CONTINUOUSLY,
+   * with no gap, until the task is acknowledged — and acknowledging is a
+   * server-side status change, so a reload cannot silence it.
    *
-   * Deliberately alertLoud and not alertOnce: alertOnce exists to stop two
-   * detectors double-announcing ONE arrival, and its 20s memory would swallow
-   * most of these on purpose. This is a repeat, which is the thing it
-   * suppresses. The first ring still comes through alertOnce in load(), so the
-   * interval starts one period later and nothing doubles up.
+   * The sound itself is owned by utils/sounds: this only says when to start and
+   * when to stop. It has to be gapless there rather than a timer here, because
+   * a JS interval that re-triggers a sound drifts against the audio clock and
+   * leaves audible holes — which is exactly what this replaced.
    *
-   * One alert for all of them, not one per task: three waiting cars should
-   * make the operator look at the screen, not listen to three overlapping
-   * alarms.
+   * No notification is raised from here. The tray already got one when the task
+   * arrived (alertOnce in load), and re-posting it on a loop would stack notices
+   * for a car the operator is already being shouted at about.
+   *
+   * One alarm regardless of how many are waiting: three unaccepted cars should
+   * make the operator look at the screen, not layer three alarms on top of each
+   * other.
    */
   useEffect(() => {
-    if (unaccepted.length === 0) return undefined
-
-    const ring = () => {
-      const first = unaccepted[0]
-      alertLoud(
-        unaccepted.length === 1
-          ? t('tasks.alarmOne')
-          : t('tasks.alarmMany', { n: unaccepted.length }),
-        unaccepted.length === 1
-          ? t('tasks.alarmBody', {
-              token: first.parked_vehicles?.token_number,
-              car: prettyCarNumber(first.parked_vehicles?.car_number),
-            })
-          : t('tasks.alarmOpen'),
-        // Same tag as the first alert, so the tray shows the current state
-        // rather than a stack of identical notices.
-        'valet-new-task',
-        '/operator/tasks',
-      )
+    if (unaccepted.length === 0) {
+      stopLoudAlarm()
+      return undefined
     }
-
-    const id = setInterval(ring, UNACCEPTED_ALARM_MS)
-    return () => clearInterval(id)
-    // unaccepted.length, not the array: a refetch rebuilds the array on every
-    // poll, and depending on the identity would restart the interval each time
-    // — which means it would never actually reach the end of a period and the
-    // alarm would never sound twice.
-  }, [unaccepted.length, t]) // eslint-disable-line react-hooks/exhaustive-deps
+    startLoudAlarm()
+    // Also stops on unmount — an operator who navigates to Check In should not
+    // carry the noise with them. The bell in AppShell still announces arrivals
+    // on every screen; this screen owns the unacknowledged alarm.
+    return stopLoudAlarm
+    // Length, not the array: a refetch rebuilds it on every poll, and depending
+    // on identity would stop and restart the alarm each time — which is the
+    // stutter this whole change is removing.
+  }, [unaccepted.length])
 
   // The filter is on assigned_operator_id, so an admin assigning a retrieval
   // shows up here as an UPDATE whose NEW row names this operator.
