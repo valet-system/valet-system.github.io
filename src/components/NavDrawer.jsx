@@ -129,12 +129,14 @@ export default function NavDrawer({ open, onClose, items }) {
         {/* ── brand ─────────────────────────────────────────────────── */}
         <div className="flex shrink-0 items-center gap-3 px-4 py-5">
           <span className="flex h-10 w-[4.5rem] shrink-0 items-center justify-center rounded-xl bg-brand px-2">
+            {/* The size public/logo-mark.png is actually emitted at, per
+                `npm run logo`. Update both when the artwork changes. */}
             <img
               src="/logo-mark.png"
               alt=""
               aria-hidden="true"
-              width={664}
-              height={242}
+              width={220}
+              height={81}
               className="h-auto w-full"
             />
           </span>

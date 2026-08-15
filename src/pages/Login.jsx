@@ -214,12 +214,15 @@ export default function Login() {
               noise. The image is decoration here, not information. */}
           <div className="mb-8 text-center">
             <span className="mx-auto mb-4 flex w-52 items-center justify-center rounded-2xl bg-brand px-5 py-4 shadow-raised">
+              {/* The size public/logo-lockup.png is actually emitted at, per
+                  `npm run logo`. These were 919x444 — the dimensions of the
+                  full-resolution copy in brand/, which is never served here. */}
               <img
                 src="/logo-lockup.png"
                 alt=""
                 aria-hidden="true"
-                width={919}
-                height={444}
+                width={520}
+                height={220}
                 className="h-auto w-full"
               />
             </span>

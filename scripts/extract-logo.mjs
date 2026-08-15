@@ -9,7 +9,7 @@
  * │                                                                     │
  * │   IN   brand/ambria-logo.png   the lockup as delivered: gold car     │
  * │                               above the AMBRIA wordmark, on black,   │
- * │                               no transparency, 1993x789             │
+ * │                               no transparency, 1842x854             │
  * │                                                                     │
  * │   OUT  public/logo-mark.png    the CAR alone, transparent            │
  * │        public/logo-lockup.png  car + wordmark, transparent           │
@@ -143,21 +143,22 @@ async function emit({ box, pad, outWidth, filename, dir = publicDir }) {
   console.log(`  ${filename.padEnd(24)} ${meta.width}x${meta.height}  ${(bytes / 1024).toFixed(0)} KB`)
 }
 
-// Found by profiling bright pixels per row. In the current artwork (1993x789)
+// Found by profiling bright pixels per row. In the current artwork (1842x854)
 // there are THREE bands, not two:
-//     97-335   the car's roof arc and body line
-//    350-439   the lower wing shapes
-//    506-660   the AMBRIA wordmark
+//    115-355   the car's roof arc and body line
+//    378-463   the lower wing shapes
+//    536-709   the AMBRIA wordmark
 //
 // So "the car" spans a gap of its own, and the band has to cover both of its
-// pieces — 350-439 is the headlights, not the word. Bounded generously at
-// 90-460 because the numbers above are the ink, and the dark gap either side of
-// it contributes nothing to the bounds.
+// pieces — 378-463 is the headlights, not the word. Bounded generously at
+// 105-500 because the numbers above are the ink, and the dark gap either side
+// of it contributes nothing to the bounds.
 //
-// These are per-artwork. Re-profile them when the logo is replaced: the previous
-// file was 1402x1122 and used [330, 610], which on this one would have cut the
-// car in half and swept up part of the wordmark.
-const CAR_BAND = [90, 460]
+// THESE ARE PER-ARTWORK — re-profile whenever the logo is replaced. Three
+// different files have come through here (1402x1122, 1993x789, 1842x854) and
+// each needed different rows; carrying the previous set over would have cut the
+// car in half and swept up part of the wordmark, silently, in every icon.
+const CAR_BAND = [105, 500]
 
 console.log(`Extracting from brand/ambria-logo.png (${W}x${H})`)
 
