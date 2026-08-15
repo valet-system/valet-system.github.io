@@ -121,7 +121,7 @@ export const en = {
 
   // ── login ────────────────────────────────────────────────────────────
   'login.title': 'Valet',
-  'login.brand': 'Valet Ops',
+  'login.brand': 'Ambria Valet',
   'login.tagline': 'Sign in to start your shift',
   'login.phonePrefix': '+91',
   'login.showPin': 'Show PIN',
@@ -742,7 +742,7 @@ export const en = {
   'pwa.newVersion': 'New version available',
   'pwa.finishFirst': 'Finish your current task first, then update.',
   'pwa.later': 'Later',
-  'pwa.installTitle': 'Install Valet Ops',
+  'pwa.installTitle': 'Install Ambria Valet',
   'pwa.dismissInstall': 'Dismiss install prompt',
   'bell.new': '{n} new',
   'bell.markAll': 'Mark all read',
@@ -872,7 +872,7 @@ export const hi = {
   'common.saving': 'सेव हो रहा है…',
 
   'login.title': 'वैले',
-  'login.brand': 'वैले ऑप्स',
+  'login.brand': 'अंब्रिया वैले',
   'login.tagline': 'शिफ़्ट शुरू करने के लिए साइन इन कीजिए',
   'login.phonePrefix': '+91',
   'login.showPin': 'पिन दिखाएँ',
@@ -1475,7 +1475,7 @@ export const hi = {
   'pwa.newVersion': 'नया वर्ज़न आ गया है',
   'pwa.finishFirst': 'पहले चालू काम पूरा कीजिए, फिर अपडेट कीजिए।',
   'pwa.later': 'बाद में',
-  'pwa.installTitle': 'वैले ऑप्स इंस्टॉल करें',
+  'pwa.installTitle': 'अंब्रिया वैले इंस्टॉल करें',
   'pwa.dismissInstall': 'इंस्टॉल का सुझाव हटाएँ',
   'bell.new': '{n} नई',
   'bell.markAll': 'सब पढ़ी हुई मार्क करें',

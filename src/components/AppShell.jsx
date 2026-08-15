@@ -313,7 +313,10 @@ function TopBar({ displayName, phone, propertyName, roleLabel, onSignOut, onOpen
           </span>
           <div className="min-w-0">
             <p className="truncate text-[0.9375rem] font-semibold leading-tight text-ink-inverse">
-              {propertyName || 'Valet Ops'}
+              {/* t(), not a literal: a system admin has no property, so this
+                  fallback is what they see in the header all day — and hard-coded
+                  English here meant it stayed English with the app in Hindi. */}
+              {propertyName || t('login.brand')}
             </p>
             <p className="truncate text-xs leading-tight text-ink-inverse/60">{roleLabel}</p>
           </div>
