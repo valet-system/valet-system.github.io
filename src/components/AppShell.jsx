@@ -278,21 +278,38 @@ function TopBar({ displayName, phone, propertyName, roleLabel, onSignOut, onOpen
             <Icon name="menu" size={22} />
           </button>
 
-          {/* A SQUARE with the glyph, not the brand mark — and this was tried
-              the other way first.
-
-              The mark is 2.7:1, so showing it properly needs a ~64px plate
-              instead of a 36px square. Measured at 320px with the longest
-              property name: the row overflowed by 22px and "Ambria Pushpanjali
-              Banquets" was squeezed to 46px. This file calls that name "the most
-              important label in the whole app" and it is right — an operator
+          {/* The brand car on a 48px plate. The width is measured, not chosen by
+              eye, because the mark competes directly with the property name and
+              that name is the most important label in the app — an admin
               covering two sites must never be unsure which one they are acting
-              on. A logo is not worth that.
+              on. Every Ambria property starts with "Ambria", so the name only
+              does its job if the truncation reaches the DISTINGUISHING word.
 
-              The brand lives where there is room for it: the login lockup, the
-              drawer, the install card, and every OS icon. */}
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-accent">
-            <Icon name="car" size={20} />
+              With "Ambria Pushpanjali Banquets", the longest name there is:
+
+                          36px plate      48px plate      64px plate
+                 320px    Ambri…          Amb…            A…
+                 360px    Ambria Push…    Ambria Pu…      Ambria …
+                 390px    Ambria Pushpa…  Ambria Pushpa…  Ambria Push…
+
+              64px is what a 2.7:1 mark really wants, and it fails at 360 —
+              "Ambria …" identifies nothing. 36px keeps the most text but leaves
+              the car 10px tall, a smudge rather than a logo. 48px still reaches
+              the distinguishing letters at 360 and above, and the car reads.
+
+              320px identifies nothing at ANY plate width, including the 36px
+              square this replaced — that viewport was already lost, so it is not
+              an argument for a smaller plate. Nothing overflows at any of the
+              three widths; the name truncates rather than pushing the row. */}
+          <span className="flex h-9 w-12 shrink-0 items-center justify-center rounded-lg bg-white/10 px-1">
+            <img
+              src="/logo-mark.png"
+              alt=""
+              aria-hidden="true"
+              width={220}
+              height={81}
+              className="h-auto w-full"
+            />
           </span>
           <div className="min-w-0">
             <p className="truncate text-[0.9375rem] font-semibold leading-tight text-ink-inverse">
