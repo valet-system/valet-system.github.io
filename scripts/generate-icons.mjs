@@ -81,17 +81,18 @@ const LOCKUP = path.join(brandDir, 'logo-lockup-full.png')
 const MARK = path.join(brandDir, 'logo-mark-full.png')
 
 /**
- * The logo's OWN background, sampled from brand/ambria-logo.png: the mean of its
- * four corners is #0b0b0c.
+ * The plate the artwork sits on: the app's own brand black, the same value as
+ * --c-brand in src/index.css and theme-color in index.html and the manifest.
  *
- * Not brand navy (#0f172a), which this used to be. The artwork was drawn on
+ * Not brand navy (#0f172a), which this used to be. The artwork is drawn on
  * black, so a navy plate behind it made the home-screen icon read as a different
  * logo to the one on the letterhead — near-black next to navy is obvious side by
  * side, which is exactly how an app icon is seen.
  *
- * theme_color in the manifest stays navy on purpose: that colours the browser
- * chrome and status bar, which sit against the app's navy HEADER, not against
- * this icon.
+ * Deliberately NOT sampled from the artwork's own corners, which measure
+ * rgb(16,18,20). That is the same black plus encoding noise, and chasing it
+ * would drift the icon a shade away from the app chrome every time the logo is
+ * re-exported. One token, three places, no drift.
  */
 const BACKGROUND = '#0b0b0c'
 
@@ -108,8 +109,10 @@ async function render(size, { inset = 1, filename, art_file = LOCKUP, rounded = 
   const pad = Math.round((size - art) / 2)
   const art_source = await readFile(art_file)
 
-  // No `density`: that only means anything for an SVG. The source is a raster
-  // wide enough (664px) that every size below is a downscale, never an upscale.
+  // No `density`: that only means anything for an SVG. The sources are rasters
+  // wide enough (both 1024px) that every size below is a downscale, never an
+  // upscale — which is why extract-logo.mjs emits full-resolution copies into
+  // brand/ alongside the small ones it puts in public/.
   //
   // `contain` into a SQUARE with a 2.7:1 mark gives a full-width car centred
   // vertically, with empty bands above and below. That is the right treatment —
