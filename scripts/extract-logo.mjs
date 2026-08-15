@@ -159,4 +159,15 @@ await emit({
   dir: path.join(root, 'brand'),
 })
 
+// The full lockup at full resolution, for the home-screen icons. The wordmark
+// is legible at 192px and up, which is where an app icon actually lives; only
+// the 32px tab favicon still gets the car alone.
+await emit({
+  box: all,
+  pad: 12,
+  outWidth: 1024,
+  filename: 'logo-lockup-full.png',
+  dir: path.join(root, 'brand'),
+})
+
 console.log('Done. Now run `npm run icons` — those render from brand/logo-mark-full.png.')

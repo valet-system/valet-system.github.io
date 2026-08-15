@@ -3,14 +3,23 @@
  * │ FILE: scripts/generate-icons.mjs                                    │
  * │                                                                     │
  * │ WHAT THIS FILE IS                                                   │
- * │   A one-off build script that renders brand/logo-mark-full.png into  │
- * │   the PNG icon sizes a PWA needs. Run it with:                       │
+ * │   A one-off build script that renders the Ambria artwork into the    │
+ * │   PNG icon sizes a PWA needs. Run it with:                          │
  * │       npm run logo && npm run icons                                 │
  * │                                                                     │
- * │   The source is the Ambria car mark, cut out of the delivered        │
- * │   lockup by scripts/extract-logo.mjs. Only the CAR — the "AMBRIA"    │
- * │   wordmark is illegible below about 128px and turns to mush in a     │
- * │   32px tab icon, so a lockup makes a worse icon than a mark does.    │
+ * │   TWO sources, both cut out by scripts/extract-logo.mjs:             │
+ * │     logo-lockup-full.png  car + "AMBRIA" — every app icon            │
+ * │     logo-mark-full.png    the car alone  — the 32px tab favicon      │
+ * │                                                                     │
+ * │   Split because the wordmark needs about 128px to be a word. On a    │
+ * │   home-screen icon it is comfortably legible and says who the app    │
+ * │   belongs to; at 32px it is four grey smudges that read as a broken  │
+ * │   image, so the tab gets the car on its own.                         │
+ * │                                                                     │
+ * │ ── CORNERS ──────────────────────────────────────────────────────────│
+ * │   Rounded on the standard icons and favicons, SQUARE on maskable and │
+ * │   apple-touch. Android and iOS mask those two themselves, and        │
+ * │   rounding first rounds twice — a visible notch out of each corner.  │
  * │                                                                     │
  * │ WHY IT EXISTS                                                       │
  * │   Chrome will NOT show the "Install app" prompt unless the manifest │
@@ -56,7 +65,20 @@ const publicDir = path.resolve(import.meta.dirname, '..', 'public')
 // icon rendered from that is an upscale — soft edges on the one image users see
 // on their home screen. The full-resolution copy lives in brand/, which is
 // outside the build, and both come from `npm run logo`.
-const source = path.join(import.meta.dirname, '..', 'brand', 'logo-mark-full.png')
+const brandDir = path.join(import.meta.dirname, '..', 'brand')
+
+/**
+ * Two sources, because the right artwork depends on how big it will be seen.
+ *
+ * LOCKUP (car + "AMBRIA") for anything 180px and up — a home-screen icon is
+ * rendered around that size and the wordmark is comfortably legible, so the icon
+ * says who it is rather than just showing a car.
+ *
+ * MARK (car alone) for the 32px tab favicon. "AMBRIA" at 32px is four grey
+ * smudges; it does not read as a word, it reads as a broken image.
+ */
+const LOCKUP = path.join(brandDir, 'logo-lockup-full.png')
+const MARK = path.join(brandDir, 'logo-mark-full.png')
 
 /**
  * The logo's OWN background, sampled from brand/ambria-logo.png: the mean of its
@@ -73,7 +95,6 @@ const source = path.join(import.meta.dirname, '..', 'brand', 'logo-mark-full.png
  */
 const BACKGROUND = '#0b0b0c'
 
-const art_source = await readFile(source)
 
 /**
  * Renders the logo at `size`, optionally inset so a launcher can crop it.
@@ -82,9 +103,10 @@ const art_source = await readFile(source)
  * (standard icons, shown as-is). 0.6 = artwork fills the middle 60%, leaving a
  * safe margin all round (maskable icons).
  */
-async function render(size, { inset = 1, filename }) {
+async function render(size, { inset = 1, filename, art_file = LOCKUP, rounded = false }) {
   const art = Math.round(size * inset)
   const pad = Math.round((size - art) / 2)
+  const art_source = await readFile(art_file)
 
   // No `density`: that only means anything for an SVG. The source is a raster
   // wide enough (664px) that every size below is a downscale, never an upscale.
@@ -111,15 +133,43 @@ async function render(size, { inset = 1, filename }) {
     .png({ compressionLevel: 9 })
     .toBuffer()
 
-  await writeFile(path.join(publicDir, filename), out)
+  // ── rounded corners, and only where nothing else will round them ──
+  //
+  // The favicon.svg this replaced had rx="14" on a 64px square, and dropping
+  // that made the tab icon a hard-edged black box.
+  //
+  // NOT applied to maskable or apple-touch: Android and iOS apply their OWN
+  // mask to those. Rounding first means rounding twice, which shaves a visible
+  // notch out of each corner.
+  const final = rounded
+    ? await sharp(out)
+        .composite([
+          {
+            input: Buffer.from(
+              `<svg width="${size}" height="${size}">` +
+                `<rect width="${size}" height="${size}" rx="${Math.round(size * 0.22)}" fill="#fff"/>` +
+                `</svg>`,
+            ),
+            blend: 'dest-in',
+          },
+        ])
+        .png({ compressionLevel: 9 })
+        .toBuffer()
+    : out
+
+  await writeFile(path.join(publicDir, filename), final)
   console.log(`  ${filename.padEnd(28)} ${size}x${size}${inset < 1 ? `  (safe zone ${inset * 100}%)` : ''}`)
 }
 
-console.log('Generating PWA icons from brand/logo-mark-full.png')
+console.log('Generating PWA icons — lockup for the app, car only for the 32px favicon')
 
-// Standard icons — displayed exactly as provided.
-await render(192, { filename: 'icon-192.png' })
-await render(512, { filename: 'icon-512.png' })
+// Standard icons — shown as provided, so they round their own corners.
+//
+// inset 0.86, not full bleed: at 1 the lockup spans the whole width and the
+// outer letters of "AMBRIA" run into the rounded corners. A logo touching its
+// own frame reads as cropped.
+await render(192, { inset: 0.86, filename: 'icon-192.png', rounded: true })
+await render(512, { inset: 0.86, filename: 'icon-512.png', rounded: true })
 
 // Maskable icons — Android crops these, so keep the art inside the safe zone.
 await render(192, { inset: 0.6, filename: 'icon-maskable-192.png' })
@@ -133,7 +183,8 @@ await render(180, { inset: 0.72, filename: 'apple-touch-icon.png' })
 // brand arrived as a raster, and a stale favicon.svg listed FIRST would have
 // won in every browser that prefers SVG — showing the old logo in the tab while
 // every other icon showed the new one.
-await render(32, { filename: 'favicon-32.png' })
-await render(180, { filename: 'favicon-180.png' })
+// The car alone here: see the note on MARK above.
+await render(32, { filename: 'favicon-32.png', art_file: MARK, rounded: true })
+await render(180, { inset: 0.86, filename: 'favicon-180.png', rounded: true })
 
 console.log('Done.')
