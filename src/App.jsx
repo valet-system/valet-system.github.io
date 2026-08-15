@@ -54,7 +54,7 @@
  * └─────────────────────────────────────────────────────────────────────┘
  */
 
-import { lazy } from 'react'
+import { lazy, useEffect, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider, useAuth } from '@/context/AuthContext'
 import { ToastProvider } from '@/context/ToastContext'
@@ -96,8 +96,8 @@ const SystemAnalytics = lazy(() => import('@/pages/system/Analytics'))
 const Records = lazy(() => import('@/pages/system/Records'))
 import Icon from '@/components/ui/Icon'
 import Button from '@/components/ui/Button'
-import { isConfigured } from '@/supabase'
-import { ROLES } from '@/types'
+import supabase, { isConfigured } from '@/supabase'
+import { ROLES, TASK_STATUS, TASK_TYPES } from '@/types'
 
 export default function App() {
   // Before anything else: is the app even configured? Nothing below can work
@@ -277,10 +277,63 @@ export default function App() {
 /**
  * Sends "/" to the right dashboard. homePath comes from AuthContext, so the
  * mapping lives in exactly one place and cannot drift from ROLE_HOME.
+ *
+ * ── EXCEPT WHEN A CAR IS WAITING ──────────────────────────────────────
+ * An operator's home is Check In, which is right almost always: their job
+ * starts with a guest handing over keys. But if an admin has dispatched a
+ * retrieval that they have not accepted yet, a guest is standing at the porch
+ * and that is the only thing that matters. Landing on Check In then means the
+ * first thing they must do is navigate away from it.
+ *
+ * This is where reopening the app is caught: the PWA's start_url is "/", so a
+ * cold launch, a tap on the home-screen icon and a fresh login all arrive
+ * here. (A tap on the notification itself already goes straight to
+ * /operator/tasks — that route is carried in the push payload.)
+ *
+ * Only 'assigned' — not accepted work in progress. Once they have accepted,
+ * they know about the car, and forcing them back to the task list every time
+ * they open the app would take Check In away from them for the whole job.
  */
 function RoleHomeRedirect() {
-  const { homePath } = useAuth()
-  return <Navigate to={homePath} replace />
+  const { homePath, role, operatorId } = useAuth()
+  const isOperator = role === ROLES.OPERATOR && Boolean(operatorId)
+
+  // Non-operators resolve synchronously — no reason to make an admin wait on a
+  // query that cannot apply to them.
+  const [target, setTarget] = useState(isOperator ? null : homePath)
+
+  useEffect(() => {
+    if (!isOperator) {
+      setTarget(homePath)
+      return undefined
+    }
+
+    let cancelled = false
+    ;(async () => {
+      const { data, error } = await supabase
+        .from('valet_tasks')
+        .select('id')
+        .eq('assigned_operator_id', operatorId)
+        .eq('task_type', TASK_TYPES.RETRIEVAL)
+        .eq('status', TASK_STATUS.ASSIGNED)
+        .limit(1)
+
+      if (cancelled) return
+      // On error, fall through to the normal home. A failed lookup must not
+      // strand an operator on a blank screen at the start of their shift.
+      setTarget(!error && data?.length ? '/operator/tasks' : homePath)
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [isOperator, operatorId, homePath])
+
+  // One round trip, and AppShell is already painted around this — so what
+  // shows meanwhile is the app with an empty content area, not a blank page.
+  if (!target) return null
+
+  return <Navigate to={target} replace />
 }
 
 function NotFound() {
