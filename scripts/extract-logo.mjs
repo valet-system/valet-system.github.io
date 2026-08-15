@@ -68,6 +68,64 @@ const { width: W, height: H, channels: C } = info
 const lumAt = (i) => 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]
 
 /**
+ * ── REPAIRING THE LAST "A" ────────────────────────────────────────────────
+ *
+ * In the delivered artwork BOTH A's are drawn with their right stroke broken:
+ * a bare "Λ" with a small detached wedge floating at the bottom right. Measured
+ * on brand/ambria-logo.png, the two glyphs are pixel-for-pixel the same shape
+ * (each split on 61 of its 126 rows, at the same rows), so this is how the
+ * typeface was drawn — but at the sizes this app shows it, the last one reads
+ * as a letter that got clipped.
+ *
+ * So the last A is closed up and given a crossbar. ONLY the last one, on
+ * request — the first A is left exactly as delivered.
+ *
+ * The numbers are measured off the source, not guessed:
+ *   apex               x1086, y657
+ *   stroke weight      21px
+ *   right stroke       upper piece ends y734 at x1104-1124
+ *                      lower piece resumes y767 at x1119-1140
+ *   so the gap is that same bar continuing on the same diagonal.
+ *
+ * This edits the pixel buffer in memory. brand/ambria-logo.png itself is never
+ * written to, so the original stays the original — delete this function and
+ * re-run `npm run logo` to get back to the artwork as supplied.
+ */
+function repairLastA() {
+  const white = (x, y) => {
+    const i = (y * W + x) * C
+    data[i] = 255
+    data[i + 1] = 255
+    data[i + 2] = 255
+  }
+
+  // Bridge the break: interpolate the stroke's left edge across the gap and
+  // fill the stroke's own width to the right of it.
+  for (let y = 734; y <= 767; y++) {
+    const t = (y - 734) / (767 - 734)
+    const left = Math.round(1104 + t * (1119 - 1104))
+    for (let x = left; x <= left + 20; x++) white(x, y)
+  }
+
+  // The crossbar, spanning inner edge to inner edge. Both strokes drift right
+  // as y grows, so both ends track that diagonal instead of sitting at fixed x.
+  //
+  // Centred on y755, 21px tall to match the stroke weight. The height is worth
+  // stating because it is the whole look of the letter: the A runs y657-783, so
+  // this sits about a fifth of the way up from the baseline. Higher and it
+  // reads as a different typeface to the rest of the word; much lower and the
+  // counter closes up and the A turns into a triangle.
+  for (let y = 745; y <= 765; y++) {
+    const t = (y - 734) / (767 - 734)
+    const from = Math.round(1069 - t * (1069 - 1053))
+    const to = Math.round(1104 + t * (1119 - 1104))
+    for (let x = from; x <= to; x++) white(x, y)
+  }
+}
+
+repairLastA()
+
+/**
  * The tight box around everything brighter than INK, within a band of rows.
  *
  * A band, because the car and the wordmark are two separate blocks of bright
@@ -108,7 +166,12 @@ async function emit({ box, pad, outWidth, filename, dir = publicDir }) {
   const w = Math.min(W - left, box.maxX - box.minX + 1 + pad * 2)
   const h = Math.min(H - top, box.maxY - box.minY + 1 + pad * 2)
 
-  const crop = await sharp(source).extract({ left, top, width: w, height: h }).raw().toBuffer()
+  // From the repaired pixel buffer, NOT from `source` again — re-reading the
+  // file here would silently discard repairLastA() and ship the broken glyph.
+  const crop = await sharp(data, { raw: { width: W, height: H, channels: C } })
+    .extract({ left, top, width: w, height: h })
+    .raw()
+    .toBuffer()
 
   const rgba = Buffer.alloc(w * h * 4)
   for (let i = 0, o = 0; i < crop.length; i += 3, o += 4) {

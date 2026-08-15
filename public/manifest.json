@@ -1,7 +1,7 @@
 {
   "id": "/?source=pwa",
-  "name": "Valet Ops — Parking Management",
-  "short_name": "Valet Ops",
+  "name": "Ambria Valet — Parking Management",
+  "short_name": "Ambria Valet",
   "description": "Check in cars, park them, and manage retrieval requests.",
 
   "start_url": "/?source=pwa",
