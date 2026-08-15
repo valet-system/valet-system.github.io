@@ -8,6 +8,7 @@
  * │     completeParking(taskId, location)                                │
  * │     requestRetrieval(vehicleId)                                      │
  * │     assignRetrieval(taskId, operatorId)                              │
+ * │     acceptTask(taskId)                                               │
  * │     startPickup(taskId)                                              │
  * │     guestArrived(taskId)                                             │
  * │     guestAbsent(taskId)                                              │
@@ -318,6 +319,18 @@ export function requestRetrieval(vehicleId) {
 /** Admin queue: send a named operator to fetch a car. */
 export function assignRetrieval(taskId, operatorId) {
   return call('assign_retrieval', { p_task_id: taskId, p_operator_id: operatorId })
+}
+
+/**
+ * "Accept" — the operator acknowledges a dispatch. 'assigned' -> 'in_progress'.
+ *
+ * This is what stops the repeating alarm on MyTasks, which sounds for as long
+ * as a retrieval sits in 'assigned'. Starting the pickup does the same thing,
+ * because that also leaves 'assigned' — an operator already at the delivery
+ * point does not have to tap twice.
+ */
+export function acceptTask(taskId) {
+  return call('task_accept', { p_task_id: taskId })
 }
 
 /**

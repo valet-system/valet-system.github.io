@@ -68,6 +68,7 @@ import useRealtime from '@/hooks/useRealtime'
 import useTimer from '@/hooks/useTimer'
 import { noteServerTime } from '@/lib/serverClock'
 import {
+  acceptTask,
   completeParking,
   completeReparking,
   guestArrived,
@@ -76,9 +77,20 @@ import {
 } from '@/lib/valetApi'
 import { supabase, describeDbError } from '@/supabase'
 import { alertOnce } from '@/lib/taskAlerts'
-import { playSuccess, playWarning } from '@/utils/sounds'
+import { alertLoud, playSuccess, playWarning } from '@/utils/sounds'
 import { formatDuration, formatTime, istDayStart, istToday, personName, prettyCarNumber, timeAgo } from '@/utils/format'
 import { ACTIVE_TASK_STATUSES, TASK_STATUS, TASK_TYPES } from '@/types'
+
+/**
+ * How often the alarm repeats while a dispatch sits unacknowledged.
+ *
+ * 20s: short enough that an operator who missed the first one is caught within
+ * half a minute, long enough not to be a fire alarm. The whole loud alert —
+ * three rounds of rising tone plus the vibration — runs about 2s, so this is a
+ * repeat rather than a continuous noise, which is what makes it possible to
+ * work through while walking to the car.
+ */
+const UNACCEPTED_ALARM_MS = 20_000
 
 /** Everything the cards need, in one round trip. */
 const TASK_SELECT = `
@@ -215,6 +227,66 @@ export default function MyTasks() {
     () => active.filter((t) => t.task_type === TASK_TYPES.RETRIEVAL),
     [active],
   )
+
+  /**
+   * Retrievals dispatched to this operator that they have not acknowledged.
+   *
+   * 'assigned' is the unacknowledged state; tapping Accept (or going straight
+   * to the delivery point) moves it on, which is what ends the alarm below.
+   */
+  const unaccepted = useMemo(
+    () => retrievals.filter((r) => r.status === TASK_STATUS.ASSIGNED),
+    [retrievals],
+  )
+
+  /**
+   * ── THE ALARM THAT DOES NOT GIVE UP ────────────────────────────────
+   *
+   * A guest is standing at the porch waiting for a car. A single chime when
+   * the dispatch lands is not enough: the phone is in a pocket, the operator
+   * is parking someone else's car, the screen is off. So it repeats until the
+   * task is acknowledged, and acknowledging is a server-side status change —
+   * a reload cannot silence it.
+   *
+   * Deliberately alertLoud and not alertOnce: alertOnce exists to stop two
+   * detectors double-announcing ONE arrival, and its 20s memory would swallow
+   * most of these on purpose. This is a repeat, which is the thing it
+   * suppresses. The first ring still comes through alertOnce in load(), so the
+   * interval starts one period later and nothing doubles up.
+   *
+   * One alert for all of them, not one per task: three waiting cars should
+   * make the operator look at the screen, not listen to three overlapping
+   * alarms.
+   */
+  useEffect(() => {
+    if (unaccepted.length === 0) return undefined
+
+    const ring = () => {
+      const first = unaccepted[0]
+      alertLoud(
+        unaccepted.length === 1
+          ? t('tasks.alarmOne')
+          : t('tasks.alarmMany', { n: unaccepted.length }),
+        unaccepted.length === 1
+          ? t('tasks.alarmBody', {
+              token: first.parked_vehicles?.token_number,
+              car: prettyCarNumber(first.parked_vehicles?.car_number),
+            })
+          : t('tasks.alarmOpen'),
+        // Same tag as the first alert, so the tray shows the current state
+        // rather than a stack of identical notices.
+        'valet-new-task',
+        '/operator/tasks',
+      )
+    }
+
+    const id = setInterval(ring, UNACCEPTED_ALARM_MS)
+    return () => clearInterval(id)
+    // unaccepted.length, not the array: a refetch rebuilds the array on every
+    // poll, and depending on the identity would restart the interval each time
+    // — which means it would never actually reach the end of a period and the
+    // alarm would never sound twice.
+  }, [unaccepted.length, t]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // The filter is on assigned_operator_id, so an admin assigning a retrieval
   // shows up here as an UPDATE whose NEW row names this operator.
@@ -482,6 +554,9 @@ function RetrievalCard({ task, run, onRefresh, spaces }) {
   const isAtPickup = task.status === TASK_STATUS.AT_PICKUP
   const needsReparking =
     task.status === TASK_STATUS.RE_PARKING || task.status === TASK_STATUS.RETURNED
+  // 'assigned' means dispatched but not yet acknowledged. This is the state the
+  // alarm keeps sounding for.
+  const needsAccept = task.status === TASK_STATUS.ASSIGNED
 
   const { secondsLeft, isWarning, isExpired } = useTimer(
     // Null unless a hand-over is actually running, so the hook idles on the
@@ -519,19 +594,46 @@ function RetrievalCard({ task, run, onRefresh, spaces }) {
 
       <NotesLine notes={vehicle?.notes} />
 
-      {/* ── assigned: not there yet ───────────────────────────────── */}
+      {/* ── dispatched: accept it, or go straight there ───────────── */}
       {!isAtPickup && !needsReparking && (
-        <Button
-          variant="primary"
-          fullWidth
-          icon="arrow-right"
-          className="mt-4"
-          onClick={() =>
-            run(() => startPickup(task.id).then(noteStart), t('tasks.timerStarted'))
-          }
-        >
-          {t('tasks.atDeliveryPoint')}
-        </Button>
+        <div className="mt-4 grid gap-2">
+          {/* Only while unacknowledged. Accepting is what silences the
+              repeating alarm — see the alarm effect at the top of this file.
+
+              "Car at delivery point" stays available beside it rather than
+              being gated behind Accept: an operator who is already standing at
+              the porch when the dispatch lands should not have to tap twice to
+              say so, and starting the pickup leaves 'assigned' too, so it
+              stops the alarm just the same. */}
+          {needsAccept && (
+            <Button
+              variant="success"
+              fullWidth
+              icon="check"
+              onClick={() =>
+                run(
+                  () => acceptTask(task.id),
+                  t('tasks.toastAccepted', { token: vehicle?.token_number }),
+                )
+              }
+            >
+              {t('tasks.accept')}
+            </Button>
+          )}
+          <Button
+            // Demoted while Accept is showing: two primary buttons stacked
+            // give no clue which one is the expected next tap, and the alarm
+            // is asking for Accept.
+            variant={needsAccept ? 'secondary' : 'primary'}
+            fullWidth
+            icon="arrow-right"
+            onClick={() =>
+              run(() => startPickup(task.id).then(noteStart), t('tasks.timerStarted'))
+            }
+          >
+            {t('tasks.atDeliveryPoint')}
+          </Button>
+        </div>
       )}
 
       {/* ── at the delivery point: the countdown ──────────────────── */}
