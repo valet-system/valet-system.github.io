@@ -29,9 +29,21 @@
   --c-line:        226 232 240;
   --c-line-strong: 203 213 225;
 
-  /* Brand — primary actions and app chrome */
-  --c-brand:       15  23  42;
-  --c-brand-hover: 30  41  59;
+  /* Brand — primary actions and app chrome.
+
+     BLACK, not the navy this was. The Ambria logo is drawn on black, and a navy
+     header behind a black-plated logo reads as two different brands sitting next
+     to each other. #0b0b0c is not a guess: it is the mean of the four corners of
+     brand/ambria-logo.png, so every dark surface in the app is literally the
+     same colour as the artwork.
+
+     --c-ink is deliberately still 15 23 42. That is the colour of HEADINGS, not
+     of a background — pure black body text on white is harsher to read, and
+     nobody asked for it. */
+  --c-brand:       11  11  12;
+  /* Lighter, so a hover is still visible. The navy pair moved by about the same
+     amount; on black it has to be a step in the only direction there is. */
+  --c-brand-hover: 38  38  41;
   --c-brand-soft: 241 245 249;
 
   /* Gold — VIP only. Using it anywhere else destroys its signal value. */
