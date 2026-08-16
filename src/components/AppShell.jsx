@@ -73,8 +73,11 @@ const NAV_ITEMS = {
     { to: '/admin/staff', key: 'staff', icon: 'users' },
     { to: '/admin/tokens', key: 'tokens', icon: 'ticket' },
     { to: '/admin/spaces', key: 'spaces', icon: 'parking' },
-    { to: '/admin/reviews', key: 'reviews', icon: 'star' },
-    { to: '/admin/analytics', key: 'analytics', icon: 'chart' },
+    // Reviews and Analytics are OFF the valet admin's nav on request. Their
+    // routes still exist and still guard on the role, so a bookmarked URL keeps
+    // working — this hides them, it does not revoke them. Reviews in particular
+    // stays empty until the WhatsApp side is built, and a nav entry that always
+    // leads to an empty screen teaches people to ignore the nav.
   ],
   [ROLES.SYSTEM_ADMIN]: [
     { to: '/system/properties', key: 'properties', icon: 'building' },
