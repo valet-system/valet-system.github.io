@@ -352,7 +352,14 @@ export default function Login() {
                   aria-label={t(showPin ? 'login.hidePin' : 'login.showPin')}
                   className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-ink-subtle transition-colors hover:bg-line/60 hover:text-ink"
                 >
-                  <Icon name={showPin ? 'eye-off' : 'eye'} size={19} />
+                  {/* The icon shows the STATE, not the action: an open eye
+                      means the PIN is readable right now, a struck-through eye
+                      means it is masked. It was the other way round — the icon
+                      described what tapping would do — and read as broken,
+                      because the struck-through eye sat next to a PIN in plain
+                      view. The aria-label still describes the action, which is
+                      what a screen reader wants from a button. */}
+                  <Icon name={showPin ? 'eye' : 'eye-off'} size={19} />
                 </button>
               </div>
 

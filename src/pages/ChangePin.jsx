@@ -186,7 +186,10 @@ export default function ChangePin() {
               onChange={(e) => setReveal(e.target.checked)}
               className="h-4 w-4 rounded border-line-strong accent-brand"
             />
-            <Icon name={reveal ? 'eye-off' : 'eye'} size={15} />
+            {/* State, not action — same as the login toggle. Here the checkbox
+                already says what tapping does, so an icon contradicting the
+                visible PINs beside it was doubly confusing. */}
+            <Icon name={reveal ? 'eye' : 'eye-off'} size={15} />
             {t('pin.showPins')}
           </label>
 
