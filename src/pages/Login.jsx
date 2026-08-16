@@ -333,8 +333,28 @@ export default function Login() {
                   aria-invalid={fieldErrors.pin ? true : undefined}
                   aria-describedby={fieldErrors.pin ? 'login-pin-error' : undefined}
                   className={cn(
-                    'tnum h-touch w-full rounded-xl border bg-surface px-4 pr-14',
-                    'text-center text-2xl font-bold tracking-[0.45em] text-ink outline-none',
+                    // SYMMETRIC padding, and that is the whole point. This was
+                    // `px-4 pr-14` — 16px left against 56px right to clear the
+                    // reveal button — and `text-center` centres within the
+                    // CONTENT box, so the digits sat 19.5px (measured) left of
+                    // the field's true centre while the progress dashes below
+                    // centred on the whole field. They visibly disagreed.
+                    //
+                    // Matching the left padding to the right (px-14) aligned
+                    // them and then clipped the first digit at 320px: six digits
+                    // at this size and tracking need 148px, and 56px of padding
+                    // each side leaves 132px. So the padding stays narrow and
+                    // the button simply overlays the right-hand padding — it is
+                    // absolutely positioned, so it costs the text nothing.
+                    'tnum h-touch w-full rounded-xl border bg-surface px-4',
+                    // indent-[0.45em] cancels the tracking's TRAILING space.
+                    // letter-spacing is added after the last digit too, and
+                    // `text-align: center` counts it — so the digits sat 5.3px
+                    // (measured, at every width) left of centre. For a centred
+                    // line, text-indent shifts the centre by half its value, so
+                    // one tracking unit of indent buys back exactly the half
+                    // unit that was lost. Keep the two numbers equal.
+                    'text-center text-2xl font-bold tracking-[0.45em] indent-[0.45em] text-ink outline-none',
                     'placeholder:text-lg placeholder:font-normal placeholder:tracking-[0.3em]',
                     'transition-colors duration-150',
                     fieldErrors.pin
