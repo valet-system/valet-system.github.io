@@ -1,0 +1,270 @@
+// @ts-nocheck — Deno file. See supabase/functions/README.md for why.
+/**
+ * ┌─────────────────────────────────────────────────────────────────────┐
+ * │ FILE: supabase/functions/wa-webhook/index.ts                        │
+ * │                                                                     │
+ * │ WHAT THIS FILE IS                                                   │
+ * │   Where the guest's tap lands. Meta POSTs here when someone presses  │
+ * │   a button on one of our template messages:                          │
+ * │                                                                     │
+ * │     "Get my car"                -> guest_request_retrieval(phone)    │
+ * │     Excellent / Good / Poor     -> guest_record_review(phone, r)     │
+ * │                                                                     │
+ * │   and it answers the guest in the same chat with the outcome.        │
+ * │                                                                     │
+ * │ ── WHY THE SIGNATURE CHECK IS NOT OPTIONAL ──────────────────────────│
+ * │   The only thing this endpoint learns about a guest is the phone     │
+ * │   number the payload claims the message came from, and it acts on    │
+ * │   that with no further proof — it will dispatch an operator to a     │
+ * │   real car. The URL is public. So if anyone could POST here, anyone  │
+ * │   could summon any car by guessing a phone number.                   │
+ * │                                                                     │
+ * │   X-Hub-Signature-256 is what makes the payload trustworthy: an      │
+ * │   HMAC of the exact request body under the app secret, which only    │
+ * │   Meta and we know. Unsigned or mis-signed requests are dropped      │
+ * │   BEFORE anything is read out of them.                               │
+ * │                                                                     │
+ * │ ── DEPLOY IT WITH --no-verify-jwt ───────────────────────────────────│
+ * │   Edge Functions require a Supabase JWT by default. Meta does not    │
+ * │   send one and cannot be made to. Without the flag every webhook is  │
+ * │   rejected with 401 before this file runs, and Meta quietly disables │
+ * │   the subscription after repeated failures:                          │
+ * │                                                                     │
+ * │     supabase functions deploy wa-webhook --no-verify-jwt             │
+ * │                                                                     │
+ * │   The signature check above is what replaces the JWT, which is why   │
+ * │   dropping it would leave this endpoint genuinely open.              │
+ * │                                                                     │
+ * │ SECRETS                                                             │
+ * │   WA_VERIFY_TOKEN   any string; must match what is typed into Meta   │
+ * │   WA_APP_SECRET     the app secret, for the signature                │
+ * │   WA_PHONE_NUMBER_ID / WA_ACCESS_TOKEN   to reply to the guest       │
+ * │   WA_BTN_*          button texts, if they are not the defaults       │
+ * └─────────────────────────────────────────────────────────────────────┘
+ */
+
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+
+const GRAPH = 'https://graph.facebook.com/v21.0'
+
+/**
+ * Constant-time comparison.
+ *
+ * A plain === on a signature leaks, through how long it takes to fail, how
+ * many leading characters were right — which is enough to reconstruct a valid
+ * signature one character at a time.
+ */
+function safeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  let diff = 0
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  return diff === 0
+}
+
+async function signatureOk(raw: string, header: string | null, secret: string): Promise<boolean> {
+  if (!header?.startsWith('sha256=')) return false
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  )
+  const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(raw))
+  const hex = [...new Uint8Array(mac)].map((b) => b.toString(16).padStart(2, '0')).join('')
+  return safeEqual(`sha256=${hex}`, header)
+}
+
+/**
+ * Which button was pressed.
+ *
+ * The text comes from the approved template, so it is configuration — the
+ * env vars let it be corrected without a redeploy. The fallbacks are keyword
+ * matches rather than exact strings, because the first version of a template
+ * is rarely the last and "Get my car" becoming "Get my car 🚗" should not
+ * silently stop working.
+ */
+function classify(label: string): string | null {
+  const s = (label ?? '').trim().toLowerCase()
+  if (!s) return null
+
+  const env = (name: string) => (Deno.env.get(name) ?? '').trim().toLowerCase()
+  const is = (name: string, ...words: string[]) => {
+    const configured = env(name)
+    if (configured) return s === configured
+    return words.some((w) => s.includes(w))
+  }
+
+  if (is('WA_BTN_GET_CAR', 'get my car', 'my car', 'gaadi', 'car')) return 'get_car'
+  if (is('WA_BTN_RATE_EXCELLENT', 'excellent', 'great')) return 'excellent'
+  if (is('WA_BTN_RATE_GOOD', 'good', 'ok')) return 'good'
+  if (is('WA_BTN_RATE_POOR', 'poor', 'bad')) return 'poor'
+  return null
+}
+
+/** What the guest reads back, per outcome code from the RPCs. */
+function replyFor(code: string, data: Record<string, unknown>): string {
+  const token = data?.token_number ? ` Token ${data.token_number}.` : ''
+  switch (code) {
+    case 'requested':
+      return `Thanks — your car has been requested.${token} Our valet is on the way.`
+    case 'already_requested':
+      return `Your car is already on its way.${token}`
+    case 'no_car':
+      return 'We could not find a parked car for this number. Please show your token at the valet desk.'
+    case 'rated':
+      return 'Thank you for the feedback.'
+    case 'already_rated':
+      return 'Thanks — we already have your feedback for this visit.'
+    case 'no_recent_visit':
+      return 'Thanks for writing in. We could not find a recent visit for this number.'
+    default:
+      return 'Sorry, something went wrong. Please speak to the valet desk.'
+  }
+}
+
+Deno.serve(async (req) => {
+  const url = new URL(req.url)
+
+  // ── Meta's subscription handshake ────────────────────────────────────
+  // Sent once, when the webhook URL is saved in the Meta dashboard. It must
+  // echo hub.challenge back as PLAIN TEXT — JSON here fails verification with
+  // no explanation of why.
+  if (req.method === 'GET') {
+    const mode = url.searchParams.get('hub.mode')
+    const token = url.searchParams.get('hub.verify_token')
+    const challenge = url.searchParams.get('hub.challenge') ?? ''
+    const expected = Deno.env.get('WA_VERIFY_TOKEN') ?? ''
+
+    if (mode === 'subscribe' && expected && token === expected) {
+      console.log('[wa-webhook] verification handshake accepted')
+      return new Response(challenge, { status: 200, headers: { 'Content-Type': 'text/plain' } })
+    }
+    console.error('[wa-webhook] verification REJECTED — WA_VERIFY_TOKEN does not match')
+    return new Response('forbidden', { status: 403 })
+  }
+
+  if (req.method !== 'POST') return new Response('method not allowed', { status: 405 })
+
+  // Read the body ONCE, as text. The signature is over these exact bytes, so
+  // re-serialising parsed JSON to check it would compare a different string
+  // and never match.
+  const raw = await req.text()
+
+  const appSecret = Deno.env.get('WA_APP_SECRET') ?? ''
+  if (!appSecret) {
+    // Refuse rather than degrade. Processing unsigned webhooks would leave a
+    // public endpoint that dispatches operators to real cars on request.
+    console.error('[wa-webhook] WA_APP_SECRET is not set — refusing to process')
+    return new Response('not configured', { status: 500 })
+  }
+  if (!(await signatureOk(raw, req.headers.get('x-hub-signature-256'), appSecret))) {
+    console.error('[wa-webhook] bad signature — dropped')
+    return new Response('bad signature', { status: 401 })
+  }
+
+  let payload: any = {}
+  try {
+    payload = JSON.parse(raw)
+  } catch {
+    // Answer 200 anyway: a non-200 makes Meta retry the same unparseable body
+    // on a schedule, forever.
+    console.error('[wa-webhook] unparseable body')
+    return new Response('ok', { status: 200 })
+  }
+
+  const supabase = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+  )
+
+  const messages = payload?.entry?.[0]?.changes?.[0]?.value?.messages ?? []
+  if (!messages.length) {
+    // Delivery receipts and read receipts arrive on the same webhook. Not an
+    // error, just not ours.
+    return new Response('ok', { status: 200 })
+  }
+
+  for (const msg of messages) {
+    const from = msg.from
+    const waId = msg.id
+
+    // Meta redelivers on any non-200, including one caused by something
+    // unrelated later in this loop. The log has a unique index on
+    // wa_message_id, so the insert is the lock: if it conflicts, this exact
+    // message has already been acted on.
+    const { error: dupe } = await supabase
+      .from('wa_message_log')
+      .insert({ wa_message_id: waId, direction: 'inbound', message_type: msg.type ?? 'unknown' })
+    if (dupe) {
+      console.log(`[wa-webhook] ${waId} already handled — skipping`)
+      continue
+    }
+
+    // Quick-reply buttons on a TEMPLATE arrive as type 'button'; buttons on an
+    // interactive message arrive as 'interactive'. Our templates use the
+    // former, but both are read so a template rebuilt the other way still works.
+    const label =
+      msg.button?.text ??
+      msg.button?.payload ??
+      msg.interactive?.button_reply?.title ??
+      msg.interactive?.button_reply?.id ??
+      msg.text?.body ??
+      ''
+
+    const action = classify(label)
+    console.log(`[wa-webhook] ${waId} from ${from}: "${label}" -> ${action ?? 'ignored'}`)
+    if (!action) continue
+
+    let code = 'error'
+    let data: Record<string, unknown> = {}
+    try {
+      const rpc =
+        action === 'get_car'
+          ? await supabase.rpc('guest_request_retrieval', { p_phone: from })
+          : await supabase.rpc('guest_record_review', { p_phone: from, p_rating: action })
+
+      if (rpc.error) {
+        console.error(`[wa-webhook] rpc failed for ${waId}:`, rpc.error.message)
+      } else {
+        data = rpc.data ?? {}
+        code = String(data.code ?? 'error')
+      }
+    } catch (err) {
+      console.error(`[wa-webhook] rpc threw for ${waId}:`, err?.message ?? err)
+    }
+
+    // Reply in the same chat. This is a free-form message, which is allowed
+    // because the guest messaged us seconds ago — that opens the 24-hour
+    // customer service window, and no template is needed inside it.
+    const phoneNumberId = Deno.env.get('WA_PHONE_NUMBER_ID') ?? ''
+    const accessToken = Deno.env.get('WA_ACCESS_TOKEN') ?? ''
+    if (phoneNumberId && accessToken) {
+      try {
+        const res = await fetch(`${GRAPH}/${phoneNumberId}/messages`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            messaging_product: 'whatsapp',
+            to: from,
+            type: 'text',
+            text: { body: replyFor(code, data) },
+          }),
+        })
+        if (!res.ok) console.error(`[wa-webhook] reply failed: ${res.status} ${await res.text()}`)
+      } catch (err) {
+        console.error('[wa-webhook] reply threw:', err?.message ?? err)
+      }
+    } else {
+      console.error('[wa-webhook] cannot reply — WA_PHONE_NUMBER_ID / WA_ACCESS_TOKEN not set')
+    }
+  }
+
+  // Always 200 once the signature has passed. A failure inside our own logic
+  // is ours to find in the logs; making Meta retry it changes nothing and
+  // eventually gets the subscription disabled.
+  return new Response('ok', { status: 200 })
+})

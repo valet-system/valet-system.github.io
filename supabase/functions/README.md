@@ -25,9 +25,45 @@ failure, and if that delete also fails you get an account that can sign in, show
 creating users starts failing, deploy this instead and point
 `src/lib/adminApi.js` back at `supabase.functions.invoke()`.
 
-Still to be written: `wa-send`, `wa-webhook`, `wa-dispatch` (the WhatsApp phase).
+`wa-dispatch/` and `wa-webhook/` are written. There is no `wa-send`: an earlier
+plan had one function per message, but every message is already queued into
+`wa_outbox` by the RPC that earns it, so a second sending path would have been a
+way for the two to disagree about what was sent.
+
 `wa-webhook` genuinely **must** be an Edge Function — Meta calls it over HTTPS and
 Postgres cannot receive an inbound request.
+
+### Deploying the two WhatsApp functions
+
+Both need `--no-verify-jwt`, for different reasons. Meta cannot attach a Supabase
+JWT to a webhook, and `wa-dispatch` is called by pg_net from a migration that
+must not contain a service role key — this repo is public.
+
+```bash
+supabase functions deploy wa-dispatch --no-verify-jwt --project-ref <ref>
+supabase functions deploy wa-webhook  --no-verify-jwt --project-ref <ref>
+```
+
+`wa-webhook` is public once deployed, so its safety rests entirely on the
+`X-Hub-Signature-256` check against `WA_APP_SECRET`. It refuses to process
+anything if that secret is unset rather than falling back to trusting the
+payload — an endpoint that dispatches a real operator to a real car on the say-so
+of a phone number in the body must not be open.
+
+Secrets, all set in the dashboard and never in the repo:
+
+| secret | used by | what it is |
+|---|---|---|
+| `WA_PHONE_NUMBER_ID` | both | the sending number's ID, not the number |
+| `WA_ACCESS_TOKEN` | both | permanent system-user token |
+| `WA_APP_SECRET` | webhook | app secret, for the signature |
+| `WA_VERIFY_TOKEN` | webhook | any string; must match what Meta is given |
+| `WA_TEMPLATE_LANG` | dispatch | must match the approved template's language |
+| `WA_TEMPLATE_CAR_PARKED` | dispatch | approved template name |
+| `WA_TEMPLATE_CAR_DELIVERED` | dispatch | approved template name |
+| `WA_TEMPLATE_NOT_AVAILABLE` | dispatch | approved template name |
+| `WA_TEMPLATE_CAR_RETURNED` | dispatch | approved template name |
+| `WA_BTN_*` | webhook | optional; exact button texts, if the keyword match is wrong |
 
 ---
 
