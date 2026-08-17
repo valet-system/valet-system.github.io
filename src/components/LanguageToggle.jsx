@@ -66,9 +66,16 @@ export default function LanguageToggle({ tone = 'dark', className = '' }) {
               // h-8 and px-2.5 keep the whole control inside the 40px bar while
               // staying a real tap target on a phone.
               'flex h-8 min-w-9 items-center justify-center rounded-md px-2.5 text-xs font-bold transition-colors',
+              // The selected pill is BRAND in both tones.
+              //
+              // On the dark chrome this was `bg-white text-ink`, the only
+              // hardcoded colour left in the app — and the moment the theme
+              // inverted, text-ink became near-white and it rendered as a blank
+              // white box in the top bar. Naming the role instead of the colour
+              // is the whole point of the tokens; this one line was opting out.
               active
                 ? tone === 'dark'
-                  ? 'bg-white text-ink'
+                  ? 'bg-brand text-ink-inverse'
                   : 'bg-brand text-ink-inverse'
                 : tone === 'dark'
                   ? 'text-ink-inverse/70 hover:text-ink-inverse'

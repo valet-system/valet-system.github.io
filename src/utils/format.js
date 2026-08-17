@@ -493,6 +493,49 @@ export function downloadCsv(filename, rows) {
   const link = document.createElement('a')
   link.href = url
   link.download = filename
+
+  // ── IN the document, and revoked LATER ────────────────────────────────
+  // This used to create a detached <a>, click it, and revoke the object URL on
+  // the very next line. Both halves of that are unreliable, and it failed in the
+  // way that is hardest to report: the toast said the export had worked and no
+  // file ever appeared.
+  //
+  //   1. A detached anchor is not guaranteed to trigger a download. Chrome
+  //      usually obliges; other browsers ignore a click on an element that is
+  //      not in the document.
+  //
+  //   2. revokeObjectURL in the same tick is a race. The browser reads the blob
+  //      asynchronously AFTER the click returns, and revoking pulls the data out
+  //      from under it. A few rows normally win the race, which is why this
+  //      looked fine in testing — a thousand-row export does not.
+  link.style.display = 'none'
+  document.body.appendChild(link)
   link.click()
-  URL.revokeObjectURL(url)
+  link.remove()
+
+  // ── WHEN TO REVOKE: not on a short timer ──────────────────────────────
+  // A one-second delay was tried and MEASURED failing. Driving this from a real
+  // browser, a 1200-row export reported:
+  //
+  //     download begin  valet-guests-2026-08-17.csv
+  //     download inProgress   (x5)
+  //     download canceled
+  //
+  // The browser writes the file asynchronously and takes longer than a second to
+  // finish even for a small CSV, so revoking on a timer cancels a download that
+  // had already started — and nothing surfaces, because the click succeeded and
+  // the success toast has already been shown.
+  //
+  // So the URL is released when the page goes away instead of on a guess about
+  // how long a write takes. One blob of a few hundred KB, held until navigation,
+  // on an admin action nobody performs twice a minute.
+  //
+  // pagehide, not beforeunload: beforeunload does not fire reliably on mobile
+  // Safari, which is where a tab is most likely to be discarded rather than
+  // closed.
+  const release = () => {
+    URL.revokeObjectURL(url)
+    window.removeEventListener('pagehide', release)
+  }
+  window.addEventListener('pagehide', release)
 }

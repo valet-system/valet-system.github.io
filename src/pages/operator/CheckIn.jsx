@@ -428,36 +428,49 @@ export default function CheckIn() {
             onChange={(e) => setField('guestPhone', normalisePhone(e.target.value))}
           />
 
-          <Input
-            label={t('checkin.carNumber')}
-            icon="car"
-            autoComplete="off"
-            spellCheck={false}
-            type="tel"
-            inputMode="numeric"
-            placeholder=" 1 2 3 4 "
-            hint={!errors.carNumber ? t('checkin.carNumberHint') : undefined}
-            value={form.carNumber}
-            error={errors.carNumber}
-            // Digits only, capped at four. Stripping here rather than on submit
-            // means the field can never show something different from what is
-            // stored — and a numeric keypad on a phone is half the typing of a
-            // full plate, on the screen used two hundred times a day.
-            onChange={(e) => setField('carNumber', e.target.value.replace(/\D/g, '').slice(0, 4))}
-            className="tnum text-lg font-bold tracking-[0.25em]"
-          />
+          {/* ── the two CAR fields, side by side from sm up ─────────────
+              Four digits and a three-option list do not need a whole row each.
+              On a laptop this form was one column of full-width inputs, so a
+              4-digit field got about 1100px of it and the operator scrolled past
+              empty space to reach the button.
 
-          <Select
-            label={t('checkin.carTier')}
-            // The VALUE stays the English enum — it is what goes in the column
-            // and what every RLS policy and badge compares against. Only the
-            // visible label is translated.
-            options={CAR_TIER_LIST.map((tier) => ({ value: tier, label: t(`tier.${tier}`) }))}
-            value={form.carTier}
-            error={errors.carTier}
-            onChange={(e) => setField('carTier', e.target.value)}
-            hint={t('checkin.carTierHint')}
-          />
+              Stacked below sm, in this order, which keeps the phone exactly as
+              it was: name, its Hindi, phone, car, tier. That sequence is the
+              order the operator is told things at the porch, and reordering it
+              to make a tidier desktop grid would cost more than the grid is
+              worth. */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Input
+              label={t('checkin.carNumber')}
+              icon="car"
+              autoComplete="off"
+              spellCheck={false}
+              type="tel"
+              inputMode="numeric"
+              placeholder=" 1 2 3 4 "
+              hint={!errors.carNumber ? t('checkin.carNumberHint') : undefined}
+              value={form.carNumber}
+              error={errors.carNumber}
+              // Digits only, capped at four. Stripping here rather than on submit
+              // means the field can never show something different from what is
+              // stored — and a numeric keypad on a phone is half the typing of a
+              // full plate, on the screen used two hundred times a day.
+              onChange={(e) => setField('carNumber', e.target.value.replace(/\D/g, '').slice(0, 4))}
+              className="tnum text-lg font-bold tracking-[0.25em]"
+            />
+
+            <Select
+              label={t('checkin.carTier')}
+              // The VALUE stays the English enum — it is what goes in the column
+              // and what every RLS policy and badge compares against. Only the
+              // visible label is translated.
+              options={CAR_TIER_LIST.map((tier) => ({ value: tier, label: t(`tier.${tier}`) }))}
+              value={form.carTier}
+              error={errors.carTier}
+              onChange={(e) => setField('carTier', e.target.value)}
+              hint={t('checkin.carTierHint')}
+            />
+          </div>
 
           <Textarea
             label={t('checkin.notes')}

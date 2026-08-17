@@ -172,7 +172,7 @@ export function InstallPrompt({ className = '' }) {
     >
       {/* On the login screen this card sits directly under the new lockup, so
           the old glyph here was the most visible mismatch of the three. */}
-      <span className="flex h-10 w-[4.5rem] shrink-0 items-center justify-center rounded-lg bg-brand px-2">
+      <span className="flex h-10 w-[4.5rem] shrink-0 items-center justify-center rounded-lg bg-logo-plate px-2">
         {/* The size public/logo-mark.png is actually emitted at — see the sizes
             printed by `npm run logo`. These only reserve the aspect ratio before
             the image loads, so a stale pair costs a visible jump on load, not a

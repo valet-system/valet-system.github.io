@@ -316,7 +316,10 @@ export default function Dashboard() {
           value={active.length}
           icon="car"
           tone="info"
-          hint={active.length > 0 ? t('queue.beingWorkedOn') : undefined}
+          // A hint in BOTH states. Passing undefined at zero left this one
+          // tile with a blank where its three neighbours had a line, and a row
+          // of four cards with one short is read as something failing to load.
+          hint={t(active.length > 0 ? 'queue.beingWorkedOn' : 'queue.nothingInHand')}
           onClick={active.length > 0 ? () => scrollToSection('queue-active') : undefined}
         />
         <StatTile
@@ -325,7 +328,9 @@ export default function Dashboard() {
           icon="check-circle"
           tone="success"
           to="/admin/car-status"
-          hint={t('queue.whereEveryCar')}
+          // Was queue.whereEveryCar — the same line as the Cars today tile two
+          // cards to the left, which made the row look like a rendering fault.
+          hint={t('queue.handedBackToday')}
         />
       </StatRow>
 

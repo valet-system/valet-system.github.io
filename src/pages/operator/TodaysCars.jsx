@@ -388,7 +388,11 @@ function CarRow({ car, spaces, onRequest }) {
               {prettyCarNumber(car.car_number)}
             </span>
             <TierBadge tier={car.car_tier} size="sm" />
-            <VehicleStatusBadge status={car.status} size="sm" />
+            {/* Status sits on the right on a wide row — see the note there. It
+                stays here on a phone, where there is no right to move it to. */}
+            <span className="sm:hidden">
+              <VehicleStatusBadge status={car.status} size="sm" />
+            </span>
           </div>
 
           <p className="mt-1 truncate text-sm text-ink-muted">
@@ -397,42 +401,77 @@ function CarRow({ car, spaces, onRequest }) {
             <span className="text-ink-subtle"> · {timeAgo(car.parked_at)}</span>
           </p>
 
-          {/* A real tel: link, not text. When a car is blocking the porch the
-              operator needs to call this guest NOW, and reading ten digits off
-              one screen to type into another is where the mistake happens. */}
-          {car.guest_phone && (
-            <a
-              href={`tel:+91${car.guest_phone}`}
-              onClick={(e) => e.stopPropagation()}
-              className="tnum mt-1 inline-flex items-center gap-1 text-sm font-medium text-info hover:underline"
-            >
-              <Icon name="phone" size={13} />
-              +91 {formatPhone(car.guest_phone)}
-            </a>
-          )}
+          {/* ── phone and place, on ONE row with a real gap ───────────────
+              These were two separate elements each carrying `inline-flex`,
+              which makes a <p> inline — so the place ran straight on from the
+              last digit of the number with nothing between them:
+              "+91 97978 76646⊙back side". A flex row with a column gap is what
+              that markup was reaching for. */}
+          {(car.guest_phone || car.parking_location) && (
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1">
+              {/* A real tel: link, not text. When a car is blocking the porch
+                  the operator needs to call this guest NOW, and reading ten
+                  digits off one screen to type into another is where the
+                  mistake happens. */}
+              {car.guest_phone && (
+                <a
+                  href={`tel:+91${car.guest_phone}`}
+                  onClick={(e) => e.stopPropagation()}
+                  // Not text-info. Blue was the one cool colour left on a screen
+                  // whose chrome is black and gold, and it read as a stray link
+                  // pasted in from somewhere else.
+                  className="tnum inline-flex items-center gap-1.5 text-sm font-medium text-ink-muted transition-colors hover:text-accent"
+                >
+                  <Icon name="phone" size={13} className="text-ink-subtle" />
+                  +91 {formatPhone(car.guest_phone)}
+                </a>
+              )}
 
-          {car.parking_location && (
-            <p className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-ink-muted">
-              <Icon name="location" size={14} className="text-ink-subtle" />
-              {storedPlaceName(car.parking_location, spaces)}
-            </p>
+              {car.parking_location && (
+                <span className="inline-flex items-center gap-1.5 text-sm font-medium text-ink">
+                  <Icon name="location" size={14} className="text-ink-subtle" />
+                  {storedPlaceName(car.parking_location, spaces)}
+                </span>
+              )}
+            </div>
           )}
 
           {car.notes && (
-            <p className="mt-1 truncate text-xs text-ink-subtle" title={car.notes}>
+            <p className="mt-1.5 truncate text-xs text-ink-subtle" title={car.notes}>
               {car.notes}
             </p>
           )}
         </div>
+
+        {/* ── the right-hand column ────────────────────────────────────
+            On a laptop this row is over 1500px wide and every word of it was
+            packed into the left third, leaving two thirds of empty card. The
+            status is what an operator scans a list FOR, so it goes to the
+            right edge where the eye can run straight down it, and the request
+            button comes with it instead of being a full-width bar underneath.
+
+            sm and up only. On a phone there is no room for a second column and
+            both stay where they were. */}
+        <div className="hidden shrink-0 flex-col items-end gap-2.5 sm:flex">
+          <VehicleStatusBadge status={car.status} size="sm" />
+          {atRest && (
+            <Button variant="secondary" size="sm" icon="bell" onClick={onRequest}>
+              {t('cars.requestCar')}
+            </Button>
+          )}
+        </div>
       </div>
 
+      {/* Phone only — sm and up gets this button in the right-hand column
+          above. Full width here because a thumb reaching across a phone wants
+          the whole row, not a small target in a corner. */}
       {atRest && (
         <Button
           variant="secondary"
           size="md"
           fullWidth
           icon="bell"
-          className="mt-3"
+          className="mt-3 sm:hidden"
           onClick={onRequest}
         >
           {t('cars.requestCar')}

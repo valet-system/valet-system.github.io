@@ -65,6 +65,7 @@ import { groupPhone, normalisePhone, skipPhoneSeparator } from '@/utils/format'
 import { primeAudio, requestNotificationPermission } from '@/utils/sounds'
 import { subscribeToPush } from '@/lib/pushApi'
 import LanguageToggle from '@/components/LanguageToggle'
+import ThemeToggle from '@/components/ThemeToggle'
 import { useT } from '@/i18n'
 import { PIN_LENGTH } from '@/types'
 import { cn } from '@/utils/cn'
@@ -195,8 +196,11 @@ export default function Login() {
           plain pt-4 put this toggle inside it. Android reserves that space
           itself, which is why it only showed up on iPhone.
           env() is 0 everywhere else, so this is a no-op off iOS. */}
-      <div className="flex justify-end px-4 pt-[calc(1rem+env(safe-area-inset-top))]">
+      <div className="flex items-center justify-end gap-1 px-4 pt-[calc(1rem+env(safe-area-inset-top))]">
         <LanguageToggle tone="light" />
+        {/* Here too, not only inside the app: somebody signing in at night
+            should not have to sign in first to turn the lights down. */}
+        <ThemeToggle tone="light" />
       </div>
 
       <main className="flex flex-1 items-center justify-center px-4 pb-10 pt-4">
@@ -213,7 +217,7 @@ export default function Login() {
               name, and a screen reader announcing "Ambria" twice in a row is
               noise. The image is decoration here, not information. */}
           <div className="mb-8 text-center">
-            <span className="mx-auto mb-4 flex w-52 items-center justify-center rounded-2xl bg-brand px-5 py-4 shadow-raised">
+            <span className="mx-auto mb-4 flex w-52 items-center justify-center rounded-2xl bg-logo-plate px-5 py-4 shadow-raised">
               {/* The size public/logo-lockup.png is actually emitted at, per
                   `npm run logo`. These were 919x444 — the dimensions of the
                   full-resolution copy in brand/, which is never served here. */}

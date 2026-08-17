@@ -128,7 +128,7 @@ export default function NavDrawer({ open, onClose, items }) {
       >
         {/* ── brand ─────────────────────────────────────────────────── */}
         <div className="flex shrink-0 items-center gap-3 px-4 py-5">
-          <span className="flex h-10 w-[4.5rem] shrink-0 items-center justify-center rounded-xl bg-brand px-2">
+          <span className="flex h-10 w-[4.5rem] shrink-0 items-center justify-center rounded-xl bg-logo-plate px-2">
             {/* The size public/logo-mark.png is actually emitted at, per
                 `npm run logo`. Update both when the artwork changes. */}
             <img
@@ -158,11 +158,11 @@ export default function NavDrawer({ open, onClose, items }) {
                 cn(
                   // min-h-12 is the tap target. A nav row read in a hurry on a
                   // porch is not a place to save vertical space.
-                  'mb-1 flex min-h-12 items-center gap-3 rounded-xl px-3 text-[0.9375rem]',
+                  'mb-1 flex min-h-12 items-center gap-3 rounded-xl border-l-2 px-3 text-[0.9375rem]',
                   'font-medium transition-colors',
                   isActive
-                    ? 'bg-brand-soft font-semibold text-brand'
-                    : 'text-ink-muted hover:bg-surface-sunken',
+                    ? 'border-accent bg-brand-soft font-semibold text-brand'
+                    : 'border-transparent text-ink-muted hover:bg-surface-sunken hover:text-ink',
                 )
               }
             >
@@ -190,7 +190,7 @@ export default function NavDrawer({ open, onClose, items }) {
           <button
             type="button"
             onClick={() => setLang(isHindi ? 'en' : 'hi')}
-            className="flex min-h-12 w-full items-center gap-3 px-4 text-[0.9375rem] font-medium text-ink-muted transition-colors hover:bg-surface-sunken"
+            className="flex min-h-12 w-full items-center gap-3 px-4 text-[0.9375rem] font-medium text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink"
           >
             <Icon name="globe" size={19} />
             <span className="min-w-0 truncate">
@@ -199,7 +199,7 @@ export default function NavDrawer({ open, onClose, items }) {
           </button>
 
           <div className="flex items-center gap-3 border-t border-line px-4 py-4">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-bold text-ink">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-bold text-brand">
               {initials(personName(displayName, displayNameHi))}
             </span>
             <div className="min-w-0">

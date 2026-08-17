@@ -27,6 +27,8 @@ export default {
           hover: 'rgb(var(--c-brand-hover) / <alpha-value>)',
           soft: 'rgb(var(--c-brand-soft) / <alpha-value>)',
         },
+        // The logo artwork's own background — deliberately theme-independent.
+        'logo-plate': 'rgb(var(--c-logo-plate) / <alpha-value>)',
         accent: {
           DEFAULT: 'rgb(var(--c-accent) / <alpha-value>)',
           soft: 'rgb(var(--c-accent-soft) / <alpha-value>)',

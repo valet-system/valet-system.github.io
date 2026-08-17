@@ -33,6 +33,7 @@
  */
 
 import { StrictMode } from 'react'
+import { initTheme } from '@/utils/theme'
 import { createRoot } from 'react-dom/client'
 import App from '@/App'
 import { registerServiceWorker } from '@/pwa'
@@ -47,6 +48,11 @@ if (!container) {
   // rather than a null-reference deep inside React.
   throw new Error('#root not found in index.html — cannot mount the app.')
 }
+
+// Before the first render: the inline script in index.html has already put an
+// attribute on <html> to avoid a flash; this agrees with it and starts
+// following the OS while the choice is 'system'.
+initTheme()
 
 createRoot(container).render(
   <StrictMode>

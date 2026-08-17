@@ -67,7 +67,6 @@ import { useAuth } from '@/context/AuthContext'
 import { useT } from '@/i18n'
 import { useToast } from '@/context/ToastContext'
 import { PageHeader } from '@/components/AppShell'
-import Card, { SectionHeading } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Icon from '@/components/ui/Icon'
 import Badge from '@/components/ui/Badge'
@@ -271,53 +270,90 @@ export default function StaffManager() {
       />
 
       {/* ── summary ─────────────────────────────────────────────────── */}
-      <div className="mb-4 flex flex-wrap gap-2">
-        <Badge tone="neutral" size="lg" icon="users">
-          {counts.total} active
-        </Badge>
+      <div className="mb-5 grid grid-cols-2 gap-3 sm:flex sm:flex-wrap">
+        <div className="flex items-center gap-3 rounded-xl border border-line bg-surface px-4 py-3 shadow-card">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-success-soft text-success">
+            <Icon name="users" size={18} />
+          </span>
+          <div>
+            <p className="text-xl font-bold leading-none text-ink">{counts.total}</p>
+            <p className="mt-0.5 text-xs font-medium text-ink-subtle">Active staff</p>
+          </div>
+        </div>
+
         {isSystemAdmin && (
-          <Badge tone="info" size="lg" icon="key">
-            {counts.operators} operators
-          </Badge>
+          <div className="flex items-center gap-3 rounded-xl border border-line bg-surface px-4 py-3 shadow-card">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-info-soft text-info">
+              <Icon name="key" size={18} />
+            </span>
+            <div>
+              <p className="text-xl font-bold leading-none text-ink">{counts.operators}</p>
+              <p className="mt-0.5 text-xs font-medium text-ink-subtle">Operators</p>
+            </div>
+          </div>
         )}
+
         {counts.inactive > 0 && (
-          <Badge tone="warning" size="lg" icon="bell-off">
-            {counts.inactive} inactive
-          </Badge>
+          <div className="flex items-center gap-3 rounded-xl border border-line bg-surface px-4 py-3 shadow-card">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-warning-soft text-warning">
+              <Icon name="bell-off" size={18} />
+            </span>
+            <div>
+              <p className="text-xl font-bold leading-none text-ink">{counts.inactive}</p>
+              <p className="mt-0.5 text-xs font-medium text-ink-subtle">Inactive</p>
+            </div>
+          </div>
         )}
       </div>
 
       {/* ── filters ─────────────────────────────────────────────────── */}
-      <Card padded={false} className="mb-4 p-3">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <SearchInput
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onClear={() => setSearch('')}
-            placeholder={t('staff.searchPlaceholder')}
-            className="flex-1"
-          />
+      <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center">
+        <SearchInput
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onClear={() => setSearch('')}
+          placeholder={t('staff.searchPlaceholder')}
+          className="flex-1"
+        />
 
-          <div className="flex flex-wrap gap-2">
-            {isSystemAdmin && (
-              <>
+        <div className="flex flex-wrap items-center gap-2">
+          {isSystemAdmin && (
+            <>
+              <div className="relative">
+                <Icon
+                  name="shield"
+                  size={15}
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle"
+                />
                 <select
                   value={roleFilter}
                   onChange={(e) => setRoleFilter(e.target.value)}
                   aria-label={t('staff.filterRole')}
-                  className="h-12 rounded-xl border border-line-strong bg-surface px-3 text-sm font-medium text-ink outline-none focus:border-brand"
+                  className="h-11 appearance-none rounded-xl border border-line-strong bg-surface pl-8 pr-8 text-sm font-medium text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
                 >
                   <option value="all">{t('staff.allRoles')}</option>
                   <option value={ROLES.OPERATOR}>{t('staff.operators')}</option>
                   <option value={ROLES.VALET_ADMIN}>{t('staff.valetAdmins')}</option>
                   <option value={ROLES.SYSTEM_ADMIN}>{t('staff.systemAdmins')}</option>
                 </select>
+                <Icon
+                  name="chevron-down"
+                  size={14}
+                  className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-subtle"
+                />
+              </div>
 
+              <div className="relative">
+                <Icon
+                  name="map-pin"
+                  size={15}
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle"
+                />
                 <select
                   value={propertyFilter}
                   onChange={(e) => setPropertyFilter(e.target.value)}
                   aria-label={t('staff.filterProperty')}
-                  className="h-12 rounded-xl border border-line-strong bg-surface px-3 text-sm font-medium text-ink outline-none focus:border-brand"
+                  className="h-11 appearance-none rounded-xl border border-line-strong bg-surface pl-8 pr-8 text-sm font-medium text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
                 >
                   <option value="all">{t('staff.allProperties')}</option>
                   {properties.map((p) => (
@@ -326,27 +362,32 @@ export default function StaffManager() {
                     </option>
                   ))}
                 </select>
-              </>
-            )}
+                <Icon
+                  name="chevron-down"
+                  size={14}
+                  className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-subtle"
+                />
+              </div>
+            </>
+          )}
 
-            <label className="flex h-12 cursor-pointer select-none items-center gap-2 rounded-xl border border-line-strong px-3 text-sm font-medium text-ink-muted">
-              <input
-                type="checkbox"
-                checked={showInactive}
-                onChange={(e) => setShowInactive(e.target.checked)}
-                className="h-4 w-4 rounded border-line-strong accent-brand"
-              />
-              {t('staff.showInactive')}
-            </label>
-          </div>
+          <label className="flex h-11 cursor-pointer select-none items-center gap-2 rounded-xl border border-line-strong bg-surface px-3.5 text-sm font-medium text-ink-muted transition-colors hover:bg-surface-sunken">
+            <input
+              type="checkbox"
+              checked={showInactive}
+              onChange={(e) => setShowInactive(e.target.checked)}
+              className="h-4 w-4 rounded border-line-strong accent-brand"
+            />
+            {t('staff.showInactive')}
+          </label>
         </div>
-      </Card>
+      </div>
 
       {/* ── list ────────────────────────────────────────────────────── */}
       {loading ? (
         <div className="space-y-2">
           {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className="h-[5.5rem] rounded-card" />
+            <Skeleton key={i} className="h-[4.75rem] rounded-card" />
           ))}
         </div>
       ) : loadError ? (
@@ -381,9 +422,14 @@ export default function StaffManager() {
         />
       ) : (
         <>
-          <SectionHeading title={t('staff.heading')} count={visible.length} />
-          <div className="space-y-2">
-            {visible.map((person) => (
+          {/* ── table header ──────────────────────────────────────── */}
+          <div className="mb-1 flex items-center px-4 text-[0.6875rem] font-semibold uppercase tracking-widest text-ink-subtle">
+            <span className="flex-1">{t('staff.heading')} <span className="ml-1.5 rounded-full bg-brand-soft px-1.5 py-0.5 text-[0.6rem] font-bold text-ink-muted">{visible.length}</span></span>
+            <span className="w-24 text-right">Actions</span>
+          </div>
+
+          <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
+            {visible.map((person, i) => (
               <StaffRow
                 key={person.id}
                 person={person}
@@ -391,6 +437,8 @@ export default function StaffManager() {
                 showProperty={isSystemAdmin}
                 onEdit={() => setEditTarget(person)}
                 onToggleActive={() => setDeactivateTarget(person)}
+                isFirst={i === 0}
+                isLast={i === visible.length - 1}
               />
             ))}
           </div>
@@ -466,86 +514,140 @@ export default function StaffManager() {
  * past — and every read is a logged, deliberate act rather than a side effect
  * of loading a list.
  */
-function StaffRow({ person, isSelf, showProperty, onEdit, onToggleActive }) {
+function StaffRow({ person, isSelf, showProperty, onEdit, onToggleActive, isFirst, isLast }) {
   const t = useT()
   const meta = ROLE_META[person.role]
 
+  const avatarBg =
+    person.role === ROLES.SYSTEM_ADMIN
+      ? 'bg-vip-soft text-vip'
+      : person.role === ROLES.VALET_ADMIN
+        ? 'bg-info-soft text-info'
+        : 'bg-brand-soft text-ink-muted'
+
+  const roleTone =
+    person.role === ROLES.SYSTEM_ADMIN
+      ? 'vip'
+      : person.role === ROLES.VALET_ADMIN
+        ? 'info'
+        : 'neutral'
+
   return (
-    <Card
-      padded={false}
-      className={cn('p-3.5', !person.is_active && 'opacity-60')}
-      accent={person.role === ROLES.SYSTEM_ADMIN ? 'vip' : undefined}
+    <div
+      className={cn(
+        'group relative flex items-center gap-4 px-5 py-4 transition-colors duration-100',
+        'hover:bg-surface-sunken',
+        !isFirst && 'border-t border-line',
+        !person.is_active && 'opacity-50',
+      )}
     >
-      <div className="flex items-center gap-3">
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand-soft text-sm font-bold text-ink-muted">
-          {initials(person.name)}
-        </span>
+      {/* Role accent stripe — 3 px left edge inside the row */}
+      {person.role !== ROLES.OPERATOR && (
+        <span
+          className={cn(
+            'absolute left-0 top-3 bottom-3 w-[3px] rounded-r-full',
+            person.role === ROLES.SYSTEM_ADMIN && 'bg-vip',
+            person.role === ROLES.VALET_ADMIN && 'bg-info',
+          )}
+          aria-hidden="true"
+        />
+      )}
 
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <p className="truncate font-semibold text-ink">
-              {personName(person.name, person.name_hi)}
-            </p>
-            {isSelf && (
-              <Badge tone="info" size="sm">
-                {t('staff.you')}
-              </Badge>
-            )}
-            {!person.is_active && (
-              <Badge tone="warning" size="sm">
-                {t('staff.inactive')}
-              </Badge>
-            )}
-          </div>
+      {/* ── Avatar ─────────────────────────────────────────────── */}
+      <span
+        className={cn(
+          'flex h-11 w-11 shrink-0 items-center justify-center rounded-xl',
+          'text-sm font-bold select-none',
+          avatarBg,
+        )}
+      >
+        {initials(person.name)}
+      </span>
 
-          {/* The number is the login identifier, so it gets equal billing with
-              the name rather than being tucked away as a contact detail. */}
-          <p className="tnum mt-0.5 text-sm text-ink-muted">+91 {formatPhone(person.phone)}</p>
-
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            <Badge tone={person.role === ROLES.OPERATOR ? 'neutral' : 'info'} size="sm" icon={meta?.icon}>
-              {/* role.* keys, so the badge matches the filter dropdown above. */}
-              {t(`role.${person.role}`)}
+      {/* ── Identity ───────────────────────────────────────────── */}
+      <div className="min-w-0 flex-1">
+        {/* Name row */}
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-[0.9375rem] font-semibold leading-snug text-ink">
+            {personName(person.name, person.name_hi)}
+          </p>
+          {isSelf && (
+            <Badge tone="info" size="sm">
+              {t('staff.you')}
             </Badge>
-            {showProperty && (
-              <span className="text-xs text-ink-subtle">
-                {person.properties?.name ?? t('staff.allProperties')}
-              </span>
-            )}
-
-          </div>
+          )}
+          {!person.is_active && (
+            <Badge tone="warning" size="sm" dot>
+              {t('staff.inactive')}
+            </Badge>
+          )}
         </div>
 
-        {/* Actions. Icon-only on a phone (no room for labels), and the whole
-            row stays a comfortable 44px+ tap target each. */}
-        <div className="flex shrink-0 items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon-md"
-            icon="edit"
-            onClick={onEdit}
-            aria-label={t('staff.editNamed', { name: person.name })}
-            title={t('staff.editTooltip')}
-          />
-          <Button
-            variant="ghost"
-            size="icon-md"
-            icon={person.is_active ? 'x-circle' : 'check-circle'}
-            onClick={onToggleActive}
-            disabled={isSelf}
-            aria-label={t(person.is_active ? 'staff.deactivateNamed' : 'staff.reactivateNamed', {
-              name: person.name,
-            })}
-            title={
-              isSelf
-                ? t('staff.cannotDeactivateSelf')
-                : t(person.is_active ? 'staff.deactivate' : 'staff.reactivate')
-            }
-            className={person.is_active ? 'hover:bg-danger-soft hover:text-danger' : 'hover:bg-success-soft hover:text-success'}
-          />
+        {/* Phone */}
+        <p className="tnum mt-0.5 text-[0.8125rem] font-medium text-ink-muted">
+          +91 {formatPhone(person.phone)}
+        </p>
+
+        {/* Role + property */}
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          <Badge tone={roleTone} size="sm" icon={meta?.icon}>
+            {t(`role.${person.role}`)}
+          </Badge>
+          {showProperty && person.properties?.name && (
+            <span className="flex items-center gap-1 rounded-md bg-surface-sunken px-2 py-0.5 text-[0.6875rem] font-medium text-ink-subtle ring-1 ring-inset ring-line-strong">
+              <Icon name="map-pin" size={10} />
+              {person.properties.name}
+            </span>
+          )}
         </div>
       </div>
-    </Card>
+
+      {/* ── Actions ────────────────────────────────────────────── */}
+      <div className="flex shrink-0 items-center gap-1 opacity-60 transition-opacity duration-100 group-hover:opacity-100">
+        <Button
+          variant="secondary"
+          size="sm"
+          icon="edit"
+          onClick={onEdit}
+          aria-label={t('staff.editNamed', { name: person.name })}
+          title={t('staff.editTooltip')}
+          className="hidden sm:inline-flex"
+        >
+          Edit
+        </Button>
+        {/* Icon-only fallback on small screens */}
+        <Button
+          variant="ghost"
+          size="icon-md"
+          icon="edit"
+          onClick={onEdit}
+          aria-label={t('staff.editNamed', { name: person.name })}
+          className="sm:hidden"
+        />
+
+        <Button
+          variant="ghost"
+          size="icon-md"
+          icon={person.is_active ? 'x-circle' : 'check-circle'}
+          onClick={onToggleActive}
+          disabled={isSelf}
+          aria-label={t(
+            person.is_active ? 'staff.deactivateNamed' : 'staff.reactivateNamed',
+            { name: person.name },
+          )}
+          title={
+            isSelf
+              ? t('staff.cannotDeactivateSelf')
+              : t(person.is_active ? 'staff.deactivate' : 'staff.reactivate')
+          }
+          className={cn(
+            person.is_active
+              ? 'hover:bg-danger-soft hover:text-danger'
+              : 'hover:bg-success-soft hover:text-success',
+          )}
+        />
+      </div>
+    </div>
   )
 }
 

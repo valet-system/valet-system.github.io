@@ -13,44 +13,77 @@
    restrained gold reserved exclusively for VIP, and a single saturated
    colour per status so an operator can read a card at arm's length.
    ══════════════════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════════════
+   TWO THEMES, and every colour in the app comes from here.
+   ──────────────────────────────────────────────────────────────────
+   Components only ever name a ROLE — surface, ink, line, brand — never
+   a colour. So a whole theme is a list of values in this file, not a
+   sweep through ninety components. That is the entire reason the tokens
+   exist, and it is why light and dark can differ in every value here
+   without a single component knowing which one is on.
+
+   ── WHY THE DARK VALUES APPEAR ONCE ───────────────────────────────
+   The usual way to do this needs the dark palette written TWICE: once
+   under @media (prefers-color-scheme: dark) for people who never touch
+   the toggle, and again under [data-theme="dark"] so the toggle can
+   win. Two copies of forty values drift, and the drift shows up as one
+   colour being subtly wrong in only one of the two ways of reaching
+   dark.
+
+   So the resolving happens in JS instead: src/utils/theme.js reads the
+   stored choice, falls back to the system preference, and always writes
+   a concrete data-theme onto <html>. CSS then needs one dark block. The
+   cost is that the attribute must be set BEFORE first paint, which is
+   what the inline script in index.html is for.
+
+   ── THE PART THAT IS NOT COSMETIC ─────────────────────────────────
+   Dark is harder to read in direct sun. Two of the three roles work
+   OUTDOORS — an operator taking keys at a porch at midday holds this
+   screen in daylight — which is why the DEFAULT for a first-time
+   visitor with no system preference is light, not dark.
+   ══════════════════════════════════════════════════════════════════ */
 :root {
-  /* Surfaces */
+  /* ── LIGHT ─────────────────────────────────────────────────────── */
+
+  /* surface  a card
+     sunken   the page behind it
+     raised   the CHROME: top bar, sidebar, drawer
+
+     `raised` is near-black in BOTH themes, because the chrome is the one
+     part of the app that does not flip — the gold logo and the white nav
+     labels sit on it, and inverting it would mean restyling the mark. It
+     cannot be `brand`: brand is the violet primary buttons are painted
+     with, and a violet sidebar is not what a violet button sits next to. */
   --c-surface:        255 255 255;
-  --c-surface-sunken: 246 247 249;
-  --c-surface-raised: 255 255 255;
+  --c-surface-sunken: 248 246 242;
+  --c-surface-raised:  11  11  12;
 
-  /* Text. 4 steps is enough; more than that and hierarchy turns to mush. */
-  --c-ink:         15  23  42;   /* headings, numbers          */
-  --c-ink-muted:   71  85 105;   /* body copy                  */
-  --c-ink-subtle: 130 141 158;   /* labels, timestamps, hints  */
-  --c-ink-inverse:248 250 252;   /* on dark surfaces           */
+  /* Text. 4 steps is enough; more than that and hierarchy turns to mush.
+     ink-inverse means "on a FILLED surface" — the violet of a button, or
+     the near-black chrome — so it is near-white in both themes. */
+  --c-ink:          15  23  42;
+  --c-ink-muted:    71  85 105;
+  --c-ink-subtle:  130 141 158;
+  --c-ink-inverse: 248 250 252;
 
-  /* Borders */
   --c-line:        226 232 240;
   --c-line-strong: 203 213 225;
 
-  /* Brand — primary actions and app chrome.
+  /* Brand — primary actions and the current-page highlight.
+     #7C3AED, not the #8B5CF6 this started as. Measured: white on 8B5CF6 is
+     4.23:1, which fails WCAG AA for normal text (4.5:1) — and every primary
+     button in the app is white on this colour. One step darker takes it to
+     5.70:1 and costs nothing anyone can see. */
+  --c-brand:       124  58 237;
+  --c-brand-hover: 109  40 217;
+  --c-brand-soft:  243 239 254;
 
-     BLACK, not the navy this was. The Ambria logo is drawn on black, and a navy
-     header behind a black-plated logo reads as two different brands sitting next
-     to each other. #0b0b0c is not a guess: it is the mean of the four corners of
-     brand/ambria-logo.png, so every dark surface in the app is literally the
-     same colour as the artwork.
-
-     --c-ink is deliberately still 15 23 42. That is the colour of HEADINGS, not
-     of a background — pure black body text on white is harsher to read, and
-     nobody asked for it. */
-  --c-brand:       11  11  12;
-  /* Lighter, so a hover is still visible. The navy pair moved by about the same
-     amount; on black it has to be a step in the only direction there is. */
-  --c-brand-hover: 38  38  41;
-  --c-brand-soft: 241 245 249;
-
-  /* Gold — VIP only. Using it anywhere else destroys its signal value. */
+  /* Gold — VIP, and the accent the chrome uses. Gold rather than the
+     reference's cyan for one reason: the Ambria logo is gold, and a cyan
+     accent would put a third hue next to a violet UI and a gold mark. */
   --c-accent:      180 118   9;
   --c-accent-soft: 254 247 224;
 
-  /* Semantic */
   --c-success:       5 150 105;
   --c-success-hover: 4 120  87;
   --c-success-soft:236 253 245;
@@ -67,6 +100,67 @@
 
   --c-vip:         180 118   9;
   --c-vip-soft:    254 247 224;
+
+  /* ── NOT A THEME COLOUR, in either theme ──
+     The exact background the logo artwork was drawn on, sampled from the
+     four corners of brand/ambria-logo.png. The mark is gold with its
+     black keyed out to transparency, so whatever sits behind it becomes
+     the logo's background — on violet, a gold mark stops matching the
+     letterhead. Fixed by something outside the app, so it is declared
+     once and never overridden below. */
+  --c-logo-plate:   11  11  12;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   DARK — one block, applied when theme.js resolves to dark.
+   Only the values that CHANGE are listed. Anything absent keeps its
+   light value, which is exactly what should happen to --c-logo-plate.
+   ══════════════════════════════════════════════════════════════════ */
+:root[data-theme='dark'] {
+  --c-surface:        22  20  38;
+  --c-surface-sunken: 13  11  24;
+  --c-surface-raised: 16  14  30;
+
+  --c-ink:         237 235 245;
+  --c-ink-muted:   169 163 196;
+  --c-ink-subtle:  124 117 154;
+  --c-ink-inverse: 255 255 255;
+
+  /* Borders carry the layout in dark. On white a card is defined by its
+     shadow; on a dark page a shadow is invisible and the edge is all
+     there is, so these sit a step stronger against their surface. */
+  --c-line:         42  38  68;
+  --c-line-strong:  62  56  96;
+
+  /* Same reasoning as light, one step darker; hover goes lighter here because
+     on a dark surface that is the only direction that reads as a hover. */
+  --c-brand:       124  58 237;
+  --c-brand-hover: 139  92 246;
+  --c-brand-soft:   38  30  66;
+
+  --c-accent:      224 163  58;
+  --c-accent-soft:  47  36  16;
+
+  /* Every colour LIGHTER and every `-soft` DARKER than its light-theme
+     value. They work the other way round now — light text on a dim tint
+     instead of dark text on a pale one — and pairing a pale tint with
+     light text is how a converted theme ends up unreadable. */
+  --c-success:      52 211 153;
+  --c-success-hover:16 185 129;
+  --c-success-soft: 10  46  36;
+
+  --c-danger:      248 113 113;
+  --c-danger-hover:239  68  68;
+  --c-danger-soft:  58  22  24;
+
+  --c-warning:     251 191  36;
+  --c-warning-soft: 54  40  10;
+
+  --c-info:         96 165 250;
+  --c-info-soft:    21  36  64;
+
+  --c-vip:         224 163  58;
+  --c-vip-soft:     47  36  16;
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -203,6 +297,24 @@
   }
 
   /**
+   * The same, MINUS the top bar — for the row that holds the sidebar and the
+   * page beside it.
+   *
+   * Without this the row is only as tall as whatever page is in it, so on a
+   * short page the dark sidebar stopped halfway down and the light body colour
+   * showed underneath it. That reads as the sidebar failing to paint, not as a
+   * short page.
+   *
+   * 4rem is the bar's own height and the inset is the strip added above it for
+   * the iOS status bar — the same two numbers the sidebar's sticky offset uses.
+   */
+  .min-h-shell {
+    min-height: calc(100vh - 4rem - env(safe-area-inset-top));
+    min-height: calc(var(--app-h, 100vh) - 4rem - env(safe-area-inset-top));
+    min-height: calc(100dvh - 4rem - env(safe-area-inset-top));
+  }
+
+  /**
    * The same rule as a fixed HEIGHT, for overlays.
    *
    * `position: fixed; inset: 0` sizes to the LAYOUT viewport, which on a phone
@@ -234,5 +346,21 @@
   }
   .scrollbar-slim::-webkit-scrollbar-thumb:hover {
     @apply bg-ink-subtle;
+  }
+
+  /*
+   * No scrollbar at all, for rows that scroll sideways and say so by other
+   * means — a tab strip whose last tab is visibly cut off at the edge.
+   *
+   * Separate from scrollbar-slim rather than a variant of it: a horizontal bar
+   * under a row of tabs sits between them and the content they control, and
+   * reads as a divider rather than a control.
+   */
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
   }
 }

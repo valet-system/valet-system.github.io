@@ -168,9 +168,26 @@ export default function Records() {
 
     setError(null)
     setRows(data ?? [])
-    // total_rows is repeated on every row — the count for the whole filter, not
-    // this page, so the header can say "100 of 8,412" without a second query.
-    setTotal(Number(data?.[0]?.total_rows ?? 0))
+
+    // ── THE COUNT COLUMN GOT RENAMED, AND THIS DID NOT ────────────────────
+    // It is repeated on every row — the count for the whole filter, not this
+    // page — so the header can say "100 of 8,412" without a second query.
+    //
+    // vehicle_records originally returned `total_rows`. Migration 0022
+    // (staff_name_hi) dropped and recreated it to add parked_by_hi /
+    // fetched_by_hi, and in doing so renamed the column to `total_count`. This
+    // line kept reading total_rows, got undefined, and coalesced to 0 — so:
+    //
+    //   • the Excel button was disabled forever, since disabled={total === 0}
+    //   • pagination collapsed to a single page, because pages is derived from
+    //     total, making every record past the first 100 unreachable
+    //   • the footer read "0 records" under a screen full of them
+    //
+    // Nothing threw and nothing logged. Both names are accepted here so this
+    // works against either version of the RPC — the rename is exactly the kind
+    // of thing a redeploy gets half-applied.
+    const first = data?.[0]
+    setTotal(Number(first?.total_count ?? first?.total_rows ?? 0))
     setLoading(false)
   }, [args, page])
 
@@ -313,7 +330,11 @@ export default function Records() {
             value={propertyId}
             onChange={(e) => setPropertyId(e.target.value)}
             aria-label={t('records.filterProperty')}
-            className="h-11 rounded-xl border border-line-strong bg-surface px-3 text-base font-medium text-ink outline-none focus:border-brand sm:text-sm"
+            // Sized to the pills beside it, not to a form field. Measured: the
+            // pills are 38px tall and fully rounded; this was 44px with a 12px
+            // radius, so it sat in the same row looking like a different kind of
+            // control that had been dropped in.
+            className="h-[2.375rem] rounded-full border border-line-strong bg-surface px-3 text-sm font-medium text-ink outline-none focus:border-brand"
           >
             <option value="all">{t('records.allProperties')}</option>
             {properties.map((p) => (
@@ -363,7 +384,7 @@ export default function Records() {
           <Card padded={false} className="overflow-x-auto">
             <table className="w-full min-w-[72rem] text-sm">
               <thead>
-                <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-ink-subtle">
+                <tr className="border-b border-line-strong bg-surface text-left text-xs uppercase tracking-wide text-ink-subtle">
                   <th scope="col" className="px-4 py-3 font-semibold">{t('records.colDate')}</th>
                   <th scope="col" className="px-4 py-3 font-semibold">{t('records.colProperty')}</th>
                   <th scope="col" className="px-3 py-3 text-right font-semibold">{t('common.token')}</th>
@@ -377,7 +398,21 @@ export default function Records() {
               </thead>
               <tbody className="divide-y divide-line">
                 {rows.map((r) => (
-                  <tr key={r.id} className="align-top">
+                  <tr
+                    key={r.id}
+                    // ZEBRA, and align-middle rather than align-top.
+                    //
+                    // Nine columns across a 72rem table is further than an eye
+                    // tracks reliably on one hairline border — the row it starts
+                    // on is not always the row it finishes on. A stripe is what
+                    // carries it across.
+                    //
+                    // align-top was there for the two-line "handled by" cell,
+                    // but it made every SINGLE-line cell float at the top of a
+                    // taller row, so the eye read a ragged upper edge instead of
+                    // one line of data.
+                    className="align-middle even:bg-surface-sunken/60"
+                  >
                     <td className="whitespace-nowrap px-4 py-3 text-ink-muted">
                       {formatDate(`${r.service_date}T12:00:00+05:30`)}
                     </td>
@@ -390,7 +425,12 @@ export default function Records() {
                       {r.guest_phone ? (
                         <a
                           href={`tel:+91${r.guest_phone}`}
-                          className="tnum text-info hover:underline"
+                          // Not text-info. Fifty-four rows of saturated blue was
+                          // the loudest column on the page, and a phone number is
+                          // not the most important thing in a record — it is
+                          // reference data you occasionally act on. Gold on hover
+                          // says it is still a link.
+                          className="tnum text-ink-muted transition-colors hover:text-accent hover:underline"
                         >
                           {formatPhone(r.guest_phone)}
                         </a>

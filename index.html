@@ -15,7 +15,37 @@
     <meta name="description" content="Valet parking management for Ambria properties." />
 
     <!-- Colours the phone's status bar / browser chrome to match the app bar. -->
+    <!-- theme-color is per-theme too: the phone's status bar should match the
+         chrome it sits above. The dark value is the same near-black the light
+         theme uses for the chrome, so one value serves both. -->
     <meta name="theme-color" content="#0b0b0c" />
+
+    <!--
+      ── APPLIED BEFORE THE FIRST PAINT, ON PURPOSE ──────────────────
+      Blocking and inline, in <head>, ahead of any stylesheet or bundle.
+      src/utils/theme.js does the same job for the running app, but nothing
+      in a module can run before the browser paints — so without these few
+      lines somebody on dark gets one full frame of white page on every
+      cold load, which reads as the app flickering.
+
+      Deliberately duplicated logic, deliberately tiny: same storage key,
+      same fallback. If you change the key, change it in utils/theme.js too.
+    -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('valet-theme')
+          var dark =
+            stored === 'dark' ||
+            (stored !== 'light' &&
+              window.matchMedia &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches)
+          document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+        } catch (e) {
+          document.documentElement.dataset.theme = 'light'
+        }
+      })()
+    </script>
 
     <!-- ── PWA ────────────────────────────────────────────────────────
          The manifest is what makes the app installable. iOS Safari still

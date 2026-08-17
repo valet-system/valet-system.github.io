@@ -54,9 +54,11 @@ import Badge from '@/components/ui/Badge'
 import { useToast } from '@/context/ToastContext'
 import { useT } from '@/i18n'
 import { supabase, describeDbError } from '@/supabase'
+import { cn } from '@/utils/cn'
+import { formatPhone, initials, istToday, personName, prettyCarNumber } from '@/utils/format'
 // For the ?role= links on the two staff tiles. The constant, not the string, so
 // a rename of a role value cannot leave a link pointing at nothing.
-import { ROLES } from '@/types'
+import { ROLES, VEHICLE_STATUS_META } from '@/types'
 
 /**
  * Scrolls the site list into view when the "Open sites" tile is tapped.
@@ -87,6 +89,35 @@ export default function Properties() {
   const [editTarget, setEditTarget] = useState(null)
   const [addOpen, setAddOpen] = useState(false)
   const [toggleTarget, setToggleTarget] = useState(null)
+
+  /**
+   * Which tab is open: 'all', or a property id.
+   *
+   * Not in the URL. Records keeps its property filter in state too, and a
+   * system admin lands here from the nav rather than from a link that names a
+   * site — so there is nothing yet for a shareable URL to be worth.
+   */
+  const [tab, setTab] = useState('all')
+
+  /**
+   * Which tile on a property tab has been opened: 'cars' | 'operators' |
+   * 'admins', or null for none.
+   *
+   * ── WHY CLICK AND NOT HOVER ───────────────────────────────────────────
+   * The obvious reading of "show the details on hover" does not survive
+   * contact with the devices this runs on. A phone has no hover; a tooltip
+   * that only appears on a pointer is invisible to every operator and to a
+   * system admin checking a site from their phone. Worse, it is invisible in a
+   * way nobody reports, because nothing looks broken.
+   *
+   * So the tile is a button and the detail opens below it. Hover still does
+   * something — StatTile lifts its border — but that is an affordance saying
+   * "this is clickable", not the feature itself.
+   */
+  const [detail, setDetail] = useState(null)
+  const [detailRows, setDetailRows] = useState([])
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [detailError, setDetailError] = useState(null)
 
   const load = useCallback(async () => {
     // The counts come from an RPC, not from fetching rows and counting them.
@@ -120,6 +151,59 @@ export default function Properties() {
   useEffect(() => {
     load()
   }, [load])
+
+  // Switching tabs closes whatever was open. Leaving it open would refetch for
+  // the new site, which looks like the panel simply changed its numbers — and
+  // the reader has no reason to think they are now looking at a different site.
+  useEffect(() => {
+    setDetail(null)
+  }, [tab])
+
+  /**
+   * Fetches the rows behind one tile, on demand.
+   *
+   * On demand, and not with the page: three lists for four sites is twelve
+   * queries to render a screen whose whole job is four numbers, and almost
+   * nobody opens any of them. The counts already came from one RPC.
+   */
+  useEffect(() => {
+    if (!detail || tab === 'all') return undefined
+
+    let cancelled = false
+    setDetailLoading(true)
+    setDetailError(null)
+
+    ;(async () => {
+      const query =
+        detail === 'cars'
+          ? supabase
+              .from('parked_vehicles')
+              .select('id, token_number, car_number, guest_name, guest_phone, status, parking_location')
+              .eq('property_id', tab)
+              // The IST service day, not the browser's calendar date — a car
+              // checked in at 01:00 belongs to the night before, and the whole
+              // system agrees on that boundary. See utils/format.
+              .eq('service_date', istToday())
+              .order('token_number')
+          : supabase
+              .from('user_roles')
+              .select('id, name, name_hi, phone, role, is_active')
+              .eq('property_id', tab)
+              .eq('role', detail === 'operators' ? ROLES.OPERATOR : ROLES.VALET_ADMIN)
+              .order('name')
+
+      const { data, error: err } = await query
+      if (cancelled) return
+
+      if (err) setDetailError(describeDbError(err, t('props.couldNotLoad')))
+      else setDetailRows(data ?? [])
+      setDetailLoading(false)
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [detail, tab, t])
 
   const totals = useMemo(() => {
     const rows = Object.values(stats)
@@ -186,6 +270,14 @@ export default function Properties() {
     )
   }
 
+  // DERIVED, not corrected with setTab during render — writing state while
+  // rendering is how a render loop starts. A tab naming a property that has
+  // since been deleted simply reads as 'all' until something else changes it,
+  // rather than showing an empty list with no way to tell why.
+  const activeTab = properties.some((p) => p.id === tab) ? tab : 'all'
+  const visible =
+    activeTab === 'all' ? properties : properties.filter((p) => p.id === activeTab)
+
   const targetStats = toggleTarget ? stats[toggleTarget.id] : null
   const staffAtTarget = targetStats
     ? Number(targetStats.operators ?? 0) + Number(targetStats.admins ?? 0)
@@ -203,41 +295,92 @@ export default function Properties() {
         }
       />
 
-      {/* Every tile goes to the screen that answers it, and the two that lead to
-          a list carry the filter with them — "5 operators" landing on an
-          unfiltered staff page makes the reader redo the counting the tile
-          already did. */}
-      <StatRow className="mb-5">
-        <StatTile
-          label={t('props.openSites')}
-          value={totals.active}
-          icon="building"
-          hint={totals.active > 0 ? t('props.seeList') : undefined}
-          onClick={totals.active > 0 ? () => scrollToSites() : undefined}
-        />
-        <StatTile
-          label={t('props.carsToday')}
-          value={totals.cars}
-          icon="car"
-          tone="info"
-          to="/system/records?days=1"
-          hint={t('props.openRecords')}
-        />
-        <StatTile
-          label={t('props.operators')}
-          value={totals.operators}
-          icon="key"
-          to={`/system/users?role=${ROLES.OPERATOR}`}
-          hint={t('props.manageOperators')}
-        />
-        <StatTile
-          label={t('props.valetAdmins')}
-          value={totals.admins}
-          icon="users"
-          to={`/system/users?role=${ROLES.VALET_ADMIN}`}
-          hint={t('props.manageAdmins')}
-        />
-      </StatRow>
+      {properties.length > 0 && (
+        <PropertyTabs properties={properties} value={activeTab} onChange={setTab} />
+      )}
+
+      {/* The tiles answer a different question depending on the tab: across the
+          group, or about the one site being looked at. "Open sites: 4" inside a
+          single property's tab would be answering a question nobody asked. */}
+      {activeTab === 'all' ? (
+        /* Every tile goes to the screen that answers it, and the two that lead
+           to a list carry the filter with them — "5 operators" landing on an
+           unfiltered staff page makes the reader redo the counting the tile
+           already did. */
+        <StatRow className="mb-5">
+          <StatTile
+            label={t('props.openSites')}
+            value={totals.active}
+            icon="building"
+            hint={totals.active > 0 ? t('props.seeList') : undefined}
+            onClick={totals.active > 0 ? () => scrollToSites() : undefined}
+          />
+          <StatTile
+            label={t('props.carsToday')}
+            value={totals.cars}
+            icon="car"
+            tone="info"
+            to="/system/records?days=1"
+            hint={t('props.openRecords')}
+          />
+          <StatTile
+            label={t('props.operators')}
+            value={totals.operators}
+            icon="key"
+            to={`/system/users?role=${ROLES.OPERATOR}`}
+            hint={t('props.manageOperators')}
+          />
+          <StatTile
+            label={t('props.valetAdmins')}
+            value={totals.admins}
+            icon="users"
+            to={`/system/users?role=${ROLES.VALET_ADMIN}`}
+            hint={t('props.manageAdmins')}
+          />
+        </StatRow>
+      ) : (
+        /* No `to` on these. The obvious destinations — records, staff — cannot
+           yet be filtered to one property from a URL, so a link there would open
+           a list covering all four and quietly contradict the number it was
+           reached from. Instead each tile opens the rows behind its own number,
+           in place, where the number's context is still on screen. */
+        <>
+          <StatRow className="mb-3">
+            <StatTile
+              label={t('props.carsToday')}
+              value={Number(stats[activeTab]?.cars_today ?? 0)}
+              icon="car"
+              tone="info"
+              hint={t(detail === 'cars' ? 'props.hideDetails' : 'props.seeDetails')}
+              onClick={() => setDetail((d) => (d === 'cars' ? null : 'cars'))}
+            />
+            <StatTile
+              label={t('props.operators')}
+              value={Number(stats[activeTab]?.operators ?? 0)}
+              icon="key"
+              hint={t(detail === 'operators' ? 'props.hideDetails' : 'props.seeDetails')}
+              onClick={() => setDetail((d) => (d === 'operators' ? null : 'operators'))}
+            />
+            <StatTile
+              label={t('props.valetAdmins')}
+              value={Number(stats[activeTab]?.admins ?? 0)}
+              icon="users"
+              hint={t(detail === 'admins' ? 'props.hideDetails' : 'props.seeDetails')}
+              onClick={() => setDetail((d) => (d === 'admins' ? null : 'admins'))}
+            />
+          </StatRow>
+
+          {detail && (
+            <DetailPanel
+              kind={detail}
+              rows={detailRows}
+              loading={detailLoading}
+              error={detailError}
+              onClose={() => setDetail(null)}
+            />
+          )}
+        </>
+      )}
 
       {error ? (
         <EmptyState
@@ -265,13 +408,13 @@ export default function Properties() {
         <>
           <SectionHeading
             title={t('props.sites')}
-            count={properties.length}
+            count={visible.length}
             icon="building"
             id="sites-list"
             className="scroll-mt-24"
           />
           <div className="space-y-2.5">
-            {properties.map((property) => (
+            {visible.map((property) => (
               <PropertyRow
                 key={property.id}
                 property={property}
@@ -317,6 +460,176 @@ export default function Properties() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+
+/**
+ * One tab per site, plus "All sites".
+ *
+ * ── WHY IT SCROLLS ────────────────────────────────────────────────────
+ * There are four sites today and the Add button has no limit on it. Tabs that
+ * wrap to a second line push the numbers below the fold on a phone, and tabs
+ * that squeeze truncate the one thing that tells sites apart — their name. So
+ * the row scrolls sideways instead, and the scrollbar is hidden because a
+ * touch device does not need one to know it can swipe.
+ *
+ * ── WHY IT IS A TABLIST AND NOT FOUR BUTTONS ──────────────────────────
+ * role="tab" with aria-selected is what tells a screen reader that these
+ * choose between views of the same thing rather than performing four separate
+ * actions. Arrow-key movement between tabs comes free from that in most
+ * readers; plain buttons announce as an unrelated list.
+ */
+function PropertyTabs({ properties, value, onChange }) {
+  const t = useT()
+
+  const tabs = [
+    { id: 'all', label: t('props.allSites') },
+    ...properties.map((p) => ({ id: p.id, label: p.name, closed: !p.is_active })),
+  ]
+
+  return (
+    <div
+      role="tablist"
+      aria-label={t('props.sites')}
+      // -mx-1 px-1: the focus ring on the first and last tab is drawn outside
+      // the element, and would be clipped by the scroll container without a
+      // little bleed either side.
+      className="scrollbar-none -mx-1 mb-4 flex gap-2 overflow-x-auto px-1 pb-1"
+    >
+      {tabs.map((tab) => {
+        const active = tab.id === value
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(tab.id)}
+            className={cn(
+              // shrink-0 is what makes the row scroll rather than compress:
+              // without it flex shaves every tab until the names are unreadable.
+              'shrink-0 rounded-xl border px-3.5 py-2 text-sm font-semibold transition-colors',
+              active
+                // White on the violet, NOT gold. Gold on this violet measures
+                // 1.91:1 — below even the 3:1 WCAG allows for large text — and
+                // it was legible in the mock only because the pill used to be
+                // near-black. White on the brand is 5.70:1.
+                ? 'border-brand bg-brand text-ink-inverse'
+                : 'border-line-strong bg-surface text-ink-muted hover:border-line-strong hover:text-ink',
+            )}
+          >
+            {tab.label}
+            {/* A closed site still gets a tab — it has history worth reading —
+                but it has to say so, or its zeroes read as a quiet day. */}
+            {tab.closed && (
+              <span className={cn('ml-1.5 text-xs font-medium', active ? 'opacity-75' : 'text-ink-subtle')}>
+                {t('props.closedTag')}
+              </span>
+            )}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/**
+ * The rows behind one tile's number.
+ *
+ * Deliberately plain: this answers "who are those two operators" and "which car
+ * is the one car today", and then gets out of the way. It is not a second
+ * staff-management screen — editing still happens in Users, where the delete
+ * and deactivate guards live.
+ */
+function DetailPanel({ kind, rows, loading, error, onClose }) {
+  const t = useT()
+
+  return (
+    <Card className="mb-5">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <SectionHeading
+          title={t(
+            kind === 'cars'
+              ? 'props.carsToday'
+              : kind === 'operators'
+                ? 'props.operators'
+                : 'props.valetAdmins',
+          )}
+          count={loading ? undefined : rows.length}
+          icon={kind === 'cars' ? 'car' : kind === 'operators' ? 'key' : 'users'}
+          className="mb-0"
+        />
+        <Button variant="ghost" size="sm" icon="x" onClick={onClose}>
+          {t('common.close')}
+        </Button>
+      </div>
+
+      {loading ? (
+        <p className="py-3 text-sm text-ink-subtle">{t('common.loading')}</p>
+      ) : error ? (
+        <p className="py-3 text-sm text-danger">{error}</p>
+      ) : rows.length === 0 ? (
+        <p className="py-3 text-sm text-ink-subtle">
+          {t(kind === 'cars' ? 'props.noCarsToday' : 'props.noStaffHere')}
+        </p>
+      ) : (
+        <ul className="divide-y divide-line">
+          {rows.map((row) =>
+            kind === 'cars' ? (
+              <li key={row.id} className="flex items-center gap-3 py-2.5">
+                <span className="tnum w-12 shrink-0 text-lg font-bold text-ink">
+                  {row.token_number}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold text-ink">
+                    {prettyCarNumber(row.car_number)}
+                  </span>
+                  <span className="block truncate text-xs text-ink-subtle">
+                    {[row.guest_name, row.parking_location].filter(Boolean).join(' · ') ||
+                      t('common.notRecorded')}
+                  </span>
+                </span>
+                <Badge tone={VEHICLE_STATUS_META[row.status]?.tone ?? 'neutral'}>
+                  {t(`vehicle.${row.status}`)}
+                </Badge>
+              </li>
+            ) : (
+              <li key={row.id} className="flex items-center gap-3 py-2.5">
+                {/* Initials, so a list of six names can be told apart at a
+                    glance rather than read word by word. */}
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand text-xs font-bold text-accent">
+                  {initials(personName(row.name, row.name_hi))}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold text-ink">
+                    {personName(row.name, row.name_hi)}
+                  </span>
+                  <span className="block truncate text-xs text-ink-subtle">
+                    {formatPhone(row.phone)}
+                  </span>
+                </span>
+                {/* Only the exception is labelled. Tagging every active person
+                    "Active" is five badges saying nothing and one saying
+                    something, which is how the one gets missed. */}
+                {!row.is_active && <Badge tone="danger">{t('staff.inactive')}</Badge>}
+                {/* A real tel: link, not a button that copies the number. The
+                    reason a system admin opens this list is usually to ring
+                    whoever is on shift. */}
+                {row.phone && (
+                  <a
+                    href={`tel:${row.phone}`}
+                    aria-label={t('props.callNamed', { name: personName(row.name, row.name_hi) })}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-line-strong text-ink-subtle transition-colors hover:border-accent hover:text-accent"
+                  >
+                    <Icon name="phone" size={16} />
+                  </a>
+                )}
+              </li>
+            ),
+          )}
+        </ul>
+      )}
+    </Card>
+  )
+}
 
 function PropertyRow({ property, cars, operators, onEdit, onToggle }) {
   const t = useT()

@@ -53,6 +53,7 @@ import { primeAudio } from '@/utils/sounds'
 import { useUnacceptedAlarm } from '@/hooks/useUnacceptedAlarm'
 import { useT } from '@/i18n'
 import LanguageToggle from '@/components/LanguageToggle'
+import ThemeToggle, { ThemeRow } from '@/components/ThemeToggle'
 
 /**
  * Navigation per role.
@@ -122,7 +123,11 @@ export default function AppShell() {
           which reads as a rendering fault rather than a layout. A sidebar
           belongs against the edge it is anchored to. The content gets its own
           cap below instead — left-aligned, so the nav never moves. */}
-      <div className="flex w-full">
+      {/* min-h-shell so the dark rail reaches the bottom of the window even on a
+          page with three rows in it. Flex stretches its children, so the height
+          has to come from the ROW — the aside cannot give itself a height the
+          row does not have. */}
+      <div className="flex min-h-shell w-full">
         {/* Desktop sidebar. sticky so a long page cannot scroll the nav away.
             The switch to the drawer is at md (768px), NOT lg. At lg an admin
             who puts the browser on half a 1080p screen — roughly 960px, which
@@ -130,6 +135,12 @@ export default function AppShell() {
             — lost the sidebar and had to open a drawer for every hop. 768px is
             the real boundary between "a tablet or a window" and "a phone".
             NavDrawer is md:hidden, so the two can never both be on screen. */}
+        {/* NO background of its own — it takes the page's.
+            It was painted near-black for a while, which looked right in dark and
+            wrong in light: a black rail under a black header, with a white
+            content area beside it, is three tones where the design has two. The
+            HEADER is chrome and stays near-black in both themes; the rail is
+            part of the page and follows it. */}
         <aside className="hidden w-56 shrink-0 md:block">
           {/* 4rem is the header row; the inset is the strip added above it for
               the iOS status bar. Left at a bare top-16 this would tuck under
@@ -267,7 +278,7 @@ function TopBar({ displayName, phone, propertyName, roleLabel, onSignOut, onOpen
     // — while the ROW below it starts under the clock instead of behind it.
     // Without this the hamburger and the property name sat beneath the time
     // and battery on an installed iPhone PWA. Zero on Android and desktop.
-    <header className="sticky top-0 z-40 border-b border-black/10 bg-brand pt-[env(safe-area-inset-top)]">
+    <header className="sticky top-0 z-40 border-b border-line bg-surface-raised pt-[env(safe-area-inset-top)]">
       {/* Full width, matching the shell below. Capping this at 1280px while
           the dark bar itself spanned the screen left the logo floating in the
           middle of its own header, out of line with the sidebar under it. */}
@@ -320,7 +331,11 @@ function TopBar({ displayName, phone, propertyName, roleLabel, onSignOut, onOpen
             />
           </span>
           <div className="min-w-0">
-            <p className="truncate text-[0.9375rem] font-semibold leading-tight text-ink-inverse">
+            {/* Gold, not white. It is the one word on the bar that says which
+                site you are acting on, and this file already argues that is the
+                most important label in the app — the accent is what makes it
+                read first instead of blending into the row of controls. */}
+            <p className="truncate text-[0.9375rem] font-semibold leading-tight text-accent">
               {/* t(), not a literal: a system admin has no property, so this
                   fallback is what they see in the header all day — and hard-coded
                   English here meant it stayed English with the app in Hindi. */}
@@ -341,6 +356,15 @@ function TopBar({ displayName, phone, propertyName, roleLabel, onSignOut, onOpen
         <div className="flex shrink-0 items-center gap-1.5">
           <div className="hidden md:block">
             <LanguageToggle />
+          </div>
+          {/* Desktop only, beside the language switch — both are "how this app is
+              presented to me" rather than anything to do with cars.
+              On a phone the bar already carries the menu button, the logo, the
+              property name, the bell and the avatar, and the property name is
+              the label this file calls the most important in the app. So the
+              phone gets it inside the account menu instead. */}
+          <div className="hidden md:block">
+            <ThemeToggle />
           </div>
           <NotificationBell />
           <UserMenu displayName={displayName} phone={phone} onSignOut={onSignOut} />
@@ -427,6 +451,13 @@ function UserMenu({ displayName, phone, onSignOut }) {
                 no to the prompt once had no way to ever say yes. */}
             <PushToggle />
 
+            {/* md:hidden — the desktop bar already has this. Two ways to reach
+                one setting is how somebody changes it by accident while
+                reaching for Sign out. */}
+            <div className="md:hidden">
+              <ThemeRow />
+            </div>
+
             <Button
               variant="ghost"
               size="md"
@@ -484,16 +515,27 @@ function SidebarLink({ to, label, icon }) {
       // strings by hand and forget a trailing slash.
       className={({ isActive }) =>
         cn(
-          'flex h-11 items-center gap-3 rounded-lg px-3 text-[0.9375rem] font-medium transition-colors',
+          // border-l-2 on BOTH states, transparent when inactive. Adding the
+          // border only when active would shift every label 2px sideways as the
+          // highlight moves, which reads as the nav twitching.
+          'flex h-11 items-center gap-3 rounded-lg border-l-2 px-3 text-[0.9375rem] font-medium transition-colors',
           isActive
-            ? 'bg-surface text-ink shadow-card'
-            : 'text-ink-muted hover:bg-surface/70 hover:text-ink',
+            // A lifted card plus the accent edge. Both sides are tokens, so this
+            // is a white card on a light page and a dark card on a dark one
+            // without a second rule — the bg-white/10 and ink-inverse this
+            // replaced were hardcoded for a dark rail and inverted badly.
+            ? 'border-accent bg-surface text-ink shadow-card'
+            : 'border-transparent text-ink-muted hover:bg-surface/60 hover:text-ink',
         )
       }
     >
       {({ isActive }) => (
         <>
-          <Icon name={icon} size={19} className={isActive ? 'text-brand' : 'text-ink-subtle'} />
+          <Icon
+            name={icon}
+            size={19}
+            className={isActive ? 'text-brand' : 'text-ink-subtle'}
+          />
           {label}
         </>
       )}
