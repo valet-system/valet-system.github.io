@@ -77,7 +77,7 @@ import {
 } from '@/lib/valetApi'
 import { supabase, describeDbError } from '@/supabase'
 import { alertOnce } from '@/lib/taskAlerts'
-import { playSuccess, playWarning, startLoudAlarm, stopLoudAlarm } from '@/utils/sounds'
+import { playSuccess, playWarning } from '@/utils/sounds'
 import { formatDuration, formatTime, istDayStart, istToday, personName, prettyCarNumber, timeAgo } from '@/utils/format'
 import { ACTIVE_TASK_STATUSES, TASK_STATUS, TASK_TYPES } from '@/types'
 
@@ -217,53 +217,16 @@ export default function MyTasks() {
     [active],
   )
 
-  /**
-   * Retrievals dispatched to this operator that they have not acknowledged.
-   *
-   * 'assigned' is the unacknowledged state; tapping Accept (or going straight
-   * to the delivery point) moves it on, which is what ends the alarm below.
-   */
-  const unaccepted = useMemo(
-    () => retrievals.filter((r) => r.status === TASK_STATUS.ASSIGNED),
-    [retrievals],
-  )
-
-  /**
-   * ── THE ALARM THAT DOES NOT GIVE UP ────────────────────────────────
-   *
-   * A guest is standing at the porch waiting for a car. A single chime when the
-   * dispatch lands is not enough: the phone is in a pocket, the operator is
-   * parking someone else's car, the screen is off. So it sounds CONTINUOUSLY,
-   * with no gap, until the task is acknowledged — and acknowledging is a
-   * server-side status change, so a reload cannot silence it.
-   *
-   * The sound itself is owned by utils/sounds: this only says when to start and
-   * when to stop. It has to be gapless there rather than a timer here, because
-   * a JS interval that re-triggers a sound drifts against the audio clock and
-   * leaves audible holes — which is exactly what this replaced.
-   *
-   * No notification is raised from here. The tray already got one when the task
-   * arrived (alertOnce in load), and re-posting it on a loop would stack notices
-   * for a car the operator is already being shouted at about.
-   *
-   * One alarm regardless of how many are waiting: three unaccepted cars should
-   * make the operator look at the screen, not layer three alarms on top of each
-   * other.
-   */
-  useEffect(() => {
-    if (unaccepted.length === 0) {
-      stopLoudAlarm()
-      return undefined
-    }
-    startLoudAlarm()
-    // Also stops on unmount — an operator who navigates to Check In should not
-    // carry the noise with them. The bell in AppShell still announces arrivals
-    // on every screen; this screen owns the unacknowledged alarm.
-    return stopLoudAlarm
-    // Length, not the array: a refetch rebuilds it on every poll, and depending
-    // on identity would stop and restart the alarm each time — which is the
-    // stutter this whole change is removing.
-  }, [unaccepted.length])
+  // ── THE ALARM IS NOT HERE ──────────────────────────────────────────
+  //
+  // It lives in hooks/useUnacceptedAlarm, mounted by AppShell, because this
+  // screen is usually NOT the one an operator is looking at when a car is
+  // dispatched to them — they are on Check In, taking keys from a guest. An
+  // alarm that only runs while the task list is open starts at the moment it
+  // has stopped being useful.
+  //
+  // It must also stay in exactly one place: start/stopLoudAlarm drive a single
+  // global loop, so a second owner here would silence it on navigating away.
 
   // The filter is on assigned_operator_id, so an admin assigning a retrieval
   // shows up here as an UPDATE whose NEW row names this operator.

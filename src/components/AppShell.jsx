@@ -50,6 +50,7 @@ import { cn } from '@/utils/cn'
 import { subscribeToPush } from '@/lib/pushApi'
 import { isStandalone, onInstallable, promptInstall } from '@/pwa'
 import { primeAudio } from '@/utils/sounds'
+import { useUnacceptedAlarm } from '@/hooks/useUnacceptedAlarm'
 import { useT } from '@/i18n'
 import LanguageToggle from '@/components/LanguageToggle'
 
@@ -96,6 +97,10 @@ export default function AppShell() {
   useAudioPriming()
   // Every open, not only at login — see the hook for why that mattered.
   usePushRefresh(operatorId)
+  // Here rather than in operator/MyTasks, so a dispatched car starts sounding
+  // the moment it is assigned — not whenever the operator next opens the task
+  // list, which is after they needed telling. See the hook.
+  useUnacceptedAlarm(operatorId, role)
 
   return (
     <div className="min-h-app bg-surface-sunken">
