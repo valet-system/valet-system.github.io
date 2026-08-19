@@ -244,16 +244,18 @@ export default function TodaysCars() {
           inputMode="search"
         />
 
-        {/* WRAP, do not scroll sideways.
-            These three labels plus their counts need about 380px, and a phone
-            gives this row roughly 330. As a scroller that meant the third pill —
-            "In the car park", the one an operator reaches for most — sat off the
-            edge behind a swipe nobody knew was there.
-            Wrapping puts it on a second line where it can be seen and tapped.
-            The labels stay as they are: they were chosen to answer the two
-            questions an operator actually asks, and shortening them to win one
-            line would cost the meaning. shrink-0 stays too, so pills wrap at
-            their natural width instead of squashing. */}
+        {/* ONE LINE, and no sideways scroll — which forced the labels to
+            shorten rather than the layout to bend.
+            This was "Being worked on" / "In the car park", which with their
+            counts need about 380px against the ~330 a phone gives this row. As a
+            scroller the third pill hid behind a swipe nobody knew was there; as
+            a wrapper it took two lines and looked like a mistake.
+            So the words came down instead: "In progress" and "Parked" — not
+            invented for this row, they are the words vehicle.parked and
+            queue.inProgress already use elsewhere in the app, so the pill and the
+            badge on the card it filters now say the same thing.
+            flex-wrap stays as a safety net for a narrower phone or a longer
+            translation; it just has nothing to do at these sizes. */}
         <div className="flex flex-wrap gap-2">
           {FILTERS.map((option) => {
             const active = filter === option.key
