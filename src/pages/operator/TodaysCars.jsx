@@ -244,7 +244,17 @@ export default function TodaysCars() {
           inputMode="search"
         />
 
-        <div className="flex gap-2 overflow-x-auto pb-1">
+        {/* WRAP, do not scroll sideways.
+            These three labels plus their counts need about 380px, and a phone
+            gives this row roughly 330. As a scroller that meant the third pill —
+            "In the car park", the one an operator reaches for most — sat off the
+            edge behind a swipe nobody knew was there.
+            Wrapping puts it on a second line where it can be seen and tapped.
+            The labels stay as they are: they were chosen to answer the two
+            questions an operator actually asks, and shortening them to win one
+            line would cost the meaning. shrink-0 stays too, so pills wrap at
+            their natural width instead of squashing. */}
+        <div className="flex flex-wrap gap-2">
           {FILTERS.map((option) => {
             const active = filter === option.key
             const n = counts[option.key] ?? 0
