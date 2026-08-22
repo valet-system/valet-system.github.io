@@ -39,6 +39,8 @@
  * │   WA_VERIFY_TOKEN   any string; must match what is typed into Meta   │
  * │   WA_APP_SECRET     the app secret, for the signature                │
  * │   WA_PHONE_NUMBER_ID / WA_ACCESS_TOKEN   to reply to the guest       │
+ * │   WA_TEMPLATE_REQUEST_RECEIVED   the acknowledgement template, if    │
+ * │                                  set; free text is used without it   │
  * │   WA_BTN_*          button texts, if they are not the defaults       │
  * └─────────────────────────────────────────────────────────────────────┘
  */
@@ -102,16 +104,92 @@ function classify(label: string): string | null {
   return null
 }
 
-/** What the guest reads back, per outcome code from the RPCs. */
+/**
+ * The message body sent back to the guest, as a Graph API payload.
+ *
+ * ── TEMPLATE FOR THE ACKNOWLEDGEMENT, TEXT FOR THE REST ───────────────
+ * "We have your request, 15 minutes" goes out as an approved TEMPLATE, on
+ * request. Both forms are legal here — the guest tapped a button seconds ago,
+ * which opens WhatsApp's 24-hour service window, and inside it free text is
+ * allowed and a template is allowed. The difference is cost: free text in the
+ * window is included, a template is billed. So this is a fifth billed message
+ * per retrieval, and rewording it later needs another Meta review.
+ *
+ * The other outcomes stay free text deliberately. "We could not find a parked
+ * car", "thanks for the feedback" — those are the rare paths, and putting four
+ * more templates through review for messages almost nobody sees would cost more
+ * review than it is worth.
+ *
+ * ── AND WHY THE TEXT PATH IS STILL HERE ───────────────────────────────
+ * If WA_TEMPLATE_REQUEST_RECEIVED is not set — the template is still in review,
+ * or somebody has not added the secret yet — this falls back to the free-text
+ * sentence rather than sending nothing. A guest who taps and hears nothing
+ * assumes the tap failed and taps again; a plain sentence is worth far more than
+ * consistency here.
+ */
+function payloadFor(to: string, code: string, data: Record<string, unknown>) {
+  const templateName = Deno.env.get('WA_TEMPLATE_REQUEST_RECEIVED') ?? ''
+  const lang = Deno.env.get('WA_TEMPLATE_LANG') ?? 'en'
+  const slip = data?.token_number ? String(data.token_number) : ''
+
+  // Only the two "your car is coming" outcomes have a template. Anything else
+  // is an edge case and goes as text.
+  const templated = code === 'requested' || code === 'already_requested'
+
+  if (templateName && templated && slip) {
+    return {
+      messaging_product: 'whatsapp',
+      to,
+      type: 'template',
+      template: {
+        name: templateName,
+        language: { code: lang },
+        components: [{ type: 'body', parameters: [{ type: 'text', text: slip }] }],
+      },
+    }
+  }
+
+  return {
+    messaging_product: 'whatsapp',
+    to,
+    type: 'text',
+    text: { body: replyFor(code, data) },
+  }
+}
+
+/**
+ * What the guest reads back, per outcome code from the RPCs.
+ *
+ * ── THESE ARE NOT TEMPLATES ───────────────────────────────────────────
+ * The guest just tapped a button, which counts as them messaging us and opens
+ * WhatsApp's 24-hour customer service window. Inside that window free text is
+ * allowed, so none of this needs Meta's approval and any of it can be reworded
+ * without a review queue. Only the four business-initiated messages in
+ * wa-dispatch are templates.
+ *
+ * ── WHY THE REPLY NAMES A TIME ────────────────────────────────────────
+ * "Our valet is on the way" told the guest nothing they could act on, so they
+ * stand at the door watching the ramp. A number sets the expectation: they can
+ * finish their coffee, and they know when to start worrying.
+ *
+ * 15 minutes is the promise the business makes, not a measurement — it is
+ * deliberately looser than the 10-minute hand-over window the operator sees, so
+ * a guest who arrives at minute 12 is early rather than kept waiting.
+ *
+ * "parking slip", not "token": the word token reads as a passcode to Meta's
+ * classifier, which is what pushed the templates towards Authentication. The
+ * free-text replies are not classified the same way, but using one vocabulary
+ * with the guest across all of it is worth more than the two saved words.
+ */
 function replyFor(code: string, data: Record<string, unknown>): string {
-  const token = data?.token_number ? ` Token ${data.token_number}.` : ''
+  const slip = data?.token_number ? ` Parking slip ${data.token_number}.` : ''
   switch (code) {
     case 'requested':
-      return `Thanks — your car has been requested.${token} Our valet is on the way.`
+      return `We have your request.${slip} Your car will be at the gate within 15 minutes.`
     case 'already_requested':
-      return `Your car is already on its way.${token}`
+      return `Your car is already on its way.${slip} It will be at the gate within 15 minutes.`
     case 'no_car':
-      return 'We could not find a parked car for this number. Please show your token at the valet desk.'
+      return 'We could not find a parked car for this number. Please show your parking slip at the valet desk.'
     case 'rated':
       return 'Thank you for the feedback.'
     case 'already_rated':
@@ -234,9 +312,9 @@ Deno.serve(async (req) => {
       console.error(`[wa-webhook] rpc threw for ${waId}:`, err?.message ?? err)
     }
 
-    // Reply in the same chat. This is a free-form message, which is allowed
-    // because the guest messaged us seconds ago — that opens the 24-hour
-    // customer service window, and no template is needed inside it.
+    // Reply in the same chat. A template for the acknowledgement, free text for
+    // everything else — see payloadFor. Both are legal because the guest
+    // messaged us seconds ago, which opens the 24-hour service window.
     const phoneNumberId = Deno.env.get('WA_PHONE_NUMBER_ID') ?? ''
     const accessToken = Deno.env.get('WA_ACCESS_TOKEN') ?? ''
     if (phoneNumberId && accessToken) {
@@ -247,12 +325,7 @@ Deno.serve(async (req) => {
             Authorization: `Bearer ${accessToken}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            messaging_product: 'whatsapp',
-            to: from,
-            type: 'text',
-            text: { body: replyFor(code, data) },
-          }),
+          body: JSON.stringify(payloadFor(from, code, data)),
         })
         if (!res.ok) console.error(`[wa-webhook] reply failed: ${res.status} ${await res.text()}`)
       } catch (err) {
