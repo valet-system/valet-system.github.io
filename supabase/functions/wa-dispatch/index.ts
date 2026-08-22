@@ -43,7 +43,29 @@
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { json, fail } from '../_shared/http.ts'
+
+/**
+ * Responses, local on purpose — this used to import json/fail from
+ * ../_shared/http.ts and that was wrong twice over.
+ *
+ * WRONG ON THE MERITS: that helper exists to attach CORS headers for functions
+ * a BROWSER calls, and says so in its own header. Nothing in a browser calls
+ * this one — Postgres does, through the trigger migration 0034 installs. No
+ * origin, no preflight, no CORS to negotiate.
+ *
+ * WRONG IN PRACTICE: the Supabase dashboard editor deploys the single file you
+ * paste, so a relative import of a sibling folder fails to bundle with
+ * "Module not found _shared/http.ts". Standing on its own means this deploys
+ * from the dashboard as well as the CLI.
+ */
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  })
+
+const fail = (code: string, error: string, status = 400) =>
+  json({ ok: false, code, error }, status)
 
 const GRAPH = 'https://graph.facebook.com/v21.0'
 
