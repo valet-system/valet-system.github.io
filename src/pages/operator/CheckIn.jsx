@@ -635,7 +635,7 @@ function TokenIssued({ issued, onNext, buttonRef, onParked, spaces }) {
   const [localError, setLocalError] = useState(null)
   const [parked, setParked] = useState(false)
 
-  const park = useParkSubmit((where, force) => completeParking(issued.task_id, where, force))
+  const park = useParkSubmit((where) => completeParking(issued.task_id, where))
 
   async function submit() {
     const trimmed = location.trim()
@@ -650,13 +650,6 @@ function TokenIssued({ issued, onNext, buttonRef, onParked, spaces }) {
 
     setLocalError(null)
     if (await park.submit(trimmed)) {
-      setParked(true)
-      onParked?.()
-    }
-  }
-
-  async function confirmFull() {
-    if (await park.confirm()) {
       setParked(true)
       onParked?.()
     }
@@ -735,21 +728,6 @@ function TokenIssued({ issued, onNext, buttonRef, onParked, spaces }) {
                 error={localError ?? park.error}
               />
 
-              {/* Only for SPACE_FULL, and only once. The car is already in the
-                  bay by now — see hooks/useParkSubmit. */}
-              {park.needsConfirm && (
-                <Button
-                  variant="warning"
-                  fullWidth
-                  icon="alert"
-                  className="mt-3"
-                  onClick={confirmFull}
-                  loadingText={t('common.saving')}
-                >
-                  {t('places.confirmFull')}
-                </Button>
-              )}
-
               <Button
                 variant="primary"
                 fullWidth
@@ -795,7 +773,7 @@ function UnparkedCard({ task, spaces, onParked }) {
   const [location, setLocation] = useState('')
   const [localError, setLocalError] = useState(null)
 
-  const park = useParkSubmit((where, force) => completeParking(task.id, where, force))
+  const park = useParkSubmit((where) => completeParking(task.id, where))
 
   async function submit() {
     const trimmed = location.trim()
@@ -863,21 +841,6 @@ function UnparkedCard({ task, spaces, onParked }) {
           spaces={spaces}
           error={localError ?? park.error}
         />
-
-        {park.needsConfirm && (
-          <Button
-            variant="warning"
-            fullWidth
-            icon="alert"
-            className="mt-3"
-            onClick={async () => {
-              if (await park.confirm()) onParked?.()
-            }}
-            loadingText={t('common.saving')}
-          >
-            {t('places.confirmFull')}
-          </Button>
-        )}
 
         <Button
           variant="success"

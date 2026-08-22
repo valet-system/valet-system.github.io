@@ -35,6 +35,7 @@
  * │   /admin/analytics        valet_admin                                 │
  * │   /system/properties      system_admin                                │
  * │   /system/users           system_admin                                │
+ * │   /system/spaces          system_admin — parking places, any property  │
  * │   /system/records        system_admin — all cars, CSV export           │
  * │   /system/analytics       system_admin                                │
  * │   *                       404                                         │
@@ -243,6 +244,19 @@ export default function App() {
                   element={
                     <ProtectedRoute allow={[ROLES.SYSTEM_ADMIN]}>
                       <StaffManager />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="system/spaces"
+                  element={
+                    /* The SAME component as admin/spaces. It reads the role and
+                       shows a property picker for a system admin; the RPCs take
+                       the property as an argument and enforce who may ask for
+                       which (migration 0035), so one screen serves both without
+                       either being able to reach the other site. */
+                    <ProtectedRoute allow={[ROLES.SYSTEM_ADMIN]}>
+                      <Spaces />
                     </ProtectedRoute>
                   }
                 />

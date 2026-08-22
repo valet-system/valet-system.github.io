@@ -240,16 +240,13 @@ export default function MyTasks() {
 
   /** Shared by every button: run it, toast the outcome, refresh. */
   /**
-   * Returns the RESULT, not a boolean: LocationForm needs the error CODE to
-   * tell a full parking space apart from every other refusal.
+   * Returns the RESULT, not a boolean: LocationForm reads the code to decide
+   * whether the screen is out of date and needs reloading.
    */
   const run = async (action, successMessage) => {
     const result = await action()
     if (!result.ok) {
-      // SPACE_FULL is shown inline, beside the picker, with the override
-      // button next to it. A toast as well would be the same sentence twice,
-      // and a toast cannot carry the button.
-      if (result.code !== 'SPACE_FULL') toast.error(result.error)
+      toast.error(result.error)
       // A rejected move almost always means this screen is out of date.
       if (result.code === 'WRONG_STATUS' || result.code === 'NOT_FOUND') load()
       return result
@@ -433,8 +430,9 @@ function LocationForm({ label, buttonLabel, buttonIcon, onSubmit, spaces }) {
   const [location, setLocation] = useState('')
   const [localError, setLocalError] = useState(null)
 
-  // onSubmit takes (location, force) and returns the raw API result, so a full
-  // space can be told apart and offered an override. See hooks/useParkSubmit.
+  // onSubmit takes the location and returns the raw API result. It used to take
+  // a `force` flag too, for confirming a car into a place the system called
+  // full; per-place limits went in migration 0035 and the flag with them.
   const park = useParkSubmit(onSubmit)
 
   const submit = async () => {
@@ -462,20 +460,6 @@ function LocationForm({ label, buttonLabel, buttonIcon, onSubmit, spaces }) {
         spaces={spaces}
         error={localError ?? park.error}
       />
-
-      {park.needsConfirm && (
-        <Button
-          variant="warning"
-          fullWidth
-          icon="alert"
-          onClick={async () => {
-            if (await park.confirm()) setLocation('')
-          }}
-          loadingText={t('common.saving')}
-        >
-          {t('places.confirmFull')}
-        </Button>
-      )}
 
       <Button variant="success" fullWidth icon={buttonIcon} onClick={submit}>
         {buttonLabel}
@@ -624,9 +608,9 @@ function RetrievalCard({ task, run, onRefresh, spaces }) {
             spaces={spaces}
             buttonLabel={t('tasks.carReparked')}
             buttonIcon="parking"
-            onSubmit={(location, force) =>
+            onSubmit={(location) =>
               run(
-                () => completeReparking(task.id, location, force),
+                () => completeReparking(task.id, location),
                 t('tasks.toastParkedAgain', { token: vehicle?.token_number }),
               )
             }

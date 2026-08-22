@@ -110,12 +110,6 @@ const CODE_MESSAGES = {
   BAD_TIER: ['Choose Standard, Premium or VIP.', 'Standard, Premium या VIP में से चुनिए।'],
   BAD_LOCATION: ['Enter where you parked the car.', 'गाड़ी कहाँ पार्क की, वह डालिए।'],
   NOT_PARKED: ['That car is not parked right now.', 'यह गाड़ी अभी पार्क नहीं है।'],
-  // Not a dead end: the UI offers "the car really is there" and retries with
-  // p_force. The SQL's own detail names the place, so it is preferred over this.
-  SPACE_FULL: [
-    'That place is full. Pick another one, or confirm the car is really there.',
-    'वह जगह भर गई है। कोई दूसरी चुनिए, या बताइए कि गाड़ी सच में वहीं है।',
-  ],
   ALREADY_REQUESTED: ['This car has already been requested.', 'इस गाड़ी की माँग पहले ही दर्ज है।'],
   BAD_OPERATOR: ['That person cannot take this car.', 'यह व्यक्ति यह गाड़ी नहीं ले सकता।'],
   OPERATOR_BUSY: ['That operator is already on another car.', 'यह ऑपरेटर पहले से दूसरी गाड़ी पर है।'],
@@ -137,9 +131,9 @@ function codeMessage(code) {
  */
 const MISSING_MIGRATION = {
   task_complete_parking:
-    'Parking is not fully set up in the database yet. Run migration 0027 (space_capacity_enforced) in the Supabase SQL Editor.',
+    'Parking is not fully set up in the database yet. Run migration 0035 (no_capacity_and_system_spaces) in the Supabase SQL Editor.',
   task_complete_reparking:
-    'Re-parking is not fully set up in the database yet. Run migration 0027 (space_capacity_enforced) in the Supabase SQL Editor.',
+    'Re-parking is not fully set up in the database yet. Run migration 0035 (no_capacity_and_system_spaces) in the Supabase SQL Editor.',
   default:
     'The car lifecycle is not set up in the database yet. Run migration 0008 (operator_flow_rpc) in the Supabase SQL Editor.',
 }
@@ -175,11 +169,13 @@ function describeRpcError(fn, error) {
   // Which migration to name depends on WHICH function is missing, and getting
   // it wrong is worse than saying nothing: somebody told to run 0008 will run
   // 0008, watch it succeed, find parking still broken, and conclude the app is
-  // broken rather than unmigrated. That happened — the two parking functions
-  // grew a p_force argument in 0027, and this message went on naming 0008.
+  // broken rather than unmigrated. That happened once: the two parking
+  // functions changed signature and this message went on naming 0008.
   //
   // PGRST202 is also what PostgREST returns when the function EXISTS but no
-  // overload matches the arguments sent, which is exactly the case above.
+  // overload matches the arguments sent — which is what a front end deployed
+  // ahead of its migration produces, and why the message has to name the right
+  // migration rather than a plausible one.
   if (
     error.code === 'PGRST202' ||
     raw.includes('Could not find the function') ||
@@ -293,16 +289,16 @@ export async function checkIn({
 // TASK TRANSITIONS
 // ═══════════════════════════════════════════════════════════════════
 
-/** "Car Parked" — closes the parking task and sends MSG 1 to the guest. */
 /**
- * "Car Parked".
+ * "Car Parked" — closes the parking task and sends MSG 1 to the guest.
  *
- * p_force is only ever true after the operator has been asked, in words,
- * whether the car really is in a place the system believes is full. Migration
- * 0027 has the reasoning: a refusal it cannot override does not un-park the car.
+ * Two arguments, since migration 0035. It used to take a third, `force`, so an
+ * operator could insist a car really was in a place the system believed full.
+ * Per-place limits are gone, so nothing refuses a park on capacity and there is
+ * nothing to override.
  */
-export function completeParking(taskId, location, force = false) {
-  return callWithoutForce('task_complete_parking', taskId, location, force)
+export function completeParking(taskId, location) {
+  return call('task_complete_parking', { p_task_id: taskId, p_location: location })
 }
 
 /**
@@ -359,45 +355,10 @@ export function guestAbsent(taskId) {
 }
 
 /** "Car Re-parked" — closes out a no-show, MSG 4 queued, operator free. */
-export function completeReparking(taskId, location, force = false) {
-  return callWithoutForce('task_complete_reparking', taskId, location, force)
+export function completeReparking(taskId, location) {
+  return call('task_complete_reparking', { p_task_id: taskId, p_location: location })
 }
 
-/**
- * Calls a parking RPC, and falls back to the pre-0027 signature if the database
- * has not been migrated yet.
- *
- * ── WHY THIS FALLBACK EXISTS ──────────────────────────────────────────
- * A front end deployed before its migration would otherwise block EVERY park:
- * the client sends p_force, PostgREST finds no overload taking three arguments,
- * and the operator cannot record a single car. That is an outage, and deploy
- * order is not something a porch can be asked to care about.
- *
- * So a missing signature retries with two arguments. Capacity is then not
- * enforced in the database until the migration runs — but the picker still
- * disables full chips, so most of the protection is still there, and the
- * warning below says exactly what is missing.
- */
-async function callWithoutForce(fn, taskId, location, force) {
-  const result = await call(fn, {
-    p_task_id: taskId,
-    p_location: location,
-    p_force: force,
-  })
-
-  if (result.ok || result.code !== 'NOT_MIGRATED') return result
-
-  console.warn(
-    `[valetApi] ${fn} has no p_force argument — migration 0027 has not been run. ` +
-      'Falling back to the old signature; a full parking space will NOT be refused ' +
-      'by the database until it is.',
-  )
-
-  // Forcing was the whole point of the third argument, so if the caller asked
-  // for it there is nothing to fall back TO — the old function never refused,
-  // which is the same outcome.
-  return call(fn, { p_task_id: taskId, p_location: location })
-}
 
 // ═══════════════════════════════════════════════════════════════════
 // READS

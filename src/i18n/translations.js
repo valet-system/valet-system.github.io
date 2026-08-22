@@ -254,11 +254,7 @@ export const en = {
     'Showing the {shown} most recent of {total} cars today. Search by token, car number or guest name to find any of them.',
 
   // ── the place picker ─────────────────────────────────────────────────
-  'places.free': '{n} free',
-  'places.full': 'FULL',
-  'places.fullLabel': '{place}, full, {inUse} of {capacity} — cannot be chosen',
-  'places.someFull': 'A full place cannot be chosen. If a car really went there, use “Somewhere else”.',
-  'places.confirmFull': 'Yes, the car is there',
+  'places.inHere': '{place}, {n} cars here',
   'places.somewhereElse': 'Somewhere else…',
   'places.backToList': 'Back to the list',
   'places.otherPlaceholder': 'Ramp, porch, behind the kitchen…',
@@ -588,13 +584,13 @@ export const en = {
   'tokens.enterAbove': 'Enter a number above {end}.',
   'tokens.rangeTooBigOne': 'That range is unusually large — check the number.',
   'tokens.extend': 'Extend',
-  'spaces.totalSpaces': 'Total spaces',
-  'spaces.acrossPlaces': 'across {n} place',
-  'spaces.acrossPlaces_plural': 'across {n} places',
+  'spaces.chooseSiteLabel': 'Which site to manage',
+  'spaces.pickASite': 'Pick a site first',
+  'spaces.pickASiteBody': 'Parking places belong to one property. Choose which one you are setting up.',
+  'spaces.places': 'Parking places',
+  'spaces.carsHere': '{n} car here',
+  'spaces.carsHere_plural': '{n} cars here',
   'spaces.carsParked': 'Cars parked',
-  'spaces.ofTotal': 'of {n}',
-  'spaces.free': 'Free',
-  'spaces.parkIsFull': 'The car park is full',
   'spaces.outOfService': 'Out of service',
   'spaces.notCounted': 'Not counted as room you have',
   'spaces.addPlaces': 'Add places',
@@ -606,7 +602,6 @@ export const en = {
   // Column headings for the list. One heading beats the same word repeated on
   // every row — see the note in admin/Spaces.
   'spaces.placeColumn': 'Place',
-  'spaces.capacityColumn': 'Spaces',
   'spaces.deleteTitle': 'Delete “{place}”?',
   'spaces.deleteBody':
     'It disappears from every operator’s screen. Cars already parked there keep the location they were recorded under — nothing in your reports changes.',
@@ -629,19 +624,13 @@ export const en = {
   // Four separate facts. They used to be one paragraph, which is four lines of
   // grey prose nobody finishes — and the fact you need is never the first one.
   'spaces.howThisWorks': 'How this works',
-  'spaces.explainCapacity':
-    'Spaces is how many cars a place holds. Change it and the operator’s chips update straight away.',
   'spaces.explainLive':
     'The count beside it is live — parking a car fills a space, handing it back frees one. Nothing is stored that could drift.',
   'spaces.explainFull':
     'A full place cannot be chosen by an operator. They use “Somewhere else” and say where the car really went, so a stacked car is still recorded.',
   'spaces.explainEye':
     'An open eye means operators can see it. Only a place already out of service can be deleted.',
-  'spaces.overCapacity': '{inUse} in a {capacity}-car space',
-  'spaces.full': 'Full',
-  'spaces.freeSuffix': ' · {n} free',
   'spaces.spacesLabel': 'Spaces',
-  'spaces.howManyFit': 'How many cars fit in {place}',
   'spaces.takeOut': 'Take out of service',
   'spaces.putBack': 'Put back in service',
   'spaces.takeOutNamed': 'Take {place} out of service',
@@ -649,7 +638,6 @@ export const en = {
   'spaces.deleteForever': 'Delete permanently',
   'spaces.deleteNamed': 'Delete {place}',
   'spaces.removed': '{place} removed',
-  'spaces.couldNotCapacity': 'Could not change the capacity.',
   'spaces.couldNotChange': 'Could not change that.',
   'spaces.couldNotDelete': 'Could not delete that.',
   'spaces.typeOne': 'Type at least one name.',
@@ -661,12 +649,9 @@ export const en = {
   'spaces.added_plural': '{n} places added',
   'spaces.typeThePlaces': 'Type the places',
   'spaces.typeThePlacesBody': 'Whatever you call them. One per line, or separated by commas.',
-  'spaces.howManyEach': 'How many cars fit in each?',
-  'spaces.howManyEachHint': 'Applies to everything in this paste. Adjust individual places afterwards.',
   'spaces.placeNames': 'Place names',
   'spaces.toAdd': 'place to add',
   'spaces.toAdd_plural': 'places to add',
-  'spaces.totalSuffix': ' · {n} spaces in total',
   'spaces.adding': 'Adding…',
   'spaces.addButton': 'Add {n} place',
   'spaces.addButton_plural': 'Add {n} places',
@@ -1017,11 +1002,7 @@ export const hi = {
   'cars.showingRecent':
     'आज की {total} गाड़ियों में से हाल की {shown} दिख रही हैं। किसी भी गाड़ी को टोकन, नंबर या गेस्ट के नाम से खोज सकते हैं।',
 
-  'places.free': '{n} खाली',
-  'places.full': 'भरी है',
-  'places.fullLabel': '{place}, भरी है, {capacity} में से {inUse} — चुनी नहीं जा सकती',
-  'places.someFull': 'भरी हुई जगह चुनी नहीं जा सकती। गाड़ी सच में वहीं गई हो तो "कोई और जगह" इस्तेमाल कीजिए।',
-  'places.confirmFull': 'हाँ, गाड़ी वहीं है',
+  'places.inHere': '{place}, {n} गाड़ियाँ यहाँ',
   'places.somewhereElse': 'कहीं और…',
   'places.backToList': 'सूची पर वापस',
   'places.otherPlaceholder': 'रैंप, पोर्च, किचन के पीछे…',
@@ -1350,13 +1331,13 @@ export const hi = {
   'tokens.enterAbove': '{end} से बड़ा नंबर डालिए।',
   'tokens.rangeTooBigOne': 'यह रेंज बहुत बड़ी है — नंबर एक बार देख लीजिए।',
   'tokens.extend': 'बढ़ाएँ',
-  'spaces.totalSpaces': 'कुल जगह',
-  'spaces.acrossPlaces': '{n} जगह में',
-  'spaces.acrossPlaces_plural': '{n} जगहों में',
+  'spaces.chooseSiteLabel': 'किस साइट का प्रबंधन',
+  'spaces.pickASite': 'पहले साइट चुनिए',
+  'spaces.pickASiteBody': 'पार्किंग जगहें किसी एक प्रॉपर्टी की होती हैं। चुनिए किसकी सेट कर रहे हैं।',
+  'spaces.places': 'पार्किंग जगहें',
+  'spaces.carsHere': '{n} गाड़ी यहाँ',
+  'spaces.carsHere_plural': '{n} गाड़ियाँ यहाँ',
   'spaces.carsParked': 'पार्क गाड़ियाँ',
-  'spaces.ofTotal': '{n} में से',
-  'spaces.free': 'खाली',
-  'spaces.parkIsFull': 'पार्किंग पूरी भर गई है',
   'spaces.outOfService': 'बंद है',
   'spaces.notCounted': 'खाली जगह में नहीं गिनी जाती',
   'spaces.addPlaces': 'जगह जोड़ें',
@@ -1368,7 +1349,6 @@ export const hi = {
   // "जगह" दो जगह इस्तेमाल हो रहा था — कॉलम का नाम और क्षमता, दोनों। हिंदी में वही
   // शब्द दो कॉलम पर पढ़ना उलझाता है, इसलिए क्षमता वाला कॉलम "क्षमता" है।
   'spaces.placeColumn': 'जगह',
-  'spaces.capacityColumn': 'क्षमता',
   'spaces.deleteTitle': '“{place}” हटा दें?',
   'spaces.deleteBody':
     'यह हर ऑपरेटर की स्क्रीन से हट जाएगी। जो गाड़ियाँ पहले से वहाँ पार्क हैं, उनकी जगह वैसी ही दर्ज रहेगी — रिपोर्ट में कुछ नहीं बदलेगा।',
@@ -1384,19 +1364,13 @@ export const hi = {
   'spaces.couldNotHindi': 'हिंदी नाम सेव नहीं हो सका',
 
   'spaces.howThisWorks': 'यह कैसे काम करता है',
-  'spaces.explainCapacity':
-    '"क्षमता" यानी वहाँ कितनी गाड़ियाँ आ सकती हैं। बदलते ही ऑपरेटर के चिप्स अपडेट हो जाते हैं।',
   'spaces.explainLive':
     'साथ की गिनती लाइव है — गाड़ी पार्क होते ही एक जगह भरती है, वापस देते ही खाली हो जाती है। ऐसा कुछ स्टोर नहीं होता जो गलत हो सके।',
   'spaces.explainFull':
     'भरी हुई जगह ऑपरेटर चुन नहीं सकता। उसे “कोई और जगह” से बताना पड़ेगा कि गाड़ी असल में कहाँ गई, ताकि ऊपर लगाई गाड़ी भी दर्ज रहे।',
   'spaces.explainEye':
     'खुली आँख का मतलब ऑपरेटर उसे देख सकते हैं। सिर्फ़ बंद की हुई जगह ही हटाई जा सकती है।',
-  'spaces.overCapacity': '{capacity} की जगह में {inUse} गाड़ियाँ',
-  'spaces.full': 'भरी है',
-  'spaces.freeSuffix': ' · {n} खाली',
   'spaces.spacesLabel': 'जगह',
-  'spaces.howManyFit': '{place} में कितनी गाड़ियाँ आती हैं',
   'spaces.takeOut': 'बंद कर दें',
   'spaces.putBack': 'दोबारा चालू करें',
   'spaces.takeOutNamed': '{place} को बंद कर दें',
@@ -1404,7 +1378,6 @@ export const hi = {
   'spaces.deleteForever': 'हमेशा के लिए हटाएँ',
   'spaces.deleteNamed': '{place} हटाएँ',
   'spaces.removed': '{place} हटा दी गई',
-  'spaces.couldNotCapacity': 'जगह की गिनती नहीं बदल सकी।',
   'spaces.couldNotChange': 'यह नहीं बदल सका।',
   'spaces.couldNotDelete': 'यह हटाया नहीं जा सका।',
   'spaces.typeOne': 'कम से कम एक नाम लिखिए।',
@@ -1416,12 +1389,9 @@ export const hi = {
   'spaces.added_plural': '{n} जगहें जोड़ी गईं',
   'spaces.typeThePlaces': 'जगहों के नाम लिखिए',
   'spaces.typeThePlacesBody': 'जो भी नाम आप देते हैं। एक लाइन में एक, या कॉमा लगाकर।',
-  'spaces.howManyEach': 'हर जगह में कितनी गाड़ियाँ आती हैं?',
-  'spaces.howManyEachHint': 'यह इस पूरी लिस्ट पर लगेगा। अलग-अलग जगह बाद में बदल सकते हैं।',
   'spaces.placeNames': 'जगहों के नाम',
   'spaces.toAdd': 'जगह जुड़ेगी',
   'spaces.toAdd_plural': 'जगहें जुड़ेंगी',
-  'spaces.totalSuffix': ' · कुल {n} जगह',
   'spaces.adding': 'जोड़ी जा रही हैं…',
   'spaces.addButton': '{n} जगह जोड़ें',
   'spaces.addButton_plural': '{n} जगहें जोड़ें',

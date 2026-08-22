@@ -33,6 +33,7 @@
  * └─────────────────────────────────────────────────────────────────────┘
  */
 
+import { Children } from 'react'
 import { Link } from 'react-router-dom'
 import Icon from './Icon'
 import { Skeleton } from './Spinner'
@@ -124,9 +125,46 @@ export default function StatTile({
  * The grid stat tiles live in. 2 columns on a phone (a single column wastes
  * the width and pushes the actual work below the fold), 4 on a desktop.
  */
+/**
+ * The columns follow the number of TILES, rather than always being four.
+ *
+ * It was `lg:grid-cols-4` flat, which is right for the four-tile screens and
+ * wrong for every other count: three tiles filled three quarters of the row and
+ * stopped short of the content underneath, which reads as a broken layout
+ * rather than as a row with three things in it.
+ *
+ * Overriding it through className does not work here and the attempt is worth
+ * naming: cn() joins strings and does NOT merge Tailwind conflicts, so passing
+ * `lg:grid-cols-3` emits both classes and which one wins is decided by their
+ * order in the generated stylesheet — not by the order written here. Counting
+ * the children is the fix that cannot be got wrong at the call site.
+ *
+ * Children.toArray, not Children.count: toArray drops the nulls and falses that
+ * a conditional tile leaves behind, so `{isAdmin && <StatTile/>}` does not
+ * reserve a column it never fills.
+ */
+const COLUMNS = {
+  1: 'lg:grid-cols-1',
+  2: 'lg:grid-cols-2',
+  3: 'lg:grid-cols-3',
+}
+
 export function StatRow({ children, className = '' }) {
+  const count = Children.toArray(children).length
+
   return (
-    <div className={cn('grid grid-cols-2 gap-3 lg:grid-cols-4', className)}>{children}</div>
+    <div
+      className={cn(
+        // grid-cols-2 on a phone whatever the count — two tiles side by side is
+        // the readable limit at 390px, and a single column would push the list
+        // below the fold.
+        'grid grid-cols-2 gap-3',
+        COLUMNS[count] ?? 'lg:grid-cols-4',
+        className,
+      )}
+    >
+      {children}
+    </div>
   )
 }
 

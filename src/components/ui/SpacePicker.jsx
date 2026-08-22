@@ -28,26 +28,26 @@
  * │     tapped instead, which is worse than free text: it reads as        │
  * │     precise and is not.                                              │
  * │                                                                     │
- * │ EVERY CHIP CARRIES ITS FREE SPACE, AND A FULL ONE IS DISABLED          │
- * │   "Basement 3 free", "Porch FULL". The count comes from                │
- * │   parking_space_usage() (migration 0020), which COUNTS the cars        │
- * │   actually at that label rather than reading a stored total — so       │
- * │   handing a car back frees its place with no bookkeeping to get wrong. │
+ * │ EVERY CHIP CARRIES ITS CAR COUNT                                      │
+ * │   "Basement 3" is three cars in the basement right now. It comes from  │
+ * │   parking_space_usage(), which COUNTS the cars actually at that label   │
+ * │   rather than reading a stored total — so handing a car back frees its  │
+ * │   place with no bookkeeping to get wrong.                              │
  * │                                                                     │
- * │ ── WHY "SOMEWHERE ELSE" IS NOW LOAD-BEARING, NOT A CONVENIENCE ───────│
- * │   A full chip cannot be tapped. It used to be tappable on purpose:     │
- * │   valets stack and double-park, and a picker that refuses the honest   │
- * │   answer gets the nearest WRONG place tapped instead — which is worse  │
- * │   than a bad count, because then nobody can find the car.              │
+ * │   It is information, not a limit. Per-place limits were removed in      │
+ * │   migration 0035, so no chip is ever disabled and nothing here refuses  │
+ * │   a park.                                                              │
  * │                                                                     │
- * │   That risk did not disappear when the chip was disabled; it moved.    │
- * │   The free-text escape hatch is what absorbs it, so it MUST stay       │
- * │   reachable, and a line under the chips points at it whenever          │
- * │   something is full. Remove either and a stacked car goes unrecorded.  │
+ * │ ── WHAT THIS USED TO DO ─────────────────────────────────────────────│
+ * │   A chip at capacity was disabled, and the count read "3 free" or       │
+ * │   "FULL". That was always the uncomfortable part of this control:       │
+ * │   valets stack and double-park, and a picker that refuses the honest    │
+ * │   answer gets the nearest WRONG place tapped instead — which is worse   │
+ * │   than a bad count, because then nobody can find the car.               │
  * │                                                                     │
- * │   A chip that is ALREADY the chosen value stays enabled even once it   │
- * │   fills up — otherwise re-opening a re-park card would disable the     │
- * │   chip it is showing as selected.                                      │
+ * │   The free-text escape hatch existed to absorb that, and it still       │
+ * │   MUST stay reachable — a place nobody thought to add is still a place  │
+ * │   a car ends up in.                                                    │
  * │                                                                     │
  * │ USED BY                                                             │
  * │   operator/CheckIn (the park step), operator/MyTasks (park and        │
@@ -108,7 +108,9 @@ export function useParkingSpaces() {
           // against `label`. See migration 0029.
           label: s.label,
           labelHi: s.label_hi ?? null,
-          capacity: Number(s.capacity ?? 1),
+          // in_use only. capacity is gone from the RPC — per-place limits were
+          // removed in migration 0035 — but the count is still worth showing:
+          // "Basement 6" tells an operator how crowded it is before they walk.
           inUse: Number(s.in_use ?? 0),
         })),
     )
@@ -159,55 +161,36 @@ export default function SpacePicker({
               // use the English label, because that is what the occupancy count
               // and every stored parking_location match on.
               const shown = placeName(space.label, space.labelHi)
-              const free = Math.max(0, space.capacity - space.inUse)
-              // A place already selected stays selectable even if it has since
-              // filled up. Otherwise re-opening a re-park card would disable the
-              // very chip it is showing as chosen, and the operator could not
-              // save without changing an answer that was correct.
-              const full = free === 0 && !selected
 
               return (
                 <button
                   key={space.id}
                   type="button"
-                  disabled={full}
                   onClick={() => {
-                    if (full) return
                     onChange(space.label)
                     setManual(false)
                   }}
                   aria-pressed={selected}
-                  // Full is announced, not implied by colour alone — and the
-                  // announcement says it cannot be chosen, because a disabled
-                  // control that does not explain itself reads as a broken one.
-                  aria-label={
-                    full
-                      ? t('places.fullLabel', {
-                          place: shown,
-                          inUse: space.inUse,
-                          capacity: space.capacity,
-                        })
-                      : `${shown}, ${free} of ${space.capacity} free`
-                  }
+                  // The count is read out, not left to the badge — a bare
+                  // number beside a name says nothing to a screen reader.
+                  aria-label={t('places.inHere', { place: shown, n: space.inUse })}
                   className={cn(
                     // min-h-11 is the tap target, not the text size. This chip is
                     // tapped two hundred times a shift, one-handed, while holding
                     // car keys.
                     'inline-flex min-h-11 items-center gap-2 rounded-xl px-3.5 text-sm font-semibold transition-colors',
+                    // EVERY PLACE IS SELECTABLE.
+                    //
+                    // A full chip used to be disabled. That was always the
+                    // uncomfortable part of this control: valets stack and
+                    // double-park, and a picker that refuses the honest answer
+                    // gets the nearest WRONG place tapped instead — which is
+                    // worse than a bad count, because then nobody can find the
+                    // car. Migration 0035 removed the limits, so the honest
+                    // answer is now always available.
                     selected
                       ? 'bg-brand text-ink-inverse'
-                      : full
-                        ? // FULL IS NOT SELECTABLE.
-                          //
-                          // It used to be, deliberately: valets stack and
-                          // double-park, and a picker that refuses the honest
-                          // answer gets the nearest WRONG place tapped instead,
-                          // which is worse than a bad count — nobody can find
-                          // the car. That risk has not gone away, so the escape
-                          // hatch below is now load-bearing: "Somewhere else"
-                          // must stay, and the note under the chips points at it.
-                          'cursor-not-allowed border border-dashed border-line-strong bg-surface-sunken text-ink-subtle opacity-60'
-                        : 'border border-line-strong bg-surface text-ink hover:bg-surface-sunken',
+                      : 'border border-line-strong bg-surface text-ink hover:bg-surface-sunken',
                   )}
                 >
                   {selected && <Icon name="check" size={14} strokeWidth={2.5} />}
@@ -216,29 +199,15 @@ export default function SpacePicker({
                   <span
                     className={cn(
                       'tnum rounded-md px-1.5 py-0.5 text-[0.6875rem] font-bold leading-none',
-                      selected
-                        ? 'bg-white/20'
-                        : full
-                          ? 'bg-line text-ink-subtle'
-                          : 'bg-brand-soft text-ink-muted',
+                      selected ? 'bg-white/20' : 'bg-brand-soft text-ink-muted',
                     )}
                   >
-                    {full ? t('places.full') : t('places.free', { n: free })}
+                    {space.inUse}
                   </span>
                 </button>
               )
             })}
           </div>
-
-          {/* Only when it is relevant. A standing instruction nobody needs is
-              read once and then never again, including on the shift where it
-              matters. */}
-          {spaces.some((s) => s.capacity - s.inUse <= 0 && value !== s.label) && (
-            <p className="flex items-start gap-1.5 text-xs leading-relaxed text-ink-subtle">
-              <Icon name="info" size={13} className="mt-0.5 shrink-0" />
-              <span>{t('places.someFull')}</span>
-            </p>
-          )}
 
           {!showManual && (
             <button

@@ -57,6 +57,7 @@ import {
 } from '@/components/ui/PageSkeleton'
 import StatTile, { StatRow } from '@/components/ui/StatTile'
 import { useAuth } from '@/context/AuthContext'
+import { ROLES } from '@/types'
 import { useT } from '@/i18n'
 import { useToast } from '@/context/ToastContext'
 import useRealtime from '@/hooks/useRealtime'
@@ -80,16 +81,34 @@ import { cn } from '@/utils/cn'
 // 11rem, not 9: the Hindi column holds the field AND the convert button, so the
 // field itself only gets what is left. At 9rem that was 104px, and a name like
 // "किचन की दीवार के पीछे" showed as "किचन की दीवा" — readable only by clicking into it.
+// Three columns, not four. The 4rem one held the per-place car limit, which
+// migration 0035 removed.
 const ROW_GRID =
-  'grid grid-cols-[minmax(0,1fr)_4rem_5.75rem] items-center gap-x-3 gap-y-2 ' +
-  'sm:grid-cols-[minmax(0,1fr)_minmax(0,11rem)_4rem_5.75rem]'
+  'grid grid-cols-[minmax(0,1fr)_5.75rem] items-center gap-x-3 gap-y-2 ' +
+  'sm:grid-cols-[minmax(0,1fr)_minmax(0,11rem)_5.75rem]'
 
 const COLUMN_LABEL = 'text-[0.6875rem] font-bold uppercase tracking-wider text-ink-subtle'
 
 export default function Spaces() {
   const t = useT()
-  const { propertyId, propertyName } = useAuth()
+  const { role, propertyId, propertyName } = useAuth()
   const toast = useToast()
+
+  /**
+   * ── ONE SCREEN, TWO ROLES ─────────────────────────────────────────────
+   * A valet_admin has exactly one property and never sees a picker: `target`
+   * is simply theirs. A system_admin has none of their own, so they choose,
+   * and until they do there is nothing to show.
+   *
+   * The RPCs take the property as an argument and enforce the rule themselves
+   * (migration 0035) — a valet_admin asking about someone else is refused by
+   * Postgres, not by this component. What is in the browser is a convenience,
+   * never the boundary.
+   */
+  const isSystemAdmin = role === ROLES.SYSTEM_ADMIN
+  const [properties, setProperties] = useState([])
+  const [chosen, setChosen] = useState('')
+  const target = isSystemAdmin ? chosen : propertyId
 
   const [spaces, setSpaces] = useState([])
   /** The place the admin has asked to delete, until they confirm or cancel. */
@@ -97,12 +116,37 @@ export default function Spaces() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  // Only a system_admin needs this list, so only they fetch it.
+  useEffect(() => {
+    if (!isSystemAdmin) return
+    let cancelled = false
+    ;(async () => {
+      const { data } = await supabase
+        .from('properties')
+        .select('id, name')
+        .eq('is_active', true)
+        .order('name')
+      if (!cancelled) setProperties(data ?? [])
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [isSystemAdmin])
+
   const load = useCallback(async () => {
-    if (!propertyId) return
+    // No property chosen yet — a system_admin who has just arrived. Not an
+    // error, and not a request worth making.
+    if (!target) {
+      setSpaces([])
+      setLoading(false)
+      return
+    }
 
     // One RPC, and it counts the cars for us. This screen and the operator's
     // chips now read the SAME function, so "in use" cannot mean two things.
-    const { data, error: err } = await supabase.rpc('parking_space_usage')
+    const { data, error: err } = await supabase.rpc('parking_space_usage', {
+      p_property_id: target,
+    })
 
     if (err) {
       setError(describeDbError(err, t('spaces.couldNotLoadList')))
@@ -116,14 +160,13 @@ export default function Spaces() {
         id: s.id,
         label: s.label,
         labelHi: s.label_hi ?? null,
-        capacity: Number(s.capacity ?? 1),
         inUse: Number(s.in_use ?? 0),
         is_active: s.is_active,
         sort_order: s.sort_order,
       })),
     )
     setLoading(false)
-  }, [propertyId, t])
+  }, [target, t])
 
   useEffect(() => {
     load()
@@ -200,40 +243,22 @@ export default function Spaces() {
   })
 
   /**
-   * Totals in CARS, not in places.
+   * How many places, and how many cars are in them.
    *
-   * "4 places" tells an admin nothing about whether they can take another
-   * booking; "37 of 60 spaces used" does. Only active places count toward
-   * capacity — a place out of service is not room you have.
+   * There used to be a third pair — total capacity and spaces free — because
+   * each place carried a car limit. Migration 0035 removed the limits, so
+   * "37 of 60 used" has no 60 to compare against any more. What is left is
+   * still the useful part: how many places exist, how many are out of service,
+   * and how many cars are actually parked.
    */
   const counts = useMemo(() => {
     const live = spaces.filter((s) => s.is_active)
     return {
       places: live.length,
       off: spaces.length - live.length,
-      capacity: live.reduce((n, s) => n + s.capacity, 0),
       inUse: live.reduce((n, s) => n + s.inUse, 0),
-      // Clamped at 0 because a stacked row can legitimately hold more cars than
-      // its capacity, and "-3 free" is not a thing.
-      free: Math.max(
-        0,
-        live.reduce((n, s) => n + Math.max(0, s.capacity - s.inUse), 0),
-      ),
     }
   }, [spaces])
-
-  async function setCapacity(space, capacity) {
-    const next = Math.min(999, Math.max(1, Math.round(Number(capacity) || 1)))
-    if (next === space.capacity) return
-
-    const { error: err } = await supabase
-      .from('parking_spaces')
-      .update({ capacity: next })
-      .eq('id', space.id)
-
-    if (err) toast.error(describeDbError(err, t('spaces.couldNotCapacity')))
-    else await load()
-  }
 
   /**
    * Called after a bulk add, with the label -> Hindi map the form built while the
@@ -251,7 +276,7 @@ export default function Spaces() {
     if (pairs.length > 0) {
       // Read fresh rather than using `spaces`: the rows were created a moment
       // ago by add_parking_spaces and are not in state yet.
-      const { data } = await supabase.rpc('parking_space_usage')
+      const { data } = await supabase.rpc('parking_space_usage', { p_property_id: target })
 
       for (const [label, hi] of pairs) {
         const row = (data ?? []).find((s) => s.label === label && !s.label_hi)
@@ -319,10 +344,27 @@ export default function Spaces() {
   }
 
   return (
-    <>
+    /* ── ONE WIDTH FOR THE WHOLE SCREEN ───────────────────────────────────
+       The shell deliberately puts no cap on a page, because a wide table wants
+       every pixel. This screen does not: its widest row needs about 1170px —
+       24rem for the add box, a gap, and 48rem for a list row — and past that it
+       stopped being one layout.
+
+       Measured at 1892px before this: the tiles stretched to 1620px and each one
+       was 532px wide with a single digit floating in it, while the list below
+       stopped at 768px. Two different right-hand edges on one screen read as
+       something failing to load rather than as a deliberate measure.
+
+       Capping HERE rather than per-block is what keeps the edges honest: the
+       tiles, the two columns and the facts box all inherit it, so they cannot
+       drift apart again when one of them changes. */
+    <div className="max-w-[73rem]">
       <PageHeader
         title={t('spaces.title')}
-        subtitle={propertyName}
+        // A valet_admin has one site and the subtitle names it. A system_admin
+        // picks, so the picker IS the subtitle — repeating the name underneath
+        // the control that sets it is one label too many.
+        subtitle={isSystemAdmin ? undefined : propertyName}
         actions={
           <Button variant="secondary" size="md" icon="refresh" onClick={load}>
             {t('common.refresh')}
@@ -330,30 +372,81 @@ export default function Spaces() {
         }
       />
 
-      {/* Totals in CARS. "4 places" does not tell an admin whether they can take
-          another booking; "37 of 60 used" does. */}
-      <StatRow className="mb-5">
-        <StatTile
-          label={t('spaces.totalSpaces')}
-          value={counts.capacity}
-          icon="parking"
-          hint={t(counts.places === 1 ? 'spaces.acrossPlaces' : 'spaces.acrossPlaces_plural', {
-            n: counts.places,
+      {/* ── CHIPS, not a dropdown ─────────────────────────────────────────
+          A select costs two taps and hides the options until the first one.
+          With four sites they all fit on one row, so choosing is one tap and
+          you can see what you are choosing between.
+
+          Same shape as the tabs on the Properties screen deliberately: this is
+          the same idea — "which site am I looking at" — and it should not look
+          like a different control on a different page. */}
+      {isSystemAdmin && (
+        <div
+          role="tablist"
+          aria-label={t('spaces.chooseSiteLabel')}
+          // Scrolls rather than wraps: the Add property button has no limit on
+          // it, and a second row of chips would push the list below the fold on
+          // a phone. -mx-1 px-1 gives the focus ring on the first and last chip
+          // room to draw outside the scroll container.
+          className="scrollbar-none -mx-1 mb-4 flex gap-2 overflow-x-auto px-1 pb-1"
+        >
+          {properties.map((prop) => {
+            const active = prop.id === chosen
+            return (
+              <button
+                key={prop.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setChosen(prop.id)}
+                className={cn(
+                  // shrink-0 is what makes the row scroll instead of squeezing
+                  // the names until they are unreadable.
+                  'shrink-0 rounded-xl border px-3.5 py-2 text-sm font-semibold transition-colors',
+                  active
+                    ? 'border-brand bg-brand text-ink-inverse'
+                    : 'border-line-strong bg-surface text-ink-muted hover:text-ink',
+                )}
+              >
+                {prop.name}
+              </button>
+            )
           })}
+        </div>
+      )}
+
+      {/* A system_admin who has not chosen yet. Everything below needs a
+          property, and rendering empty tiles and an add form that would fail
+          would look broken rather than unanswered. */}
+      {isSystemAdmin && !chosen && (
+        <EmptyState
+          icon="building"
+          title={t('spaces.pickASite')}
+          description={t('spaces.pickASiteBody')}
+        />
+      )}
+
+      {target && (
+        <>
+      <StatRow className="mb-5">
+        {/* Three tiles, not five. "Total spaces" and "Free" both counted
+            against a per-place limit, and those limits went in migration 0035 —
+            a "free" figure with nothing to be free OF would be a number the
+            screen invents. */}
+        <StatTile
+          label={t('spaces.places')}
+          value={counts.places}
+          icon="parking"
+          // No hint. It briefly carried spaces.notCounted — "not counted as room
+          // you have" — which was written for the out-of-service tile beside it
+          // and read as nonsense here, twice over since both tiles then showed
+          // the same line.
         />
         <StatTile
           label={t('spaces.carsParked')}
           value={counts.inUse}
           icon="car"
           tone="info"
-          hint={t('spaces.ofTotal', { n: counts.capacity })}
-        />
-        <StatTile
-          label={t('spaces.free')}
-          value={counts.free}
-          icon="check-circle"
-          tone={counts.free === 0 && counts.capacity > 0 ? 'danger' : 'success'}
-          hint={counts.free === 0 && counts.capacity > 0 ? t('spaces.parkIsFull') : undefined}
         />
         <StatTile
           label={t('spaces.outOfService')}
@@ -370,7 +463,7 @@ export default function Spaces() {
             desktop sidebar pins itself at top-16 for the same reason. */}
         <div className="xl:sticky xl:top-20">
           <SectionHeading title={t('spaces.addPlaces')} icon="plus" />
-          <AddSpaces onAdded={handleAdded} />
+          <AddSpaces propertyId={target} onAdded={handleAdded} />
         </div>
 
         <div>
@@ -394,16 +487,16 @@ export default function Spaces() {
               description={t('spaces.nothingYetBody')}
             />
           ) : (
-            /* Capped, because a row needs about this much and no more. Left to
-               fill an xl screen it became a name pinned to one edge and a number
-               box pinned to the other with a hand-width of nothing between them,
-               which reads as two unrelated controls rather than one row. */
-            <div className="max-w-3xl space-y-4">
-              {/* ROWS, not chips. A chip fitted a name; it cannot also carry a
-                  fill bar, a live count and an editable capacity without
-                  becoming unreadable. One flat list in the order the admin typed
-                  them — no zones or levels, because the admin names the places
-                  and this app has no business modelling their car park. */}
+            /* No cap of its own any more: the page carries one, above. This was
+               max-w-3xl, which was right in isolation and wrong together — it
+               made the list narrower than the tiles above it. */
+            <div className="space-y-4">
+              {/* ROWS, not chips. A chip fits a name; it cannot also carry a
+                  live car count, an editable Hindi spelling and two actions
+                  without becoming unreadable. One flat list in the order the
+                  admin typed them — no zones or levels, because the admin names
+                  the places and this app has no business modelling their car
+                  park. */}
               <div>
                 {/* Headings once, instead of the word "Spaces" set beside every
                     single number box. With four places that was four labels
@@ -413,9 +506,6 @@ export default function Spaces() {
                   <span className={cn(COLUMN_LABEL, 'hidden sm:block')}>
                     {t('spaces.hindiColumn')}
                   </span>
-                  <span className={cn(COLUMN_LABEL, 'text-center')}>
-                    {t('spaces.capacityColumn')}
-                  </span>
                   <span />
                 </div>
 
@@ -424,7 +514,6 @@ export default function Spaces() {
                     <SpaceRow
                       key={space.id}
                       space={space}
-                      onCapacity={(n) => setCapacity(space, n)}
                       onLabelHi={(v) => setLabelHi(space, v)}
                       onToggle={() => toggle(space)}
                       onRemove={() => setPendingDelete(space)}
@@ -446,7 +535,6 @@ export default function Spaces() {
                   {t('spaces.howThisWorks')}
                 </p>
                 <ul className="max-w-2xl space-y-1.5 text-xs leading-relaxed text-ink-muted">
-                  <Fact>{t('spaces.explainCapacity')}</Fact>
                   <Fact>{t('spaces.explainLive')}</Fact>
                   <Fact>{t('spaces.explainFull')}</Fact>
                   <Fact>{t('spaces.explainEye')}</Fact>
@@ -456,6 +544,8 @@ export default function Spaces() {
           )}
         </div>
       </div>
+        </>
+      )}
 
       {/* The guard that replaced "take it out of service first".
           It names the place, because a mis-tapped row and the right row look
@@ -479,7 +569,7 @@ export default function Spaces() {
         }
         confirmLabel={t('spaces.deleteConfirm')}
       />
-    </>
+    </div>
   )
 }
 
@@ -499,24 +589,12 @@ function Fact({ children }) {
 // ONE PLACE
 // ═══════════════════════════════════════════════════════════════════
 
-function SpaceRow({ space, onCapacity, onLabelHi, onToggle, onRemove }) {
+function SpaceRow({ space, onLabelHi, onToggle, onRemove }) {
   const t = useT()
 
   /**
-   * The capacity field is local while it is being typed.
-   *
-   * Writing on every keystroke would fire a query per digit and, worse, clamp
-   * "20" to "2" the instant the first character landed. It commits on blur and
-   * on Enter, which is when the admin has finished saying what they mean.
-   */
-  const [draft, setDraft] = useState(String(space.capacity))
-
-  useEffect(() => setDraft(String(space.capacity)), [space.capacity])
-
-  /**
-   * The Hindi name while it is being typed, for the same reason as the capacity
-   * above: writing on every keystroke would fire a query per character.
-   * It commits on blur and on Enter.
+   * The Hindi name while it is being typed: writing on every keystroke would
+   * fire a query per character. It commits on blur and on Enter.
    */
   const [hiDraft, setHiDraft] = useState(space.labelHi ?? '')
 
@@ -524,15 +602,6 @@ function SpaceRow({ space, onCapacity, onLabelHi, onToggle, onRemove }) {
   // conversion that runs after a bulk add — shows up here instead of leaving a
   // stale draft on screen.
   useEffect(() => setHiDraft(space.labelHi ?? ''), [space.labelHi])
-
-  const free = Math.max(0, space.capacity - space.inUse)
-  const over = space.inUse > space.capacity
-  const full = free === 0
-  // Capped at 100% so an over-stacked row shows a full bar rather than
-  // overflowing its container.
-  const pct = space.capacity > 0 ? Math.min(100, (space.inUse / space.capacity) * 100) : 0
-
-  const commit = () => onCapacity(draft)
 
   return (
     <div className={cn(ROW_GRID, 'px-4 py-3', !space.is_active && 'opacity-60')}>
@@ -547,16 +616,6 @@ function SpaceRow({ space, onCapacity, onLabelHi, onToggle, onRemove }) {
             {space.label}
           </span>
 
-          {space.is_active && over && (
-            <Badge tone="danger" size="sm">
-              {t('spaces.overCapacity', { inUse: space.inUse, capacity: space.capacity })}
-            </Badge>
-          )}
-          {space.is_active && full && !over && (
-            <Badge tone="warning" size="sm">
-              {t('spaces.full')}
-            </Badge>
-          )}
           {!space.is_active && (
             <Badge tone="neutral" size="sm">
               {t('spaces.outOfService')}
@@ -564,25 +623,13 @@ function SpaceRow({ space, onCapacity, onLabelHi, onToggle, onRemove }) {
           )}
         </div>
 
-        <div className="mt-1.5 flex items-center gap-2">
-          {/* Fills the row. No max-width: capping it at 14rem left a hand-width
-              of nothing between the count and the number box, which is exactly
-              the disconnected look the width cap was meant to fix. The card's
-              own max-w-3xl already stops this getting silly. */}
-          <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-line">
-            <div
-              className={cn(
-                'h-full rounded-full',
-                over ? 'bg-danger' : full ? 'bg-warning' : 'bg-info',
-              )}
-              style={{ width: `${pct}%` }}
-            />
-          </div>
-          <span className="tnum shrink-0 text-xs text-ink-subtle">
-            {space.inUse} / {space.capacity}
-            {space.is_active && !full && !over && t('spaces.freeSuffix', { n: free })}
-          </span>
-        </div>
+        {/* A count, not a fill bar. The bar measured cars against the place's
+            limit, and with the limits gone there is no denominator to draw. */}
+        <p className="tnum mt-1 text-xs text-ink-subtle">
+          {t(space.inUse === 1 ? 'spaces.carsHere' : 'spaces.carsHere_plural', {
+            n: space.inUse,
+          })}
+        </p>
       </div>
 
       {/* ── the Hindi name ────────────────────────────────────────────────
@@ -635,26 +682,6 @@ function SpaceRow({ space, onCapacity, onLabelHi, onToggle, onRemove }) {
         />
       </div>
 
-      {/* No visible label of its own — the column heading above the list says
-          "Spaces" once. aria-label still names the PLACE, which a shared column
-          heading cannot do, so screen readers get "How many cars fit in
-          Basement" rather than a bare "Spaces". */}
-      <input
-        type="tel"
-        inputMode="numeric"
-        value={draft}
-        onChange={(e) => setDraft(e.target.value.replace(/\D/g, '').slice(0, 3))}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault()
-            e.currentTarget.blur()
-          }
-        }}
-        aria-label={t('spaces.howManyFit', { place: space.label })}
-        className="tnum h-10 w-full rounded-xl border border-line-strong bg-surface px-2 text-center text-base font-bold text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 sm:text-sm"
-      />
-
       {/* Delete FIRST, eye LAST — deliberately, and it looks backwards until you
           see the list. Both are on every row now, and the eye is the one people
           reach for constantly, so it holds the right-hand column and delete sits
@@ -704,16 +731,10 @@ function SpaceRow({ space, onCapacity, onLabelHi, onToggle, onRemove }) {
 
 // ═══════════════════════════════════════════════════════════════════
 
-function AddSpaces({ onAdded }) {
+function AddSpaces({ propertyId, onAdded }) {
   const t = useT()
   const toast = useToast()
   const [text, setText] = useState('')
-  /**
-   * One capacity for the whole paste, because that is how a car park is
-   * described: "the basement has 20 bays", "the front row holds 6". Individual
-   * places are adjusted in the list afterwards.
-   */
-  const [capacity, setCapacity] = useState('1')
   const [error, setError] = useState(null)
 
   /**
@@ -781,7 +802,10 @@ function AddSpaces({ onAdded }) {
     setError(null)
     const { data, error: err } = await supabase.rpc('add_parking_spaces', {
       p_labels: labels,
-      p_capacity: Math.min(999, Math.max(1, Number(capacity) || 1)),
+      // Explicit, always. It defaults to the caller's own property in the
+      // database, which is right for a valet_admin and useless for a system
+      // admin — who has none.
+      p_property_id: propertyId,
     })
 
     if (err) {
@@ -818,21 +842,6 @@ function AddSpaces({ onAdded }) {
       />
 
       <div className="mt-4 space-y-3">
-        <Field
-          label={t('spaces.howManyEach')}
-          htmlFor="space-capacity"
-          hint={t('spaces.howManyEachHint')}
-        >
-          <input
-            id="space-capacity"
-            type="tel"
-            inputMode="numeric"
-            value={capacity}
-            onChange={(e) => setCapacity(e.target.value.replace(/\D/g, '').slice(0, 3))}
-            className="tnum h-touch w-24 rounded-xl border border-line-strong bg-surface px-4 text-center text-lg font-bold text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
-          />
-        </Field>
-
         <Field label={t('spaces.placeNames')} htmlFor="space-names" error={error}>
           <textarea
             id="space-names"
@@ -879,9 +888,6 @@ function AddSpaces({ onAdded }) {
               {labels.length}
             </Badge>
             {t(labels.length === 1 ? 'spaces.toAdd' : 'spaces.toAdd_plural')}
-            {t('spaces.totalSuffix', {
-              n: labels.length * Math.max(1, Number(capacity) || 1),
-            })}
           </p>
         )}
 

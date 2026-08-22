@@ -148,6 +148,26 @@ export async function selectOptional(run, runWithout, what = 'an optional column
  * Every custom string matched below is raised deliberately by our own SQL —
  * see supabase/migrations/20260731090100_fixes_and_hardening.sql.
  */
+/**
+ * Which migration adds each function, for the PGRST202 branch below.
+ *
+ * Longest-lived first is not the ordering that matters — SPECIFICITY is. The
+ * match is a substring test, so a name that is a prefix of another would claim
+ * both; none here are, and a new entry should be checked against that.
+ */
+const FN_MIGRATION = {
+  parking_space_usage: '0035 (no_capacity_and_system_spaces)',
+  add_parking_spaces: '0035 (no_capacity_and_system_spaces)',
+  task_complete_parking: '0035 (no_capacity_and_system_spaces)',
+  task_complete_reparking: '0035 (no_capacity_and_system_spaces)',
+  nag_unaccepted_retrievals: '0032 (nag_unaccepted)',
+  guest_request_retrieval: '0033 (guest_whatsapp_rpc)',
+  guest_record_review: '0033 (guest_whatsapp_rpc)',
+  task_accept: '0031 (task_accept)',
+  admin_set_space_label_hi: '0029 (space_label_hi)',
+  set_guest_name_hi: '0030 (guest_name_hi)',
+}
+
 export function describeDbError(error, fallback = null) {
   if (!error) return null
 
@@ -175,6 +195,35 @@ export function describeDbError(error, fallback = null) {
       'No property is linked to your account. Contact your system admin.',
       'आपके अकाउंट से कोई प्रॉपर्टी जुड़ी नहीं है। सिस्टम एडमिन से बात कीजिए।',
     )
+  }
+
+  // ── the function is not in the database yet ───────────────────────────
+  //
+  // PostgREST answers PGRST202 both when a function is missing and when it
+  // exists but no overload matches the arguments sent — which is what a front
+  // end deployed ahead of its migration produces.
+  //
+  // Raw, that reads "Could not find the function
+  // public.parking_space_usage(p_property_id) in the schema cache", which is
+  // useful to a developer and useless to an admin looking at a broken screen.
+  // Naming the migration turns it into something they can act on.
+  //
+  // Keyed on the function name because one message cannot be right for all of
+  // them: somebody told to run the wrong migration will run it, watch it
+  // succeed, find the screen still broken, and conclude the app is broken
+  // rather than unmigrated. lib/valetApi learned that the hard way.
+  if (code === 'PGRST202' || raw.includes('Could not find the function')) {
+    const hit = Object.entries(FN_MIGRATION).find(([fn]) => raw.includes(fn))
+    const which = hit ? hit[1] : null
+    return which
+      ? pickLang(
+          `This screen needs a database update. Run migration ${which} in the Supabase SQL Editor.`,
+          `इस स्क्रीन के लिए डेटाबेस अपडेट चाहिए। Supabase SQL Editor में migration ${which} चलाइए।`,
+        )
+      : pickLang(
+          'This screen needs a database update. Run the pending migrations in the Supabase SQL Editor.',
+          'इस स्क्रीन के लिए डेटाबेस अपडेट चाहिए। Supabase SQL Editor में बाकी migrations चलाइए।',
+        )
   }
 
   // ── Postgres error codes ─────────────────────────────────────────────

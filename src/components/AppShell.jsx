@@ -84,6 +84,8 @@ const NAV_ITEMS = {
   [ROLES.SYSTEM_ADMIN]: [
     { to: '/system/properties', key: 'properties', icon: 'building' },
     { to: '/system/users', key: 'users', icon: 'users' },
+    // Same screen as the valet admin's, with a property picker on it.
+    { to: '/system/spaces', key: 'spaces', icon: 'parking' },
     { to: '/system/records', key: 'records', icon: 'list' },
     { to: '/system/analytics', key: 'analytics', icon: 'chart' },
   ],

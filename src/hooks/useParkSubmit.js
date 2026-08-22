@@ -3,68 +3,55 @@
  * │ FILE: src/hooks/useParkSubmit.js                                    │
  * │                                                                     │
  * │ WHAT THIS FILE IS                                                   │
- * │   Recording where a car was parked, including the one case the       │
- * │   server can refuse: the place filled up while the operator was      │
- * │   walking back.                                                     │
+ * │   The submit half of "where did you park it": one busy flag and one  │
+ * │   error, shared by the two screens that record a parked car.         │
  * │                                                                     │
- * │     const park = useParkSubmit((location, force) =>                  │
- * │       completeParking(task.id, location, force))                     │
+ * │     const park = useParkSubmit((location) =>                         │
+ * │       completeParking(task.id, location))                            │
  * │                                                                     │
- * │     park.submit(location)        // normal                           │
- * │     park.error                   // what to show                     │
- * │     park.needsConfirm            // offer "the car really is there"  │
- * │     park.confirm()               // retry with force                 │
+ * │     park.submit(location)   // record it                             │
+ * │     park.reset()            // the operator edited the place         │
+ * │     park.busy, park.error                                           │
  * │                                                                     │
- * │ ── WHY A HOOK AND NOT THREE COPIES ──────────────────────────────────│
- * │   Three screens record a park: the token panel on Check In, the      │
- * │   "still to park" strip beside it, and the re-park card in My Tasks. │
- * │   All three need the same two-step recovery, and a hand-rolled copy  │
- * │   in each is three chances to get the retry subtly wrong — most      │
- * │   likely by forgetting to send `force` on the second attempt, which  │
- * │   would leave the operator tapping a button that never works.        │
+ * │ ── WHAT THIS USED TO DO, AND WHY IT NO LONGER DOES ──────────────────│
+ * │   It carried a two-step confirm flow: a full parking place was       │
+ * │   refused with SPACE_FULL, and the operator could answer "the car    │
+ * │   really is there" and retry with force. Per-place limits were       │
+ * │   removed in migration 0035, so nothing refuses a park on capacity   │
+ * │   any more and there is nothing left to override.                    │
  * │                                                                     │
- * │ ── WHY THE OVERRIDE EXISTS AT ALL ───────────────────────────────────│
- * │   By the time this runs, the car is already parked. The operator      │
- * │   drove it, walked back, and is telling the system what they did. A  │
- * │   refusal it cannot get past does not move the car — it leaves one   │
- * │   sitting in a real bay that the system thinks is still at the       │
- * │   porch. Migration 0027 has the full argument.                        │
+ * │   The hook stays rather than being deleted, because the busy flag    │
+ * │   and the single error string are still worth having in one place —  │
+ * │   two screens submit this and both need the same "disabled while in  │
+ * │   flight" behaviour that stops a double-park.                        │
  * │                                                                     │
  * │ USED BY                                                             │
  * │   operator/CheckIn (token panel + still-to-park), operator/MyTasks   │
  * └─────────────────────────────────────────────────────────────────────┘
  */
 
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useState } from 'react'
 
 export default function useParkSubmit(run) {
   const [error, setError] = useState(null)
-  const [needsConfirm, setNeedsConfirm] = useState(false)
   const [busy, setBusy] = useState(false)
 
-  /** The location the refusal was about, so confirm() retries the same one. */
-  const pending = useRef('')
-
-  const attempt = useCallback(
-    async (location, force) => {
+  const submit = useCallback(
+    async (location) => {
       setBusy(true)
       try {
-        const result = await run(location, force)
+        const result = await run(location)
 
         if (result.ok) {
           setError(null)
-          setNeedsConfirm(false)
           return true
         }
 
         setError(result.error)
-        // SPACE_FULL is the only refusal with a way forward. Everything else —
-        // WRONG_STATUS, OFFLINE, NOT_FOUND — needs the operator to do something
-        // different, and offering an override would just hide that.
-        setNeedsConfirm(result.code === 'SPACE_FULL' && !force)
-        pending.current = location
         return false
       } finally {
+        // finally, not after the branches: an exception here would otherwise
+        // leave the button disabled for good and the operator stuck.
         setBusy(false)
       }
     },
@@ -73,14 +60,9 @@ export default function useParkSubmit(run) {
 
   return {
     error,
-    needsConfirm,
     busy,
-    submit: (location) => attempt(location, false),
-    confirm: () => attempt(pending.current, true),
+    submit,
     /** Call when the operator edits the place, so a stale refusal clears. */
-    reset: () => {
-      setError(null)
-      setNeedsConfirm(false)
-    },
+    reset: () => setError(null),
   }
 }
