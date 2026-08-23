@@ -73,3 +73,16 @@ verify_jwt = false
 [functions.wa-dispatch]
 # Drains public.wa_outbox. Invoked by a scheduler, not by a user.
 verify_jwt = false
+
+[functions.valet-report]
+# Read-only analytics for Ambria Admin, which is a DIFFERENT Supabase project.
+# Its users' JWTs are signed by that project, so this project's gateway would
+# reject every one of them as invalid — verification here could only ever fail.
+#
+# Authenticity is proven instead by X-API-Key, which the function compares
+# against REPORT_API_KEY in constant time before it touches the database. An
+# unset secret refuses everything rather than waving it through.
+#
+# Note it sends NO CORS headers, deliberately: a browser must not be able to
+# call this, because the key would then have to live in a public bundle.
+verify_jwt = false
