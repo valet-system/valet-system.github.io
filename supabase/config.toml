@@ -74,7 +74,7 @@ verify_jwt = false
 # Drains public.wa_outbox. Invoked by a scheduler, not by a user.
 verify_jwt = false
 
-[functions.valet-report]
+[functions.valet_report]
 # Read-only analytics for Ambria Admin, which is a DIFFERENT Supabase project.
 # Its users' JWTs are signed by that project, so this project's gateway would
 # reject every one of them as invalid — verification here could only ever fail.

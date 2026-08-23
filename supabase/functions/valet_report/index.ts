@@ -1,7 +1,7 @@
 // @ts-nocheck — Deno file. See supabase/functions/README.md for why.
 /**
  * ┌─────────────────────────────────────────────────────────────────────┐
- * │ FILE: supabase/functions/valet-report/index.ts                      │
+ * │ FILE: supabase/functions/valet_report/index.ts                      │
  * │                                                                     │
  * │ WHAT THIS FILE IS                                                   │
  * │   A read-only HTTP API over the valet analytics, for ANOTHER APP on  │
@@ -163,7 +163,7 @@ Deno.serve(async (req) => {
   // An unset secret must refuse everything. Treating "no key configured" as
   // "no key required" is how a staging deploy ends up world-readable.
   if (expected.length < 32) {
-    console.error('[valet-report] REPORT_API_KEY is missing or too short (<32 chars)')
+    console.error('[valet_report] REPORT_API_KEY is missing or too short (<32 chars)')
     return fail(503, 'NOT_CONFIGURED', 'This endpoint is not configured.')
   }
 
@@ -171,13 +171,13 @@ Deno.serve(async (req) => {
   if (!(await keyMatches(presented, expected))) {
     // Deliberately vague to the caller, specific in the log. Which of "no key"
     // and "wrong key" it was is useful to us and a probing aid to anyone else.
-    console.warn('[valet-report] rejected a call:', presented ? 'wrong key' : 'no key')
+    console.warn('[valet_report] rejected a call:', presented ? 'wrong key' : 'no key')
     return fail(401, 'UNAUTHORISED', 'Bad or missing X-API-Key.')
   }
 
   const url = new URL(req.url)
-  // Everything after the function name, so both /valet-report/summary and a
-  // bare /valet-report?report=summary style deployment behave the same.
+  // Everything after the function name, so both /valet_report/summary and a
+  // bare /valet_report?report=summary style deployment behave the same.
   const endpoint = url.pathname.split('/').filter(Boolean).pop() ?? ''
   const q = url.searchParams
 
@@ -300,7 +300,7 @@ Deno.serve(async (req) => {
     }
   } catch (thrown) {
     if (thrown instanceof BadRequest) return fail(400, 'BAD_REQUEST', thrown.message)
-    console.error('[valet-report] threw:', thrown)
+    console.error('[valet_report] threw:', thrown)
     return fail(500, 'UNEXPECTED', 'Something went wrong.')
   }
 })
@@ -313,7 +313,7 @@ Deno.serve(async (req) => {
  * retrying — it should read as "tell the valet team", not as a transient fault.
  */
 function dbFail(fn: string, error: { code?: string; message?: string }) {
-  console.error(`[valet-report] ${fn} failed:`, error.code, error.message)
+  console.error(`[valet_report] ${fn} failed:`, error.code, error.message)
 
   if (error.code === 'PGRST202' || (error.message ?? '').includes('Could not find the function')) {
     return fail(

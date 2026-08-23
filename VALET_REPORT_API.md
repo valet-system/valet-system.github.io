@@ -5,7 +5,37 @@
 This document is the handover spec. It is written for a developer working on
 **Ambria Admin** (`ambria-workforce`), who wants the valet analytics screen —
 cars per day, guest wait times, peak hours, per-operator workload — inside their
-own app.
+own app, with a CSV download of the guest list.
+
+---
+
+## 0. Start here — what is already done
+
+**The valet side is finished and live.** You do not need to touch it, and you
+cannot see it from this repo — it is a different Supabase project.
+
+Already done for you:
+
+| | |
+|---|---|
+| Valet API deployed at | `https://vyirixtdgheypbpffsct.supabase.co/functions/v1/valet_report` |
+| Its `REPORT_API_KEY` | set, on the valet project |
+| Migration 0037 | run, so the database allows a server to read |
+| **This project's secrets** | `VALET_REPORT_URL` and `VALET_REPORT_KEY` — already set in Ambria Admin's own Edge Function secrets |
+
+Note the function name is **`valet_report` with an underscore**, not a hyphen.
+
+**So your job is only the three things in section 4:**
+
+1. A proxy Edge Function in *this* project (`valet-analytics`) — section 4.2
+2. The analytics page that calls it — section 4.3 and section 5
+3. The CSV download button — section 8
+
+Do **not** put the API key in the frontend. Section 3 explains why, and it is
+enforced — a direct browser call physically cannot work.
+
+If a call comes back `503 NOT_MIGRATED` or `401 UNAUTHORISED`, that is a valet-side
+or secret problem, not your code. Section 6 says which is which.
 
 ---
 
@@ -41,14 +71,19 @@ Three ways out, and why this is the one:
 
 ---
 
-## 2. What you need from the valet team
+## 2. What the valet side gave you
 
-Two things. Ask for them directly — they are not in any repo.
+Both are **already stored as secrets in this project** (see section 0), so you
+read them from `Deno.env`, never from a file you can see.
 
 | | |
 |---|---|
-| **Base URL** | `https://<valet-project-ref>.supabase.co/functions/v1/valet-report` |
-| **API key** | A long random string. Goes in the `X-API-Key` header. |
+| **Base URL** | `https://vyirixtdgheypbpffsct.supabase.co/functions/v1/valet_report` — in `VALET_REPORT_URL` |
+| **API key** | A long random string, in `VALET_REPORT_KEY`. Goes in the `X-API-Key` header. |
+
+The URL is not a secret — it is in the valet app's public bundle already. The
+key is. If you ever need the key changed, the valet team rotates
+`REPORT_API_KEY` on their side and re-issues it; nothing is redeployed.
 
 ---
 
@@ -70,7 +105,7 @@ Ambria Admin browser
 Ambria Admin Edge Function  ──── holds VALET_REPORT_KEY as a Supabase secret
    │  (X-API-Key)
    ▼
-Valet  /functions/v1/valet-report
+Valet  /functions/v1/valet_report
    │  (service_role, inside the valet project only)
    ▼
 Valet Postgres — aggregates and returns
@@ -86,15 +121,18 @@ quietly.
 
 ## 4. Setup on the Ambria Admin side
 
-### 4.1 Store the key
+### 4.1 The secrets — already set, just confirm
 
 Supabase dashboard → **Edge Functions → Secrets** (of the *Ambria Admin*
-project):
+project). These two should already be there:
 
 ```
-VALET_REPORT_URL = https://<valet-project-ref>.supabase.co/functions/v1/valet-report
-VALET_REPORT_KEY = <the key the valet team gave you>
+VALET_REPORT_URL = https://vyirixtdgheypbpffsct.supabase.co/functions/v1/valet_report
+VALET_REPORT_KEY = <the key>
 ```
+
+If they are missing, ask for the key — do not invent one, it has to match the
+valet side exactly or every call is a `401`.
 
 ### 4.2 Add a proxy function
 
@@ -161,6 +199,14 @@ Deploy it:
 ```bash
 supabase functions deploy valet-analytics
 ```
+
+Or without the CLI: Supabase dashboard → **Edge Functions → Deploy a new
+function → Via editor**, name it `valet-analytics`, paste the code above, Deploy.
+
+**Leave JWT verification ON for this one.** Its callers are your own users with
+your own project's tokens, so the gateway can and should check them. (The valet
+function has it off, for the opposite reason — its caller's token comes from a
+different project and could never verify.)
 
 ### 4.3 Call it from the page
 
@@ -349,8 +395,8 @@ with itself is what `/summary` is for.
 
 ### `GET /records`
 
-The rows behind the spreadsheet export — one per car. This is what the download
-button uses.
+The rows behind the CSV download — **one per car**, not per guest. This is what
+the download button in section 8 uses.
 
 | Param | Format | Default | Notes |
 |---|---|---|---|
@@ -464,7 +510,7 @@ a browser anyway (no CORS headers, by design):
 
 ```bash
 KEY='…'
-BASE='https://<valet-project-ref>.supabase.co/functions/v1/valet-report'
+BASE='https://vyirixtdgheypbpffsct.supabase.co/functions/v1/valet_report'
 
 # Should list the properties
 curl -s -H "X-API-Key: $KEY" "$BASE/properties"
@@ -483,56 +529,70 @@ deployed but migration 0037 has not been run.
 
 ## 8. The download button
 
-The valet app puts an **Export** button on its records screen that produces a
-formatted `.xlsx`. Here is how to put the same button on your analytics page.
+A **CSV** of the guest list, with three columns: guest name, phone number, car
+tier. No library and no `npm install` — CSV is plain text.
 
-### 8.1 Install
+> The valet app's own export is the same three columns, so the two files match.
+> Everything else the valet screen shows — date, property, car number, who parked
+> it, who fetched it — stays on the screen. The table is for verifying a visit;
+> the file is for taking a guest list away.
 
-```bash
-npm install write-excel-file
-```
+### 8.1 The helper
 
-### 8.2 The helper
-
-`src/utils/xlsx.js`:
+`src/utils/csv.js`:
 
 ```js
-/** Header cells: bold, tinted band, one rule underneath. */
-const HEADER = {
-  fontWeight: 'bold',
-  backgroundColor: '#F4EFE6',
-  textColor: '#14120E',
-  align: 'left',
-  bottomBorderColor: '#D4C9B6',
-  bottomBorderStyle: 'thin',
-}
-
-export async function downloadXlsx(filename, cols, rows) {
+/**
+ * Turns rows into a CSV file and hands it to the user.
+ *
+ * @param filename e.g. 'valet-guests-2026-08-23.csv'
+ * @param cols     [{ key, label }]
+ * @param rows     plain objects keyed by `key`
+ */
+export function downloadCsv(filename, cols, rows) {
   if (!rows?.length) return
 
-  // Imported HERE, not at the top of the file. This is the biggest thing in the
-  // bundle and one button on one admin screen uses it — a top-level import
-  // makes every user download it. '/browser', not the bare name: the package
-  // ships no "." export and the bare import fails the build outright.
-  const { default: writeXlsxFile } = await import('write-excel-file/browser')
+  const cell = (col, value) => {
+    // '' as well as null. A text column left to handle '' emits ="" — which
+    // looks blank in Excel but is a formula, so ISBLANK disagrees with the eye.
+    if (value === null || value === undefined || value === '') return ''
+    const s = String(value)
+    const needsQuoting = /[",\n\r]/.test(s)
 
-  const columns = cols.map((col) => ({
-    header: { ...HEADER, value: col.label, align: col.align ?? 'left' },
-    cell: (row) => {
-      const v = row[col.key]
-      return {
-        // Every cell a STRING, deliberately. A phone number is an identifier
-        // that happens to be digits — as a number it loses its leading zero and
-        // goes scientific past 11 digits. Nothing here is ever summed.
-        value: v === null || v === undefined || v === '' ? null : String(v),
-        type: String,
-        align: col.align ?? 'left',
-      }
-    },
-    width: col.width,
-  }))
+    // ── THE PHONE COLUMN MUST BE FORCED TO TEXT ──────────────────────────
+    // CSV carries no cell types, so Excel guesses "number" for a phone and
+    // renders it in scientific notation. MEASURED, from a real export:
+    //
+    //     Guest name   Number        Car tier
+    //     Kbks         6.576E+09     Standard
+    //     Msm          1E+10         VIP
+    //
+    // The digits are still in the file; Excel is only displaying them that way.
+    // But the column is unreadable, and widening it is a per-open workaround,
+    // not a fix. ="…" is read as a formula returning a string, which pins the
+    // value to text regardless of column width.
+    //
+    // UNQUOTED on purpose — quoting it makes Excel show the literal ="123…",
+    // which is worse. So a value containing a comma falls through to ordinary
+    // quoting instead of breaking the row. Phones never contain one.
+    if (col.text && !needsQuoting) return `="${s}"`
 
-  const blob = await writeXlsxFile(rows, { columns, stickyRowsCount: 1 }).toBlob()
+    // Quote only when needed, and double any inner quote. A guest called
+    // "Sharma, Anil" would otherwise split into two columns and shift every
+    // field after it on that row.
+    return needsQuoting ? `"${s.replace(/"/g, '""')}"` : s
+  }
+
+  const csv = [
+    cols.map((c) => cell({}, c.label)).join(','),
+    ...rows.map((row) => cols.map((c) => cell(c, row[c.key])).join(',')),
+  ].join('\r\n')
+
+  // ── THE BOM IS NOT OPTIONAL ──────────────────────────────────────────
+  // '﻿' first, or Excel opens the file as the system codepage and every
+  // Hindi name becomes mojibake — "अनिल" reads as "à¤…à¤¨à¤¿à¤²". The file is
+  // valid UTF-8 either way; Excel simply does not look unless the BOM is there.
+  const blob = new Blob(['﻿', csv], { type: 'text/csv;charset=utf-8;' })
 
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
@@ -542,28 +602,42 @@ export async function downloadXlsx(filename, cols, rows) {
   link.click()
   link.remove()
 
-  // Released on pagehide, NOT on a timer. The browser writes the file
-  // asynchronously; revoking while that is in flight CANCELS the download, and
-  // nothing surfaces because the click already succeeded. See 8.4.
-  const release = () => URL.revokeObjectURL(url)
-  window.addEventListener('pagehide', release, { once: true })
+  // ── RELEASE ON pagehide, NOT ON A TIMER ──────────────────────────────
+  // A one-second timer was tried on the valet side and MEASURED failing:
+  //
+  //     download begin  valet-guests.csv
+  //     download inProgress   (x5)
+  //     download canceled
+  //
+  // The browser writes the file asynchronously and takes longer than a second
+  // even for a small CSV, so revoking on a timer cancels a download that had
+  // already started — and nothing surfaces, because the click succeeded and any
+  // success toast has already been shown.
+  //
+  // pagehide rather than beforeunload: beforeunload does not fire reliably on
+  // mobile Safari, which is where a tab is most likely to be discarded.
+  window.addEventListener('pagehide', () => URL.revokeObjectURL(url), { once: true })
 }
 ```
 
-### 8.3 The button
+### 8.2 The button
 
 ```jsx
-import { downloadXlsx } from '../utils/xlsx'
+import { useState } from 'react'
+import { downloadCsv } from '../utils/csv'
 
+// THREE columns: who came, what they drove, how to reach them.
+//
+// >>> 'Number' MUST STAY LAST. Do not add a column after it. <<<
+// CSV cannot carry a column width, so Excel opens every column at its default
+// 8.43 characters and a ten-digit phone does not fit. Excel DOES spill text past
+// a cell's edge when the cells to its right are empty — so as the last column
+// the phone shows in full. Add a fourth and it silently starts clipping again.
 const COLUMNS = [
-  { key: 'date',      label: 'Date',       width: 12 },
-  { key: 'property',  label: 'Property',   width: 20 },
-  { key: 'name',      label: 'Guest',      width: 22 },
-  { key: 'phone',     label: 'Number',     width: 14 },
-  { key: 'car',       label: 'Car',        width: 12 },
-  { key: 'tier',      label: 'Tier',       width: 10 },
-  { key: 'parkedBy',  label: 'Parked by',  width: 18 },
-  { key: 'fetchedBy', label: 'Fetched by', width: 18 },
+  { key: 'name', label: 'Guest name' },
+  { key: 'tier', label: 'Car tier' },
+  // text: true, or Excel shows 6.576E+09 instead of the number. See 8.1.
+  { key: 'phone', label: 'Number', text: true },
 ]
 
 function ExportButton({ range, propertyId }) {
@@ -577,27 +651,22 @@ function ExportButton({ range, propertyId }) {
         to: range.to,
         ...(propertyId ? { property_id: propertyId } : {}),
       })
-      if (!rows.length) return alert('Nothing to export for those dates.')
+      if (!rows.length) {
+        alert('Nothing to export for those dates.')
+        return
+      }
 
-      await downloadXlsx(
-        `valet-guests-${range.to}.xlsx`,
+      downloadCsv(
+        `valet-guests-${range.to}.csv`,
         COLUMNS,
         rows.map((r) => ({
-          // service_date, NOT parked_at. A car checked in at 01:00 belongs to
-          // the night before, and the whole valet system agrees on that.
-          date: r.service_date ?? '',
-          property: r.property_name ?? '',
           name: r.guest_name ?? '',
           phone: r.guest_phone ?? '',
-          car: r.car_number ?? '',
           tier: r.car_tier ?? '',
-          // English names, not the _hi variants: the file is for payroll and
-          // comparison, and one stable spelling per person beats matching
-          // whichever language the exporter happened to have selected.
-          parkedBy: r.parked_by ?? '',
-          fetchedBy: r.fetched_by ?? '',
         })),
       )
+    } catch (err) {
+      alert(err.message ?? 'Could not build the file.')
     } finally {
       setBusy(false)
     }
@@ -605,50 +674,44 @@ function ExportButton({ range, propertyId }) {
 
   return (
     <button onClick={onExport} disabled={busy}>
-      {busy ? 'Preparing…' : 'Export to Excel'}
+      {busy ? 'Preparing…' : 'Download CSV'}
     </button>
   )
 }
 ```
 
-**`token_number` is deliberately not a column.** It is a per-property,
-per-day counter, so across a date range or several properties the same number
-repeats constantly and identifies nothing — and as digits in a text cell it puts
-a warning triangle on every row. `Date` + `Property` + `Car` is the identifier
-that actually works.
+### 8.3 Three things worth knowing
 
-### 8.4 Four traps in `write-excel-file` v4
+**One row per CAR, not per guest.** `/records` returns vehicles, so a guest who
+came twice in the range appears twice, and a regular appears every visit. If you
+want one row per person, dedupe on `guest_phone` before passing the rows in —
+the phone is the identity in this system, not the name.
 
-All four cost real time on the valet side. None of them fail the build — they
-fail silently at runtime, or produce a file with no error at all.
+**Phone numbers do NOT survive Excel unless you force them to text.** This was
+tried the naive way first and it failed — a real export opened as:
 
-| Trap | Symptom | Fix |
-|---|---|---|
-| `writeXlsxFile()` does not download | Builds the whole spreadsheet, no file, **no error** | It returns `{ toBlob(), toFile() }`. One must be called. There is no `fileName` option. |
-| `schema:` was removed in v4 | Throws `` `schema` parameter was removed `` on click | Use `columns:`, and note `value:` moved into a nested `cell()` that returns the cell object |
-| `color:` was renamed in 3.x | Header band renders with black text, style looks ignored | `textColor:` |
-| Its own `.toFile()` revokes after 100ms | A large export **cancels** part-way, silently | Take `.toBlob()` and download it yourself, releasing on `pagehide` — as in 8.2 |
-
-One more, on bundling: if your build config has a `manualChunks` rule that
-sweeps `node_modules` into a vendor chunk, it will pull this library into the
-eagerly-preloaded chunk and defeat the `await import()` entirely — every user
-downloads ~60KB for a button they cannot see. Exclude it:
-
-```js
-if (id.includes('write-excel-file')) return undefined
+```
+Guest name   Number        Car tier
+Kbks         6.576E+09     Standard
+Msm          1E+10         VIP
 ```
 
-### 8.5 About the green triangles
+CSV carries no cell types, so Excel guesses "number". Widening the column makes
+the digits reappear, which is why this is easy to dismiss as cosmetic — it is
+not, because every person who opens the file has to do it again. `text: true` on
+that column is the fix, and 8.1 explains why the `="…"` goes in unquoted.
 
-Excel puts a *"number stored as text"* warning triangle on the phone column.
-That is expected and correct — the cells are strings on purpose so `0123456789`
-keeps its leading zero. Do not "fix" it by making them numbers.
+**Do not add the token number.** It is a per-property, per-day counter, so across
+a date range or several properties the same number repeats constantly and
+identifies nothing.
 
 ---
 
-## 9. Valet-side setup
+## 9. Valet-side setup — ALREADY DONE
 
-*For the valet team, not the Ambria Admin developer.*
+> **If you are working on Ambria Admin, skip this section.** It is done, and it
+> is on a Supabase project you do not have access to. It is kept here as the
+> record of what was set up, and for rotating the key later.
 
 1. **Generate a key** (32+ bytes; the function refuses anything shorter):
 
@@ -670,7 +733,7 @@ keeps its leading zero. Do not "fix" it by making them numbers.
 4. **Deploy:**
 
    ```bash
-   supabase functions deploy valet-report --no-verify-jwt
+   supabase functions deploy valet_report --no-verify-jwt
    ```
 
    `--no-verify-jwt` is required. Ambria Admin's JWTs are signed by a different

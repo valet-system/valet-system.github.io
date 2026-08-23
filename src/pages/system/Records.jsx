@@ -56,13 +56,13 @@ import RangePicker, { PRESETS, presetRange } from '@/components/ui/RangePicker'
 import { useT } from '@/i18n'
 import { supabase, describeDbError } from '@/supabase'
 import {
+  downloadCsv,
   formatDate,
   formatPhone,
   istToday,
   personName,
   prettyCarNumber,
 } from '@/utils/format'
-import { downloadXlsx } from '@/utils/xlsx'
 
 const PAGE = 100
 
@@ -178,7 +178,7 @@ export default function Records() {
     // fetched_by_hi, and in doing so renamed the column to `total_count`. This
     // line kept reading total_rows, got undefined, and coalesced to 0 — so:
     //
-    //   • the Excel button was disabled forever, since disabled={total === 0}
+    //   • the export button was disabled forever, since disabled={total === 0}
     //   • pagination collapsed to a single page, because pages is derived from
     //     total, making every record past the first 100 unreachable
     //   • the footer read "0 records" under a screen full of them
@@ -242,66 +242,59 @@ export default function Records() {
       return
     }
 
-    // EIGHT COLUMNS, and the narrowness this replaced was a principle applied
-    // one column too far.
+    // THREE COLUMNS, on request: who came, what they drove, how to reach them.
+    // Phone LAST, deliberately — see the block above the call for why.
     //
-    // It was four — name, number, tier, parked by — on the reasoning that the
-    // table is for verifying and the file is for taking away, so "just one more
-    // column" is how an export becomes a database dump nobody can open. That
-    // reasoning is right, and it still governs what is NOT here: notes (free
-    // text, often long), timestamps beyond the date, parking location, retrieval
-    // counts, status. Those belong on the screen, read beside everything else.
+    // Everything else the table shows stays on the SCREEN — date, property, car
+    // number, who parked it, who fetched it, notes, status, retrieval counts.
+    // That is the division this file is built on: the table is for verifying a
+    // visit, the export is for taking a guest list away.
     //
-    // But it had left out the two the file cannot work without:
+    // ── WHAT THE NARROWNESS COSTS, SO NOBODY IS SURPRISED ───────────────
+    // No DATE column. The filename carries the export date, not the visit date,
+    // so a range covering a month produces names with nothing to sort them by.
+    // No PROPERTY column either, and a system admin exports across all four
+    // sites — so two guests from two sites are indistinguishable in the file.
     //
-    //   DATE      the filename carried the EXPORT date; no row carried the
-    //             VISIT date. The range picker reaches a year, so this produced
-    //             thousands of names that cannot be sorted or reconciled.
-    //   PROPERTY  a system admin exports across all four sites and nothing in
-    //             the file said which site a row came from.
+    // Both were deliberate. If either ever needs answering, the row is already
+    // being read here and the field is already fetched; it is one line.
     //
-    // Car identifies a row when somebody queries it later.
+    // ── KEYS ARE THE HEADERS ────────────────────────────────────────────
+    // downloadCsv takes the header row from Object.keys() of the first row, so
+    // these keys ARE the column titles. Spelled out here rather than mapped
+    // through a separate label list, because a two-place definition of one
+    // column is how a header ends up disagreeing with the data under it.
     //
-    // Token is deliberately NOT here, though it is on the screen. It is a
-    // per-property, per-day counter, so across a range or across four sites the
-    // same number repeats constantly and identifies nothing — and being digits
-    // in a text cell it drew a warning triangle on every row for a column
-    // nobody could use. Date + Property + Car is the identifier that works.
+    // ── ONE ROW PER CAR, NOT PER GUEST ──────────────────────────────────
+    // A guest who visited twice in the range appears twice. Deliberate: the
+    // count matters, and deduping would quietly turn a visit log into a contact
+    // list without saying so.
+    // ═══════════════════════════════════════════════════════════════════
+    // >>> 'Number' MUST STAY THE LAST COLUMN. Do not add one after it. <<<
     //
-    // ── WIDTHS ARE WHY THIS IS xlsx AND NOT csv ─────────────────────────
-    // CSV cannot carry a column width, and Excel renders a too-narrow date as
-    // ######## — which reads as missing data, not as a narrow column. It was
-    // read exactly that way. A width fixes the cause, and the ="…" wrappers CSV
-    // needed to protect leading zeros are gone with it.
-    await downloadXlsx(
-      `valet-guests-${istToday()}.xlsx`,
-      [
-        // Widths in characters, sized to the longest real VALUE rather than to
-        // the header — "Ambria Pushpanjali" is the widest thing in this file.
-        { key: 'date', label: 'Date', width: 12 },
-        { key: 'property', label: 'Property', width: 20 },
-        { key: 'name', label: 'Guest', width: 22 },
-        { key: 'phone', label: 'Number', width: 14 },
-        { key: 'car', label: 'Car', width: 12 },
-        { key: 'tier', label: 'Tier', width: 10 },
-        { key: 'parkedBy', label: 'Parked by', width: 18 },
-        { key: 'fetchedBy', label: 'Fetched by', width: 18 },
-      ],
+    // CSV cannot carry a column width — it is a text file, there is nowhere to
+    // put one — so Excel opens every column at its default 8.43 characters and a
+    // ten-digit phone does not fit. The { text: } option below stops Excel
+    // rendering it as 6.576E+09, but it cannot make the column wider.
+    //
+    // What DOES make it readable: Excel spills text past a cell's edge when the
+    // cells to its right are empty. As the last of three columns, the phone
+    // overflows into D onward and shows in full at the default width.
+    //
+    // Add a fourth column and that stops instantly — the phone starts being
+    // clipped again and nothing about the change will look related to it. If a
+    // fourth column is ever needed, put it BEFORE this one.
+    // ═══════════════════════════════════════════════════════════════════
+    downloadCsv(
+      `valet-guests-${istToday()}.csv`,
       all.map((r) => ({
-        // The service date, not parked_at: a car checked in at 01:00 belongs to
-        // the night before, and the whole system agrees on that boundary.
-        date: r.service_date ?? '',
-        property: r.property_name ?? '',
-        name: r.guest_name ?? '',
-        phone: r.guest_phone ?? '',
-        car: r.car_number ?? '',
-        tier: r.car_tier ?? '',
-        // English, like the Operator column in the Reviews export: the file is
-        // for payroll and comparison, and one stable spelling per person beats
-        // matching whichever language the exporter had selected.
-        parkedBy: r.parked_by ?? '',
-        fetchedBy: r.fetched_by ?? '',
+        'Guest name': r.guest_name ?? '',
+        'Car tier': r.car_tier ?? '',
+        Number: r.guest_phone ?? '',
       })),
+      // Without this Excel reads a phone as a number and shows 6.576E+09.
+      // Measured on a real export — see downloadCsv for the evidence.
+      { text: ['Number'] },
     )
 
     toast.success(t('records.exported', { n: all.length.toLocaleString() }))
@@ -337,7 +330,7 @@ export default function Records() {
               loadingText={t('records.preparing')}
               disabled={total === 0}
             >
-              {t('records.excel')}
+              {t('records.csv')}
             </Button>
           </>
         }

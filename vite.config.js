@@ -21,18 +21,18 @@ export default defineConfig({
         manualChunks(id) {
           if (!id.includes('node_modules')) return undefined
 
-          // LEFT TO ROLLUP, on purpose — do not name a chunk for this.
+          // A NOTE FOR WHOEVER ADDS A BIG, RARELY-USED DEPENDENCY HERE.
           //
-          // The spreadsheet writer is only reached through `await import()` in
-          // src/utils/xlsx.js, so Rollup will give it its own async chunk and
-          // nobody downloads it until they click Export.
+          // A spreadsheet writer used to live in this list, reached only through
+          // `await import()` so that nobody downloaded it until they clicked
+          // Export. Naming a chunk for it broke exactly that: every unnamed
+          // dependency falls through to 'vendor' below, vendor is in the entry
+          // graph, and the entry graph is preloaded from index.html. Measured,
+          // it went from "on demand for one admin" to "78 kB on first paint for
+          // every operator", and appeared in index.html as a preload.
           //
-          // Naming it here breaks that. Every unnamed dependency falls through
-          // to 'vendor' below, vendor is in the entry graph, and the entry graph
-          // is preloaded from index.html — so it went from "loaded on demand by
-          // a system admin" to "78 kB loaded on first paint by every operator".
-          // Measured: it appeared in index.html as a preload.
-          if (id.includes('write-excel-file')) return undefined
+          // So if you add something lazy, `return undefined` for it and let
+          // Rollup give it its own async chunk.
 
           if (id.includes('@supabase')) return 'supabase'
           if (id.includes('react-router') || id.includes('@remix-run')) return 'router'

@@ -465,26 +465,63 @@ export function percent(part, whole, decimals = 0) {
 }
 
 /**
- * Builds a CSV and triggers a download. Used by admin/Reviews.
+ * Builds a CSV and triggers a download. Used by system/Records and admin/Reviews.
  *
- * The `="..."` wrapper on phone numbers is deliberate: without it Excel reads
- * 9876543210 as a number and shows 9.87654E+09, and strips any leading zero.
- * Admins open these in Excel, not a text editor.
+ * @param filename e.g. 'valet-guests-2026-08-23.csv'
+ * @param rows     plain objects. Object.keys() of the FIRST row becomes the
+ *                 header, so the keys are the column titles.
+ * @param options  { text: ['Number'] } — columns Excel must not treat as numbers.
+ *
+ * ── WHY `text` HAS TO EXIST ───────────────────────────────────────────
+ * CSV carries no cell types, so Excel guesses, and it guesses "number" for a
+ * phone. MEASURED, from a real export opened in Excel:
+ *
+ *     Guest name   Number        Car tier
+ *     Kbks         6.576E+09     Standard
+ *     Msm          1E+10         VIP
+ *
+ * The digits are still in the file — Excel is only displaying them that way —
+ * but nobody can read the column, and widening it is a per-open workaround, not
+ * a fix. A leading zero would additionally be lost for real.
+ *
+ * A previous version of this comment claimed the wrapper below was already
+ * being applied. It was not: the code had no such branch, so every phone
+ * exported as a bare number. The comment was the only thing protecting them.
  */
-export function downloadCsv(filename, rows) {
+export function downloadCsv(filename, rows, options = {}) {
   if (!rows?.length) return
 
   const headers = Object.keys(rows[0])
-  const escape = (value) => {
-    if (value == null) return ''
+  const asText = new Set(options.text ?? [])
+
+  const cell = (header, value) => {
+    // '' as well as null, and the empty string is the one that matters: callers
+    // write `r.guest_phone ?? ''`, so a guest with no number arrives here as ''.
+    // Left to fall through, a text column would emit ="" — which LOOKS blank in
+    // Excel but is a formula, so ISBLANK and COUNTA both disagree with the eye.
+    if (value == null || value === '') return ''
     const s = String(value)
+    const needsQuoting = /[",\n\r]/.test(s)
+
+    // ="…" is read by Excel as a formula returning a string, which pins the
+    // value to TEXT: no scientific notation, no lost leading zero, and no
+    // dependence on how wide the column happens to be.
+    //
+    // It must go in UNQUOTED — wrapping it in quotes makes Excel show the
+    // literal ="9876543210", which is worse than the problem. That is why the
+    // needsQuoting check comes first: a value with a comma in it would break the
+    // row, so it falls through to ordinary quoting instead. Phone numbers,
+    // tokens and registrations never contain one, so in practice this always
+    // takes the text path — but it degrades safely rather than corrupting a row.
+    if (asText.has(header) && !needsQuoting) return `="${s}"`
+
     // Quote if it contains a comma, quote or newline; double any inner quotes.
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+    return needsQuoting ? `"${s.replace(/"/g, '""')}"` : s
   }
 
   const csv = [
     headers.join(','),
-    ...rows.map((row) => headers.map((h) => escape(row[h])).join(',')),
+    ...rows.map((row) => headers.map((h) => cell(h, row[h])).join(',')),
   ].join('\r\n')
 
   // BOM so Excel detects UTF-8 and renders Hindi names correctly.
@@ -494,9 +531,9 @@ export function downloadCsv(filename, rows) {
 /**
  * Hands a Blob to the user as a file.
  *
- * Extracted so the spreadsheet export shares it — see utils/xlsx. The library
- * that builds the .xlsx has its own downloader that revokes the object URL
- * after 100ms, which is the same race described below with a shorter fuse.
+ * Extracted when a spreadsheet export briefly shared it. That is gone now, but
+ * this stays separate from downloadCsv above: the revoke timing below is the
+ * part worth having in one place, and it is the part everyone gets wrong.
  */
 export function downloadBlob(filename, blob) {
   const url = URL.createObjectURL(blob)
