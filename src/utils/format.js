@@ -488,7 +488,17 @@ export function downloadCsv(filename, rows) {
   ].join('\r\n')
 
   // BOM so Excel detects UTF-8 and renders Hindi names correctly.
-  const blob = new Blob(['﻿', csv], { type: 'text/csv;charset=utf-8;' })
+  downloadBlob(filename, new Blob(['﻿', csv], { type: 'text/csv;charset=utf-8;' }))
+}
+
+/**
+ * Hands a Blob to the user as a file.
+ *
+ * Extracted so the spreadsheet export shares it — see utils/xlsx. The library
+ * that builds the .xlsx has its own downloader that revokes the object URL
+ * after 100ms, which is the same race described below with a shorter fuse.
+ */
+export function downloadBlob(filename, blob) {
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url

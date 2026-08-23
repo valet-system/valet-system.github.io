@@ -56,13 +56,13 @@ import RangePicker, { PRESETS, presetRange } from '@/components/ui/RangePicker'
 import { useT } from '@/i18n'
 import { supabase, describeDbError } from '@/supabase'
 import {
-  downloadCsv,
   formatDate,
   formatPhone,
   istToday,
   personName,
   prettyCarNumber,
 } from '@/utils/format'
+import { downloadXlsx } from '@/utils/xlsx'
 
 const PAGE = 100
 
@@ -242,50 +242,65 @@ export default function Records() {
       return
     }
 
-    // NINE COLUMNS, and the narrowness this replaced was a principle applied
+    // EIGHT COLUMNS, and the narrowness this replaced was a principle applied
     // one column too far.
     //
     // It was four — name, number, tier, parked by — on the reasoning that the
     // table is for verifying and the file is for taking away, so "just one more
     // column" is how an export becomes a database dump nobody can open. That
-    // reasoning is right, and it still governs what is NOT here.
+    // reasoning is right, and it still governs what is NOT here: notes (free
+    // text, often long), timestamps beyond the date, parking location, retrieval
+    // counts, status. Those belong on the screen, read beside everything else.
     //
-    // But it had left out the two columns the file cannot work without:
+    // But it had left out the two the file cannot work without:
     //
     //   DATE      the filename carried the EXPORT date; no row carried the
-    //             VISIT date. The range picker goes out to a year, so this
-    //             produced thousands of names that cannot be sorted, filed, or
-    //             reconciled against anything. Not a nice-to-have.
+    //             VISIT date. The range picker reaches a year, so this produced
+    //             thousands of names that cannot be sorted or reconciled.
     //   PROPERTY  a system admin exports across all four sites and nothing in
     //             the file said which site a row came from.
     //
-    // Token and Car are here because they are how a row is identified when
-    // somebody queries it — "which car was this" has no answer without them.
+    // Car identifies a row when somebody queries it later.
     //
-    // Still deliberately out: notes (free text, often long), timestamps beyond
-    // the date, parking location, retrieval counts, status. Those are for the
-    // screen, where they can be read next to everything else.
-    downloadCsv(
-      `valet-guests-${istToday()}.csv`,
+    // Token is deliberately NOT here, though it is on the screen. It is a
+    // per-property, per-day counter, so across a range or across four sites the
+    // same number repeats constantly and identifies nothing — and being digits
+    // in a text cell it drew a warning triangle on every row for a column
+    // nobody could use. Date + Property + Car is the identifier that works.
+    //
+    // ── WIDTHS ARE WHY THIS IS xlsx AND NOT csv ─────────────────────────
+    // CSV cannot carry a column width, and Excel renders a too-narrow date as
+    // ######## — which reads as missing data, not as a narrow column. It was
+    // read exactly that way. A width fixes the cause, and the ="…" wrappers CSV
+    // needed to protect leading zeros are gone with it.
+    await downloadXlsx(
+      `valet-guests-${istToday()}.xlsx`,
+      [
+        // Widths in characters, sized to the longest real VALUE rather than to
+        // the header — "Ambria Pushpanjali" is the widest thing in this file.
+        { key: 'date', label: 'Date', width: 12 },
+        { key: 'property', label: 'Property', width: 20 },
+        { key: 'name', label: 'Guest', width: 22 },
+        { key: 'phone', label: 'Number', width: 14 },
+        { key: 'car', label: 'Car', width: 12 },
+        { key: 'tier', label: 'Tier', width: 10 },
+        { key: 'parkedBy', label: 'Parked by', width: 18 },
+        { key: 'fetchedBy', label: 'Fetched by', width: 18 },
+      ],
       all.map((r) => ({
         // The service date, not parked_at: a car checked in at 01:00 belongs to
         // the night before, and the whole system agrees on that boundary.
-        Date: r.service_date ?? '',
-        Property: r.property_name ?? '',
-        Token: r.token_number ?? '',
-        Name: r.guest_name ?? '',
-        // ="…" forces Excel to keep it as TEXT. Without it a 10-digit number is
-        // read as a number, loses any leading zero, and renders as 9.87654E+09 —
-        // which makes the column useless for the one thing it is for.
-        Number: r.guest_phone ? `="${r.guest_phone}"` : '',
-        // Same treatment, same reason: a plate like 0012 loses its zeros.
-        Car: r.car_number ? `="${r.car_number}"` : '',
-        Tier: r.car_tier ?? '',
+        date: r.service_date ?? '',
+        property: r.property_name ?? '',
+        name: r.guest_name ?? '',
+        phone: r.guest_phone ?? '',
+        car: r.car_number ?? '',
+        tier: r.car_tier ?? '',
         // English, like the Operator column in the Reviews export: the file is
         // for payroll and comparison, and one stable spelling per person beats
         // matching whichever language the exporter had selected.
-        'Parked by': r.parked_by ?? '',
-        'Fetched by': r.fetched_by ?? '',
+        parkedBy: r.parked_by ?? '',
+        fetchedBy: r.fetched_by ?? '',
       })),
     )
 
