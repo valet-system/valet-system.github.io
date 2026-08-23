@@ -242,26 +242,50 @@ export default function Records() {
       return
     }
 
-    // FOUR COLUMNS — name, number, tier, and who parked it.
+    // NINE COLUMNS, and the narrowness this replaced was a principle applied
+    // one column too far.
     //
-    // The table on screen shows more because that is what you search and verify
-    // against; the file is for taking away and stays deliberately narrow. Adding
-    // "just one more" column is how an export becomes a database dump nobody can
-    // open — so "Parked by" is here only because comparing operator workload is
-    // the stated reason this column exists at all. Anything else stays out.
+    // It was four — name, number, tier, parked by — on the reasoning that the
+    // table is for verifying and the file is for taking away, so "just one more
+    // column" is how an export becomes a database dump nobody can open. That
+    // reasoning is right, and it still governs what is NOT here.
+    //
+    // But it had left out the two columns the file cannot work without:
+    //
+    //   DATE      the filename carried the EXPORT date; no row carried the
+    //             VISIT date. The range picker goes out to a year, so this
+    //             produced thousands of names that cannot be sorted, filed, or
+    //             reconciled against anything. Not a nice-to-have.
+    //   PROPERTY  a system admin exports across all four sites and nothing in
+    //             the file said which site a row came from.
+    //
+    // Token and Car are here because they are how a row is identified when
+    // somebody queries it — "which car was this" has no answer without them.
+    //
+    // Still deliberately out: notes (free text, often long), timestamps beyond
+    // the date, parking location, retrieval counts, status. Those are for the
+    // screen, where they can be read next to everything else.
     downloadCsv(
       `valet-guests-${istToday()}.csv`,
       all.map((r) => ({
+        // The service date, not parked_at: a car checked in at 01:00 belongs to
+        // the night before, and the whole system agrees on that boundary.
+        Date: r.service_date ?? '',
+        Property: r.property_name ?? '',
+        Token: r.token_number ?? '',
         Name: r.guest_name ?? '',
         // ="…" forces Excel to keep it as TEXT. Without it a 10-digit number is
         // read as a number, loses any leading zero, and renders as 9.87654E+09 —
         // which makes the column useless for the one thing it is for.
         Number: r.guest_phone ? `="${r.guest_phone}"` : '',
-        'Car tier': r.car_tier ?? '',
+        // Same treatment, same reason: a plate like 0012 loses its zeros.
+        Car: r.car_number ? `="${r.car_number}"` : '',
+        Tier: r.car_tier ?? '',
         // English, like the Operator column in the Reviews export: the file is
         // for payroll and comparison, and one stable spelling per person beats
         // matching whichever language the exporter had selected.
         'Parked by': r.parked_by ?? '',
+        'Fetched by': r.fetched_by ?? '',
       })),
     )
 
