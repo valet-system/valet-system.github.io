@@ -693,8 +693,6 @@ export const en = {
   'queue.waitingForCar': 'Waiting for a car',
   'queue.couldNotLoad': 'Could not load the queue',
   'queue.nobodyIsWaiting': 'Nobody is waiting',
-  'queue.nobodyIsWaitingBody':
-    'Requests appear here the moment a guest asks for their car. This screen will sound an alert.',
   'queue.waitingFor': 'Waiting {ago}',
   'queue.noShow': '· no-show ×{n}',
   'queue.assignTo': 'Assign token {token} to',
@@ -1441,8 +1439,6 @@ export const hi = {
   'queue.waitingForCar': 'गाड़ी का इंतज़ार',
   'queue.couldNotLoad': 'लिस्ट लोड नहीं हो सकी',
   'queue.nobodyIsWaiting': 'कोई इंतज़ार में नहीं है',
-  'queue.nobodyIsWaitingBody':
-    'गेस्ट जैसे ही अपनी गाड़ी माँगेंगे, यहाँ दिख जाएगा। यह स्क्रीन आवाज़ भी करेगी।',
   'queue.waitingFor': '{ago} से इंतज़ार',
   'queue.noShow': '· गेस्ट नहीं आए ×{n}',
   'queue.assignTo': 'टोकन {token} किसे देना है',

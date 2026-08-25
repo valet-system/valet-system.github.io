@@ -468,11 +468,15 @@ export default function Dashboard() {
           }
         />
       ) : pending.length === 0 ? (
-        <EmptyState
-          icon="check-circle"
-          title={t('queue.nobodyIsWaiting')}
-          description={t('queue.nobodyIsWaitingBody')}
-        />
+        /* One line, not an EmptyState.
+           The big empty card was right when this section was the whole page —
+           it filled a screen that would otherwise look broken. It is not the
+           whole page any more: the on-site list sits directly below it, so a
+           tall empty box is just distance between the search and the cars. */
+        <p className="flex items-center gap-2 px-1 text-sm text-ink-subtle">
+          <Icon name="check-circle" size={15} />
+          {t('queue.nobodyIsWaiting')}
+        </p>
       ) : (
         <div className="space-y-3">
           {pending.map((task) => (
