@@ -702,7 +702,7 @@ export const en = {
   'queue.noParkedMatch': 'No parked car matches that.',
   'queue.onSite': 'On site now',
   'queue.andMoreOnSite': '+{{n}} more on site — search above to find one.',
-  'queue.sendFor': 'Send for it',
+  'queue.sendFor': 'Send',
   'queue.assign': 'Assign',
   'queue.sentTo': 'Sent to {name}',
   'queue.parking': 'Parking',

@@ -605,12 +605,20 @@ function SendCard({ car, operators, onDispatch }) {
         </div>
       </div>
 
-      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+      {/* ── ONE ROW, EVEN ON A PHONE ────────────────────────────────────
+          Stacked, the select and the button were two full-width bars and the
+          card was mostly controls. Side by side saves a whole row per card, and
+          with a dozen cars on the page that is the difference between scanning
+          the list and scrolling it.
+
+          h-touch stays. The row got shorter by removing one, not by shrinking
+          the target somebody taps with a thumb. */}
+      <div className="mt-3 flex gap-2">
         <select
           value={operatorId}
           onChange={(e) => setOperatorId(e.target.value)}
           aria-label={t('queue.assignTo', { token: car.token_number })}
-          className="h-touch flex-1 rounded-xl border border-line-strong bg-surface px-4 text-base text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
+          className="h-touch min-w-0 flex-1 rounded-xl border border-line-strong bg-surface px-3 text-sm text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 sm:px-4 sm:text-base"
         >
           <option value="">
             {t(operators.length === 0 ? 'queue.everyoneBusy' : 'queue.chooseOperator')}
@@ -627,7 +635,7 @@ function SendCard({ car, operators, onDispatch }) {
           icon="arrow-right"
           disabled={!operatorId}
           onClick={() => onDispatch(car.id, operatorId, car.token_number)}
-          className="sm:w-40"
+          className="shrink-0 sm:w-40"
         >
           {t('queue.sendFor')}
         </Button>
@@ -654,7 +662,9 @@ function PendingCard({ task, operators, onAssign }) {
           <p className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-subtle">
             {t('common.token')}
           </p>
-          <p className="tnum text-5xl font-bold leading-none tracking-tight text-ink">
+          {/* 4xl on a phone, 5xl from sm up. At 5xl on a narrow screen the
+              token was taller than the two lines of guest detail beside it. */}
+          <p className="tnum text-4xl font-bold leading-none tracking-tight text-ink sm:text-5xl">
             {vehicle?.token_number ?? '—'}
           </p>
         </div>
@@ -694,12 +704,13 @@ function PendingCard({ task, operators, onAssign }) {
         </div>
       </div>
 
-      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+      {/* One row on a phone too — see SendCard for why. */}
+      <div className="mt-3 flex gap-2">
         <select
           value={operatorId}
           onChange={(e) => setOperatorId(e.target.value)}
           aria-label={t('queue.assignTo', { token: vehicle?.token_number })}
-          className="h-touch flex-1 rounded-xl border border-line-strong bg-surface px-4 text-base text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
+          className="h-touch min-w-0 flex-1 rounded-xl border border-line-strong bg-surface px-3 text-sm text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 sm:px-4 sm:text-base"
         >
           <option value="">
             {t(operators.length === 0 ? 'queue.everyoneBusy' : 'queue.chooseOperator')}
@@ -716,7 +727,7 @@ function PendingCard({ task, operators, onAssign }) {
           icon="arrow-right"
           disabled={!operatorId}
           onClick={assign}
-          className="sm:w-40"
+          className="shrink-0 sm:w-40"
         >
           {t('queue.assign')}
         </Button>
