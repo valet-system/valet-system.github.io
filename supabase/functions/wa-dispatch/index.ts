@@ -90,23 +90,67 @@ const TEMPLATE_ENV = {
 }
 
 /**
+ * A guest name Meta will accept as a template parameter.
+ *
+ * Two things it has to survive:
+ *
+ *   EMPTY. Meta rejects an empty parameter outright, and an operator can check
+ *   a car in without a name. That would fail the whole message over a blank
+ *   field, so it becomes "Guest" — the message still reads correctly.
+ *
+ *   WHITESPACE. A parameter may not contain a newline, a tab, or four or more
+ *   consecutive spaces. A name pasted from somewhere else can carry any of
+ *   those, so they are collapsed to single spaces rather than trusted.
+ */
+function guestLabel(name: unknown): string {
+  const cleaned = String(name ?? '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return cleaned || 'Guest'
+}
+
+/**
  * The body parameters each template expects, in order.
  *
  * Meta matches these positionally to {{1}}, {{2}} … in the approved body, so
  * the ORDER here is part of the contract with the template. If a template is
  * re-approved with its variables rearranged, this is the list to change.
+ *
+ * ── THE ORDER IS NOT THE SAME IN EVERY TEMPLATE ───────────────────────
+ * Read these against the approved bodies, because {{2}} does not mean the same
+ * thing in both of the two-or-more-variable templates:
+ *
+ *   car_park      Hello {{3}}, … Token No. {{1}} … Vehicle No. {{2}}
+ *   car_reparked  Hi {{2}}, your vehicle for Token No. {{1}} …
+ *
+ * So the name is THIRD in one and SECOND in the other. Getting this wrong does
+ * not error — Meta fills the slots positionally and the guest is sent a message
+ * addressed to their own car number.
+ *
+ * A count mismatch DOES error, with 132001-series "number of parameters does
+ * not match". The template's `example` values are only shown to Meta's
+ * reviewer; they are never substituted at send time, so every variable in the
+ * body has to be supplied here on every send.
  */
 function templateParams(type: string, row: Record<string, unknown>) {
   const token = String(row.token_number ?? '')
   const car = String(row.car_number ?? '')
+  const name = guestLabel(row.guest_name)
 
   switch (type) {
+    // car_park: Hello {{3}}, … Token {{1}} … Vehicle {{2}}
     case 'car_parked':
-      return [token, car]
-    case 'car_delivered':
+      return [token, car, name]
+
+    // car_reparked: Hi {{2}}, … Token {{1}} …
     case 'not_available':
+      return [token, name]
+
+    // car_deliver: … Token {{1}} … — one variable, no name.
+    case 'car_delivered':
     case 'car_returned':
       return [token]
+
     default:
       return [token]
   }
@@ -152,7 +196,7 @@ Deno.serve(async (req) => {
   // than a copy of the vehicle row that can drift from it.
   const { data: queued, error } = await supabase
     .from('wa_outbox')
-    .select('id, property_id, vehicle_id, task_id, message_type, attempts, parked_vehicles(token_number, car_number, guest_phone)')
+    .select('id, property_id, vehicle_id, task_id, message_type, attempts, parked_vehicles(token_number, car_number, guest_phone, guest_name)')
     .eq('status', 'queued')
     .lt('attempts', MAX_ATTEMPTS)
     .order('created_at', { ascending: true })
