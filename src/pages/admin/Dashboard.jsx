@@ -74,6 +74,16 @@ import { ACTIVE_TASK_STATUSES, CAR_TIERS, TASK_TYPES, VEHICLE_AT_REST, VEHICLE_S
  * must keep working on a database that has not run it yet — a guest is
  * standing at the porch waiting for one of these rows. See selectOptional.
  */
+/**
+ * How many on-site cars are rendered at once.
+ *
+ * Not a limit on what can be reached — the search filters the whole set, so any
+ * car is one or two keystrokes away. This is only a ceiling on how many cards
+ * the browser lays out at rest, because a busy property has a couple of hundred
+ * and laying all of them out makes the page crawl on the phone this is read on.
+ */
+const SHOW_ON_SITE = 40
+
 const TASK_SELECT_BASE = `
   id, task_type, status, return_count, created_at, assigned_at, pickup_started_at,
   assigned_operator_id,
@@ -119,9 +129,7 @@ export default function Dashboard() {
    * the urgent queue is what this page is for. Empty search, nothing rendered.
    */
   const [carQuery, setCarQuery] = useState('')
-  const [carTerm, setCarTerm] = useState('')
-  const [found, setFound] = useState([])
-  const [searching, setSearching] = useState(false)
+  const [parkedCars, setParkedCars] = useState([])
   const [active, setActive] = useState([])
   const [operators, setOperators] = useState([])
   /** Every status string for today's cars, in one array. Counted in `counts`. */
@@ -156,7 +164,7 @@ export default function Dashboard() {
         .in('status', ACTIVE_TASK_STATUSES)
         .order('assigned_at', { ascending: true })
 
-    const [pendingRes, activeRes, statusRes, opsRes] = await Promise.all([
+    const [pendingRes, activeRes, statusRes, opsRes, carsRes] = await Promise.all([
       selectOptional(
         () => pendingQuery(TASK_SELECT),
         () => pendingQuery(TASK_SELECT_NO_HI),
@@ -177,6 +185,10 @@ export default function Dashboard() {
         .eq('property_id', propertyId)
         .eq('service_date', today),
       availableOperators(propertyId),
+      // The cars themselves, for the "on site" list under the queue. The
+      // status-only query above cannot serve it — that one deliberately fetches
+      // one column so the tiles are cheap, and this needs the whole row.
+      supabase.rpc('search_todays_cars', { p_query: null, p_limit: 500 }),
     ])
 
     if (pendingRes.error) {
@@ -193,6 +205,14 @@ export default function Dashboard() {
     // A failed operator fetch is not fatal — the queue still has to render, and
     // an admin can see who is waiting even if the dropdown is temporarily empty.
     if (opsRes.ok) setOperators(opsRes.rows ?? [])
+
+    // Every car on site today, for the list below the queue. Only the at-rest
+    // ones: a car being fetched, standing at the gate, or already handed over
+    // must not be offered, because sending a second operator for it produces
+    // two people and one car.
+    setParkedCars(
+      (carsRes?.data ?? []).filter((c) => VEHICLE_AT_REST.includes(c.status)),
+    )
     setLoading(false)
 
     // ── alarm on a genuinely new request ──────────────────────────────
@@ -261,34 +281,40 @@ export default function Dashboard() {
     }
   }, [statuses])
 
-  // 300ms, same as every other search in the app: a typed car number is one
-  // query instead of ten.
-  useEffect(() => {
-    const id = setTimeout(() => setCarTerm(carQuery.trim()), 300)
-    return () => clearTimeout(id)
-  }, [carQuery])
+  /**
+   * The cars on site that nobody has asked for yet.
+   *
+   * Filtered from the list already loaded rather than searched on the server:
+   * the whole set is in memory, so typing filters instantly and costs no round
+   * trip. A debounced query per keystroke would be slower and no more correct.
+   *
+   * Anything with a pending request is excluded — those are the cards above,
+   * and showing a car in both lists invites dispatching it twice.
+   */
+  const waitingIds = useMemo(
+    () => new Set(pending.map((task) => task.parked_vehicles?.id).filter(Boolean)),
+    [pending],
+  )
 
-  useEffect(() => {
-    if (carTerm.length < 2) {
-      setFound([])
-      return
-    }
-    let cancelled = false
-    setSearching(true)
-    supabase
-      .rpc('search_todays_cars', { p_query: carTerm, p_limit: 20 })
-      .then(({ data }) => {
-        if (cancelled) return
-        // Only cars actually on site. A car already being fetched, at the gate,
-        // or handed over must not be offered — sending a second operator for it
-        // produces two people and one car.
-        setFound((data ?? []).filter((c) => VEHICLE_AT_REST.includes(c.status)))
-        setSearching(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [carTerm])
+  const available = useMemo(() => {
+    const q = carQuery.trim().toLowerCase()
+    const digits = q.replace(/\D/g, '')
+
+    return parkedCars.filter((car) => {
+      if (waitingIds.has(car.id)) return false
+      if (!q) return true
+
+      // The four things somebody at a desk actually has to hand: the slip, the
+      // plate, the name, or the number the guest reads out.
+      return (
+        String(car.token_number) === digits ||
+        (car.car_number ?? '').toLowerCase().includes(q.replace(/\s/g, '')) ||
+        (car.guest_name ?? '').toLowerCase().includes(q) ||
+        (car.guest_name_hi ?? '').includes(carQuery.trim()) ||
+        (digits.length >= 4 && (car.guest_phone ?? '').includes(digits))
+      )
+    })
+  }, [parkedCars, waitingIds, carQuery])
 
   /**
    * Send someone for a car the guest never asked for.
@@ -311,10 +337,10 @@ export default function Dashboard() {
         name: assigned ? personName(assigned.name, assigned.name_hi) : result.operator_name,
       }),
     )
-    // Clear the search: that car is now in the queue above, and leaving it in
-    // the results invites a second dispatch of a car already on its way.
+    // Clear the search. The car has moved into the queue above, and load()
+    // drops it out of the on-site list — but a stale filter still showing it
+    // would invite a second dispatch of a car already on its way.
     setCarQuery('')
-    setFound([])
     load()
   }
 
@@ -428,26 +454,6 @@ export default function Dashboard() {
           placeholder={t('queue.searchToSend')}
         />
 
-        {carTerm.length >= 2 && (
-          <div className="mt-3 space-y-3">
-            {searching && found.length === 0 ? (
-              <p className="px-1 text-sm text-ink-subtle">{t('common.loading')}</p>
-            ) : found.length === 0 ? (
-              // Said plainly, because there are two reasons for an empty result
-              // and only one of them is "no such car".
-              <p className="px-1 text-sm text-ink-subtle">{t('queue.noParkedMatch')}</p>
-            ) : (
-              found.map((car) => (
-                <SendCard
-                  key={car.id}
-                  car={car}
-                  operators={operators}
-                  onDispatch={handleDispatch}
-                />
-              ))
-            )}
-          </div>
-        )}
       </div>
 
       {error ? (
@@ -478,6 +484,49 @@ export default function Dashboard() {
             />
           ))}
         </div>
+      )}
+
+      {/* ── ON SITE, NOT ASKED FOR ──────────────────────────────────────
+          Every car in a bay right now. A guest who walks up to the desk is in
+          here, not in the queue above — they never tapped anything.
+
+          Below the queue, not above it: the queue is guests already waiting
+          with a clock running, and nothing should push them down the page. */}
+      {available.length > 0 && (
+        <div className="mt-8">
+          <SectionHeading
+            title={t('queue.onSite')}
+            count={available.length}
+            icon="parking"
+            className="scroll-mt-24"
+            id="queue-onsite"
+          />
+          <div className="space-y-3">
+            {available.slice(0, SHOW_ON_SITE).map((car) => (
+              <SendCard
+                key={car.id}
+                car={car}
+                operators={operators}
+                onDispatch={handleDispatch}
+              />
+            ))}
+          </div>
+
+          {/* Capped, and it SAYS it is capped. Rendering two hundred cards makes
+              the page crawl, and silently showing forty of them would read as
+              "that is all the cars", which is worse than a slow page. */}
+          {available.length > SHOW_ON_SITE && (
+            <p className="mt-3 px-1 text-sm text-ink-subtle">
+              {t('queue.andMoreOnSite', { n: available.length - SHOW_ON_SITE })}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Something was typed and nothing matched — said plainly, because an
+          empty area looks like a list that failed to load. */}
+      {carQuery.trim() && available.length === 0 && (
+        <p className="mt-4 px-1 text-sm text-ink-subtle">{t('queue.noParkedMatch')}</p>
       )}
 
       {active.length > 0 && (
