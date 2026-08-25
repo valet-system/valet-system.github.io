@@ -256,10 +256,39 @@ Deno.serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   )
 
-  const messages = payload?.entry?.[0]?.changes?.[0]?.value?.messages ?? []
+  const value = payload?.entry?.[0]?.changes?.[0]?.value ?? {}
+  const messages = value.messages ?? []
+
+  // ── DELIVERY RECEIPTS ────────────────────────────────────────────────
+  // These arrive on the same webhook as guest replies, and they used to be
+  // dropped as "not ours". That was a real blind spot: wa_outbox writes 'sent'
+  // when the Graph API ACCEPTS a message, which is not the same as the guest
+  // receiving it. Meta reports the actual outcome here, and only here.
+  //
+  // So a message could be accepted, silently filtered, and every screen we own
+  // would still say 'sent' — a guest waiting at the gate and nothing in the
+  // system disagreeing. This does not fix that; it makes it visible.
+  //
+  // Logged rather than stored: a status row arrives for every message several
+  // times over (sent -> delivered -> read), and writing each one back to
+  // wa_outbox would cost more than it tells us. What matters is the failures,
+  // and those are worth reading in full — Meta puts the reason in `errors`,
+  // which is the only place the difference between "filtered", "no WhatsApp on
+  // that number" and "we are rate limited" is ever stated.
+  const statuses = value.statuses ?? []
+  for (const s of statuses) {
+    if (s?.status === 'failed') {
+      // JSON, not a summary. The code AND the title AND any error_data matter,
+      // and guessing which field to keep is how the useful one gets dropped.
+      console.error(
+        `[wa-webhook] DELIVERY FAILED to ${s.recipient_id}: ${JSON.stringify(s.errors ?? [])}`,
+      )
+    } else if (s?.status) {
+      console.log(`[wa-webhook] delivery ${s.status} to ${s.recipient_id}`)
+    }
+  }
+
   if (!messages.length) {
-    // Delivery receipts and read receipts arrive on the same webhook. Not an
-    // error, just not ours.
     return new Response('ok', { status: 200 })
   }
 
