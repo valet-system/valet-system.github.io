@@ -50,7 +50,7 @@ import {
   RowsSkeleton,
   SectionHeadingSkeleton,
 } from '@/components/ui/PageSkeleton'
-import { TierBadge, VehicleStatusBadge } from '@/components/ui/Badge'
+import { RatingBadge, TierBadge, VehicleStatusBadge } from '@/components/ui/Badge'
 import { useToast } from '@/context/ToastContext'
 import RangePicker, { PRESETS, presetRange } from '@/components/ui/RangePicker'
 import { useT } from '@/i18n'
@@ -425,6 +425,10 @@ export default function Records() {
                   <th scope="col" className="px-4 py-3 font-semibold">{t('records.colCar')}</th>
                   <th scope="col" className="px-4 py-3 font-semibold">{t('records.colParkedAt')}</th>
                   <th scope="col" className="px-4 py-3 font-semibold">{t('records.colHandledBy')}</th>
+                  {/* Next to Handled by on purpose: the question this column
+                      exists to answer is "how did THAT operator score", and two
+                      adjacent cells answer it without anyone building a report. */}
+                  <th scope="col" className="px-4 py-3 font-semibold">{t('records.colRating')}</th>
                   <th scope="col" className="px-4 py-3 font-semibold">{t('records.colStatus')}</th>
                 </tr>
               </thead>
@@ -434,7 +438,7 @@ export default function Records() {
                     key={r.id}
                     // ZEBRA, and align-middle rather than align-top.
                     //
-                    // Nine columns across a 72rem table is further than an eye
+                    // Ten columns across a 72rem table is further than an eye
                     // tracks reliably on one hairline border — the row it starts
                     // on is not always the row it finishes on. A stripe is what
                     // carries it across.
@@ -497,6 +501,16 @@ export default function Records() {
                             </span>
                           )}
                         </span>
+                      ) : (
+                        <span className="text-ink-subtle">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {/* A dash, not a blank. Most visits have no rating — the
+                          guest simply did not tap — and an empty cell in a
+                          zebra table reads as data that failed to load. */}
+                      {r.rating ? (
+                        <RatingBadge rating={r.rating} size="sm" />
                       ) : (
                         <span className="text-ink-subtle">—</span>
                       )}
