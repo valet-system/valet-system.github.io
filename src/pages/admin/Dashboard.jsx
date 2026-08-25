@@ -572,7 +572,7 @@ function SendCard({ car, operators, onDispatch }) {
 
   return (
     <Card accent={isVip ? 'vip' : undefined}>
-      <div className="flex items-start gap-4">
+      <div className="flex items-start gap-3 sm:gap-4">
         <div className="shrink-0 text-center">
           <p className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-subtle">
             {t('common.token')}
@@ -597,9 +597,10 @@ function SendCard({ car, operators, onDispatch }) {
             )}
           </p>
 
-          {/* Where to walk to. The operator is being sent somewhere. */}
-          <p className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-surface-sunken px-2.5 py-1.5 text-sm font-semibold text-ink">
-            <Icon name="location" size={15} className="text-ink-subtle" />
+          {/* Where to walk to. Plain text, not a chip — see PendingCard. No
+              waiting time here, because nobody is waiting. */}
+          <p className="mt-1.5 inline-flex items-center gap-1 text-sm font-semibold text-ink">
+            <Icon name="location" size={14} className="text-ink-subtle" />
             {car.parking_location || t('common.notRecorded')}
           </p>
         </div>
@@ -657,7 +658,7 @@ function PendingCard({ task, operators, onAssign }) {
 
   return (
     <Card urgent accent={isVip ? 'vip' : 'danger'}>
-      <div className="flex items-start gap-4">
+      <div className="flex items-start gap-3 sm:gap-4">
         <div className="shrink-0 text-center">
           <p className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-subtle">
             {t('common.token')}
@@ -684,19 +685,28 @@ function PendingCard({ task, operators, onAssign }) {
             )}
           </p>
 
-          {/* Where the operator has to walk to. Without it they are searching
-              a multi-level car park with nothing to go on. */}
-          <p className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-brand-soft px-2.5 py-1.5 text-sm font-semibold text-ink">
-            <Icon name="location" size={15} className="text-ink-subtle" />
-            {vehicle?.parking_location || t('common.notRecorded')}
-          </p>
+          {/* ── TWO FACTS, ONE LINE ───────────────────────────────────────
+              Where to walk to, and how long they have been waiting. Both were a
+              row of their own, and the location was a padded chip on top of
+              that — three rows of chrome for two short strings.
 
-          {/* The number that decides who to assign first. */}
-          <p className="mt-2 flex items-center gap-1.5 text-sm font-semibold text-danger">
-            <Icon name="clock" size={15} />
-            {t('queue.waitingFor', { ago: timeAgo(task.created_at) })}
+              They belong together anyway: the pair is the whole decision. Who
+              has waited longest, and how far is the car.
+
+              Wrapping, not truncating: a parking place can be "L2 Bay B4 near
+              lift" and an operator who reads half of it walks to the wrong
+              floor. */}
+          <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+            <span className="inline-flex items-center gap-1 font-semibold text-ink">
+              <Icon name="location" size={14} className="text-ink-subtle" />
+              {vehicle?.parking_location || t('common.notRecorded')}
+            </span>
+            <span className="inline-flex items-center gap-1 font-semibold text-danger">
+              <Icon name="clock" size={14} />
+              {t('queue.waitingFor', { ago: timeAgo(task.created_at) })}
+            </span>
             {task.return_count > 0 && (
-              <span className="font-normal text-ink-subtle">
+              <span className="text-ink-subtle">
                 {t('queue.noShow', { n: task.return_count })}
               </span>
             )}
