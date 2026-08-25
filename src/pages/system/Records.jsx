@@ -510,7 +510,22 @@ export default function Records() {
                           guest simply did not tap — and an empty cell in a
                           zebra table reads as data that failed to load. */}
                       {r.rating ? (
-                        <RatingBadge rating={r.rating} size="sm" />
+                        <span className="block">
+                          <RatingBadge rating={r.rating} size="sm" />
+                          {/* What they typed, under the badge rather than in a
+                              column of its own. Free text in an eleventh column
+                              would set the width of the whole table from its
+                              longest complaint. Clamped to two lines; the full
+                              text is the cell's title, so hovering reads it. */}
+                          {r.review_comment && (
+                            <span
+                              className="mt-1 line-clamp-2 max-w-[16rem] text-xs italic leading-snug text-ink-muted"
+                              title={r.review_comment}
+                            >
+                              &ldquo;{r.review_comment}&rdquo;
+                            </span>
+                          )}
+                        </span>
                       ) : (
                         <span className="text-ink-subtle">—</span>
                       )}

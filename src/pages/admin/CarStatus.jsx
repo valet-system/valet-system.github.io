@@ -398,6 +398,16 @@ function CarRow({ car }) {
             {car.rating && <RatingBadge rating={car.rating} size="sm" />}
           </div>
 
+          {/* The complaint, in full, on its own line. This is the screen the
+              valet admin has open during the shift — the one person who can
+              still do something about it today. Not truncated for that reason:
+              a half-read complaint is worse than none. */}
+          {car.review_comment && (
+            <p className="mt-1.5 rounded-md bg-surface-sunken px-2.5 py-1.5 text-xs italic leading-snug text-ink-muted">
+              &ldquo;{car.review_comment}&rdquo;
+            </p>
+          )}
+
           <p className="mt-1 truncate text-sm text-ink-muted">
             {personName(car.guest_name, car.guest_name_hi) || t('common.guest')}
             <span className="text-ink-subtle">{t('status.inAt', { time: formatTime(car.parked_at) })}</span>
