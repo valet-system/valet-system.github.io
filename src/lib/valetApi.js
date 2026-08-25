@@ -6,8 +6,8 @@
  * │   Every write in the car lifecycle:                                  │
  * │     checkIn({ guestName, guestPhone, carNumber, carTier, notes })    │
  * │     completeParking(taskId, location)                                │
- * │     requestRetrieval(vehicleId)                                      │
  * │     assignRetrieval(taskId, operatorId)                              │
+ * │     dispatchVehicle(vehicleId, operatorId)                           │
  * │     acceptTask(taskId)                                               │
  * │     startPickup(taskId)                                              │
  * │     guestArrived(taskId)                                             │
@@ -301,20 +301,22 @@ export function completeParking(taskId, location) {
   return call('task_complete_parking', { p_task_id: taskId, p_location: location })
 }
 
-/**
- * "Get My Car", raised from the porch instead of WhatsApp.
- *
- * Creates an UNASSIGNED pending retrieval — who fetches it is the admin's
- * call on the retrieval queue, which is also what the wa-webhook will do
- * when WhatsApp lands.
- */
-export function requestRetrieval(vehicleId) {
-  return call('request_retrieval', { p_vehicle_id: vehicleId })
-}
-
-/** Admin queue: send a named operator to fetch a car. */
+/** Admin queue: send a named operator to fetch a car the guest has asked for. */
 export function assignRetrieval(taskId, operatorId) {
   return call('assign_retrieval', { p_task_id: taskId, p_operator_id: operatorId })
+}
+
+/**
+ * Send an operator for a car NOBODY has asked for yet.
+ *
+ * For the guest who walks up to the desk instead of tapping the button. There
+ * is no task to assign, so the server makes one and assigns it in the same
+ * transaction — see migration 0045 for why that must not be two calls from
+ * here. If the guest happened to tap seconds earlier, their request is adopted
+ * rather than duplicated.
+ */
+export function dispatchVehicle(vehicleId, operatorId) {
+  return call('dispatch_vehicle', { p_vehicle_id: vehicleId, p_operator_id: operatorId })
 }
 
 /**

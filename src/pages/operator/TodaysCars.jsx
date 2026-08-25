@@ -56,9 +56,7 @@ import {
 import { TierBadge, VehicleStatusBadge } from '@/components/ui/Badge'
 import { useAuth } from '@/context/AuthContext'
 import { useT } from '@/i18n'
-import { useToast } from '@/context/ToastContext'
 import useRealtime from '@/hooks/useRealtime'
-import { requestRetrieval } from '@/lib/valetApi'
 import { supabase, describeDbError } from '@/supabase'
 import { useParkingSpaces } from '@/components/ui/SpacePicker'
 import { formatPhone, formatTime, istToday, personName, prettyCarNumber, storedPlaceName, timeAgo } from '@/utils/format'
@@ -92,7 +90,6 @@ export default function TodaysCars() {
   const { spaces } = useParkingSpaces()
   const t = useT()
   const { propertyId, propertyName } = useAuth()
-  const toast = useToast()
 
   const [cars, setCars] = useState([])
   /** How many cars exist today, which may be more than `cars` holds. */
@@ -196,18 +193,6 @@ export default function TodaysCars() {
     ).length
     return { all: cars.length, parked: atRest, active: working }
   }, [cars])
-
-  const requestCar = async (car) => {
-    const result = await requestRetrieval(car.id)
-    if (!result.ok) {
-      toast.error(result.error)
-      // Almost always means someone already requested it, or it moved.
-      load()
-      return
-    }
-    toast.success(t('cars.requested', { token: car.token_number }))
-    load()
-  }
 
   if (loading) {
     return (
@@ -355,12 +340,7 @@ export default function TodaysCars() {
       ) : (
         <div className="space-y-2.5">
           {visible.map((car) => (
-            <CarRow
-              key={car.id}
-              car={car}
-              spaces={spaces}
-              onRequest={() => requestCar(car)}
-            />
+            <CarRow key={car.id} car={car} spaces={spaces} />
           ))}
         </div>
       )}
@@ -368,9 +348,8 @@ export default function TodaysCars() {
   )
 }
 
-function CarRow({ car, spaces, onRequest }) {
+function CarRow({ car, spaces }) {
   const t = useT()
-  const atRest = VEHICLE_AT_REST.includes(car.status)
 
   return (
     <Card
@@ -466,29 +445,12 @@ function CarRow({ car, spaces, onRequest }) {
             both stay where they were. */}
         <div className="hidden shrink-0 flex-col items-end gap-2.5 sm:flex">
           <VehicleStatusBadge status={car.status} size="sm" />
-          {atRest && (
-            <Button variant="secondary" size="sm" icon="bell" onClick={onRequest}>
-              {t('cars.requestCar')}
-            </Button>
-          )}
         </div>
       </div>
 
       {/* Phone only — sm and up gets this button in the right-hand column
           above. Full width here because a thumb reaching across a phone wants
           the whole row, not a small target in a corner. */}
-      {atRest && (
-        <Button
-          variant="secondary"
-          size="md"
-          fullWidth
-          icon="bell"
-          className="mt-3 sm:hidden"
-          onClick={onRequest}
-        >
-          {t('cars.requestCar')}
-        </Button>
-      )}
     </Card>
   )
 }

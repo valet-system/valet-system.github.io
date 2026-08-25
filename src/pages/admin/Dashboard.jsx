@@ -48,6 +48,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PageHeader } from '@/components/AppShell'
 import Button from '@/components/ui/Button'
 import Card, { SectionHeading } from '@/components/ui/Card'
+import { SearchInput } from '@/components/ui/Field'
 import EmptyState from '@/components/ui/EmptyState'
 import Icon from '@/components/ui/Icon'
 import {
@@ -62,11 +63,11 @@ import { useAuth } from '@/context/AuthContext'
 import { useT } from '@/i18n'
 import { useToast } from '@/context/ToastContext'
 import useRealtime from '@/hooks/useRealtime'
-import { assignRetrieval, availableOperators } from '@/lib/valetApi'
+import { assignRetrieval, availableOperators, dispatchVehicle } from '@/lib/valetApi'
 import { supabase, describeDbError, selectOptional } from '@/supabase'
 import { alertLoud, playSuccess } from '@/utils/sounds'
 import { formatPhone, istToday, personName, prettyCarNumber, timeAgo } from '@/utils/format'
-import { ACTIVE_TASK_STATUSES, CAR_TIERS, TASK_TYPES, VEHICLE_STATUS } from '@/types'
+import { ACTIVE_TASK_STATUSES, CAR_TIERS, TASK_TYPES, VEHICLE_AT_REST, VEHICLE_STATUS } from '@/types'
 
 /**
  * Two variants, because name_hi arrives with migration 0022 and this screen
@@ -105,6 +106,22 @@ export default function Dashboard() {
   const toast = useToast()
 
   const [pending, setPending] = useState([])
+
+  /**
+   * Finding a car NOBODY has asked for.
+   *
+   * The queue above only holds cars a guest requested. A guest who walks up to
+   * the desk instead is not in it and never will be — so this is how they are
+   * reached: type the name or the number, pick an operator, send them.
+   *
+   * Deliberately NOT a full list of every parked car. At a busy property that
+   * is a couple of hundred cards pushing the urgent queue off the screen, and
+   * the urgent queue is what this page is for. Empty search, nothing rendered.
+   */
+  const [carQuery, setCarQuery] = useState('')
+  const [carTerm, setCarTerm] = useState('')
+  const [found, setFound] = useState([])
+  const [searching, setSearching] = useState(false)
   const [active, setActive] = useState([])
   const [operators, setOperators] = useState([])
   /** Every status string for today's cars, in one array. Counted in `counts`. */
@@ -244,6 +261,63 @@ export default function Dashboard() {
     }
   }, [statuses])
 
+  // 300ms, same as every other search in the app: a typed car number is one
+  // query instead of ten.
+  useEffect(() => {
+    const id = setTimeout(() => setCarTerm(carQuery.trim()), 300)
+    return () => clearTimeout(id)
+  }, [carQuery])
+
+  useEffect(() => {
+    if (carTerm.length < 2) {
+      setFound([])
+      return
+    }
+    let cancelled = false
+    setSearching(true)
+    supabase
+      .rpc('search_todays_cars', { p_query: carTerm, p_limit: 20 })
+      .then(({ data }) => {
+        if (cancelled) return
+        // Only cars actually on site. A car already being fetched, at the gate,
+        // or handed over must not be offered — sending a second operator for it
+        // produces two people and one car.
+        setFound((data ?? []).filter((c) => VEHICLE_AT_REST.includes(c.status)))
+        setSearching(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [carTerm])
+
+  /**
+   * Send someone for a car the guest never asked for.
+   *
+   * One call, not request-then-assign: if the second half failed the car would
+   * be left carrying a request nobody made, at the top of the queue, with the
+   * guest told their car is coming. See migration 0045.
+   */
+  const handleDispatch = async (vehicleId, operatorId, token) => {
+    const result = await dispatchVehicle(vehicleId, operatorId)
+    if (!result.ok) {
+      toast.error(result.error)
+      load()
+      return
+    }
+    playSuccess()
+    const assigned = operators.find((op) => op.id === operatorId)
+    toast.success(
+      t('queue.sentTo', {
+        name: assigned ? personName(assigned.name, assigned.name_hi) : result.operator_name,
+      }),
+    )
+    // Clear the search: that car is now in the queue above, and leaving it in
+    // the results invites a second dispatch of a car already on its way.
+    setCarQuery('')
+    setFound([])
+    load()
+  }
+
   const handleAssign = async (taskId, operatorId) => {
     const result = await assignRetrieval(taskId, operatorId)
     if (!result.ok) {
@@ -342,6 +416,40 @@ export default function Dashboard() {
         id="queue-waiting"
       />
 
+      {/* ── SEARCH: a car nobody asked for ──────────────────────────────
+          Above the queue because that is where it is reached from — a guest is
+          standing at the desk and the admin is typing, not scrolling. Costs one
+          input line when empty; results only exist while something is typed. */}
+      <div className="mb-4">
+        <SearchInput
+          value={carQuery}
+          onChange={(e) => setCarQuery(e.target.value)}
+          onClear={() => setCarQuery('')}
+          placeholder={t('queue.searchToSend')}
+        />
+
+        {carTerm.length >= 2 && (
+          <div className="mt-3 space-y-3">
+            {searching && found.length === 0 ? (
+              <p className="px-1 text-sm text-ink-subtle">{t('common.loading')}</p>
+            ) : found.length === 0 ? (
+              // Said plainly, because there are two reasons for an empty result
+              // and only one of them is "no such car".
+              <p className="px-1 text-sm text-ink-subtle">{t('queue.noParkedMatch')}</p>
+            ) : (
+              found.map((car) => (
+                <SendCard
+                  key={car.id}
+                  car={car}
+                  operators={operators}
+                  onDispatch={handleDispatch}
+                />
+              ))
+            )}
+          </div>
+        )}
+      </div>
+
       {error ? (
         <EmptyState
           variant="error"
@@ -396,6 +504,84 @@ export default function Dashboard() {
 // ═══════════════════════════════════════════════════════════════════
 // PENDING — the only cards that pulse
 // ═══════════════════════════════════════════════════════════════════
+
+/**
+ * A car found by search, with an operator picker.
+ *
+ * Quieter than PendingCard on purpose: that card is urgent because a guest has
+ * been waiting and the clock is running. This one is a car sitting in a bay
+ * that somebody has just walked up and asked for — same action, no alarm.
+ */
+function SendCard({ car, operators, onDispatch }) {
+  const t = useT()
+  const [operatorId, setOperatorId] = useState('')
+  const isVip = car.car_tier === CAR_TIERS.VIP
+
+  return (
+    <Card accent={isVip ? 'vip' : undefined}>
+      <div className="flex items-start gap-4">
+        <div className="shrink-0 text-center">
+          <p className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-subtle">
+            {t('common.token')}
+          </p>
+          <p className="tnum text-3xl font-bold leading-none tracking-tight text-ink">
+            {car.token_number}
+          </p>
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-semibold tracking-wide text-ink">
+              {prettyCarNumber(car.car_number)}
+            </span>
+            <TierBadge tier={car.car_tier} size="sm" />
+          </div>
+
+          <p className="mt-0.5 truncate text-sm text-ink-muted">
+            {personName(car.guest_name, car.guest_name_hi) || t('common.guest')}
+            {car.guest_phone && (
+              <span className="tnum text-ink-subtle"> · {formatPhone(car.guest_phone)}</span>
+            )}
+          </p>
+
+          {/* Where to walk to. The operator is being sent somewhere. */}
+          <p className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-surface-sunken px-2.5 py-1.5 text-sm font-semibold text-ink">
+            <Icon name="location" size={15} className="text-ink-subtle" />
+            {car.parking_location || t('common.notRecorded')}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+        <select
+          value={operatorId}
+          onChange={(e) => setOperatorId(e.target.value)}
+          aria-label={t('queue.assignTo', { token: car.token_number })}
+          className="h-touch flex-1 rounded-xl border border-line-strong bg-surface px-4 text-base text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
+        >
+          <option value="">
+            {t(operators.length === 0 ? 'queue.everyoneBusy' : 'queue.chooseOperator')}
+          </option>
+          {operators.map((op) => (
+            <option key={op.id} value={op.id}>
+              {personName(op.name, op.name_hi)}
+            </option>
+          ))}
+        </select>
+
+        <Button
+          variant="primary"
+          icon="arrow-right"
+          disabled={!operatorId}
+          onClick={() => onDispatch(car.id, operatorId, car.token_number)}
+          className="sm:w-40"
+        >
+          {t('queue.sendFor')}
+        </Button>
+      </div>
+    </Card>
+  )
+}
 
 function PendingCard({ task, operators, onAssign }) {
   const t = useT()
