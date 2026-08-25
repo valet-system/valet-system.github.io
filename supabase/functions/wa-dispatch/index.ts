@@ -84,6 +84,7 @@ const MAX_ATTEMPTS = 5
 /** wa_outbox.message_type -> the env var naming its approved template. */
 const TEMPLATE_ENV = {
   car_parked: 'WA_TEMPLATE_CAR_PARKED',
+  car_at_pickup: 'WA_TEMPLATE_CAR_AT_PICKUP',
   car_delivered: 'WA_TEMPLATE_CAR_DELIVERED',
   not_available: 'WA_TEMPLATE_NOT_AVAILABLE',
   car_returned: 'WA_TEMPLATE_CAR_RETURNED',
@@ -144,6 +145,12 @@ function templateParams(type: string, row: Record<string, unknown>) {
 
     // car_reparked: Hi {{2}}, … Token {{1}} …
     case 'not_available':
+      return [token, name]
+
+    // The "your car is at the entrance" message. Same two variables in the same
+    // order as car_reparked, deliberately — one fewer arrangement to get wrong,
+    // and both messages are addressed to a guest about a waiting car.
+    case 'car_at_pickup':
       return [token, name]
 
     // car_deliver: … Token {{1}} … — one variable, no name.
