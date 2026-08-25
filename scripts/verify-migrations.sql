@@ -1,4 +1,14 @@
--- Kya saari 6 migrations lag gayi? Har row PASS hona chahiye.
+-- Har row PASS hona chahiye. Read-only — kuch badalta nahi.
+--
+-- Yeh sirf "function ban gaya" nahi dekhta. Teen cheezein jo chup-chaap toot
+-- sakti hain, unhe alag se check karta hai:
+--   0034  trigger wa_outbox pe LAGA hai ya nahi (function ban jaana kaafi nahi)
+--   0035  purana capacity wala form HATA hai ya nahi
+--   0038  service_role guest RPCs ko CALL kar sakta hai ya nahi
+--
+-- Woh aakhri wala aaj pakda gaya: 0033 ne PUBLIC se execute cheen liya tha aur
+-- service_role ko diya nahi, to webhook button tap pe kuch nahi kar pata tha
+-- aur guest ko "Sorry, something went wrong" jaata tha.
 select migration, case when ok then 'PASS' else 'FAIL' end as result
 from (
   select '0031 task_accept' as migration,
@@ -38,8 +48,28 @@ from (
            where pronamespace = 'public'::regnamespace
              and proname = 'task_complete_reparking')
 
-  -- The report API from earlier today.
+  -- The report API for Ambria Admin.
   union all select '0037 report_api',
          to_regprocedure('public.is_service_call()') is not null
+
+  -- 0038 — the one that makes the guest's "Get My Car" button actually work.
+  -- Without it the webhook is denied and the guest is told "Sorry, something
+  -- went wrong", which looks like a WhatsApp fault and is not one.
+  union all select '0038 webhook may call guest_request_retrieval',
+         has_function_privilege('service_role',
+           'public.guest_request_retrieval(text)', 'execute')
+
+  union all select '0038 webhook may call guest_record_review',
+         has_function_privilege('service_role',
+           'public.guest_record_review(text,text)', 'execute')
+
+  -- And the browser still may NOT. These take a phone number and act on
+  -- whatever car it finds, with no session — reachable by anon, anyone could
+  -- request any guest's car by guessing numbers.
+  union all select '0038 anon still cannot call them',
+         not has_function_privilege('anon',
+           'public.guest_request_retrieval(text)', 'execute')
+         and not has_function_privilege('anon',
+           'public.guest_record_review(text,text)', 'execute')
 ) t
 order by ok, migration;

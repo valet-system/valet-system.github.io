@@ -25,7 +25,7 @@
 --
 -- ── WHAT PROTECTS IT INSTEAD ──────────────────────────────────────────
 -- The service_role key never reaches a browser. It lives as an Edge Function
--- secret, and the only caller is functions/valet_report, which demands its own
+-- secret, and the only caller is functions/valet-report, which demands its own
 -- REPORT_API_KEY before it will run. Two secrets, both server-side.
 --
 -- If the service_role key is ever pasted into a VITE_ variable, this branch

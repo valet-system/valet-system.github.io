@@ -18,12 +18,14 @@ Already done for you:
 
 | | |
 |---|---|
-| Valet API deployed at | `https://vyirixtdgheypbpffsct.supabase.co/functions/v1/valet_report` |
+| Valet API deployed at | `https://vyirixtdgheypbpffsct.supabase.co/functions/v1/valet-report` |
 | Its `REPORT_API_KEY` | set, on the valet project |
 | Migration 0037 | run, so the database allows a server to read |
 | **This project's secrets** | `VALET_REPORT_URL` and `VALET_REPORT_KEY` — already set in Ambria Admin's own Edge Function secrets |
 
-Note the function name is **`valet_report` with an underscore**, not a hyphen.
+Note the function name is **`valet-report` with a hyphen**, not an underscore.
+It briefly existed under the underscore spelling and that URL is now a `404`, so
+if a call comes back "Requested function was not found", check this first.
 
 **So your job is only the three things in section 4:**
 
@@ -78,7 +80,7 @@ read them from `Deno.env`, never from a file you can see.
 
 | | |
 |---|---|
-| **Base URL** | `https://vyirixtdgheypbpffsct.supabase.co/functions/v1/valet_report` — in `VALET_REPORT_URL` |
+| **Base URL** | `https://vyirixtdgheypbpffsct.supabase.co/functions/v1/valet-report` — in `VALET_REPORT_URL` |
 | **API key** | A long random string, in `VALET_REPORT_KEY`. Goes in the `X-API-Key` header. |
 
 The URL is not a secret — it is in the valet app's public bundle already. The
@@ -105,7 +107,7 @@ Ambria Admin browser
 Ambria Admin Edge Function  ──── holds VALET_REPORT_KEY as a Supabase secret
    │  (X-API-Key)
    ▼
-Valet  /functions/v1/valet_report
+Valet  /functions/v1/valet-report
    │  (service_role, inside the valet project only)
    ▼
 Valet Postgres — aggregates and returns
@@ -127,7 +129,7 @@ Supabase dashboard → **Edge Functions → Secrets** (of the *Ambria Admin*
 project). These two should already be there:
 
 ```
-VALET_REPORT_URL = https://vyirixtdgheypbpffsct.supabase.co/functions/v1/valet_report
+VALET_REPORT_URL = https://vyirixtdgheypbpffsct.supabase.co/functions/v1/valet-report
 VALET_REPORT_KEY = <the key>
 ```
 
@@ -510,7 +512,7 @@ a browser anyway (no CORS headers, by design):
 
 ```bash
 KEY='…'
-BASE='https://vyirixtdgheypbpffsct.supabase.co/functions/v1/valet_report'
+BASE='https://vyirixtdgheypbpffsct.supabase.co/functions/v1/valet-report'
 
 # Should list the properties
 curl -s -H "X-API-Key: $KEY" "$BASE/properties"
@@ -733,7 +735,7 @@ identifies nothing.
 4. **Deploy:**
 
    ```bash
-   supabase functions deploy valet_report --no-verify-jwt
+   supabase functions deploy valet-report --no-verify-jwt
    ```
 
    `--no-verify-jwt` is required. Ambria Admin's JWTs are signed by a different
