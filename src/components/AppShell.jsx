@@ -75,11 +75,14 @@ const NAV_ITEMS = {
     { to: '/admin/staff', key: 'staff', icon: 'users' },
     { to: '/admin/tokens', key: 'tokens', icon: 'ticket' },
     { to: '/admin/spaces', key: 'spaces', icon: 'parking' },
-    // Reviews and Analytics are OFF the valet admin's nav on request. Their
-    // routes still exist and still guard on the role, so a bookmarked URL keeps
-    // working — this hides them, it does not revoke them. Reviews in particular
-    // stays empty until the WhatsApp side is built, and a nav entry that always
-    // leads to an empty screen teaches people to ignore the nav.
+    // Reviews and Analytics stay OFF this nav, on request. Their routes exist
+    // and still guard on the role, so a bookmarked URL keeps working — this
+    // hides them, it does not revoke them.
+    //
+    // The valet admin does see a rating: it is a badge on the Car Status card,
+    // beside the status. That screen is scoped to ist_today(), so it shows the
+    // shift in progress and nothing older — which is the intent. The history
+    // lives on the system admin's Records screen, where the range picker is.
   ],
   [ROLES.SYSTEM_ADMIN]: [
     { to: '/system/properties', key: 'properties', icon: 'building' },

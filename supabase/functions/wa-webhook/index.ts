@@ -181,6 +181,40 @@ function payloadFor(to: string, code: string, data: Record<string, unknown>) {
  * free-text replies are not classified the same way, but using one vocabulary
  * with the guest across all of it is worth more than the two saved words.
  */
+/**
+ * Sends one plain-text WhatsApp message and never throws.
+ *
+ * Factored out because the comment path replies too, and a second copy of the
+ * fetch would be a second place to forget the "swallow the error" part. A reply
+ * that fails must not take down the webhook: the rating is already recorded,
+ * and a non-200 to Meta only earns a redelivery of a message we handled.
+ */
+async function replyText(to: string, body: string) {
+  const phoneNumberId = Deno.env.get('WA_PHONE_NUMBER_ID') ?? ''
+  const accessToken = Deno.env.get('WA_ACCESS_TOKEN') ?? ''
+  if (!phoneNumberId || !accessToken) {
+    console.error('[wa-webhook] cannot reply — WA_PHONE_NUMBER_ID / WA_ACCESS_TOKEN not set')
+    return
+  }
+  try {
+    const res = await fetch(`${GRAPH}/${phoneNumberId}/messages`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to,
+        type: 'text',
+        // Link previews off: the review link would otherwise pull a large card
+        // in and bury the sentence asking them to tap it.
+        text: { body, preview_url: false },
+      }),
+    })
+    if (!res.ok) console.error(`[wa-webhook] reply failed: ${res.status} ${await res.text()}`)
+  } catch (err) {
+    console.error('[wa-webhook] reply threw:', err?.message ?? err)
+  }
+}
+
 function replyFor(code: string, data: Record<string, unknown>): string {
   const slip = data?.token_number ? ` Parking slip ${data.token_number}.` : ''
   switch (code) {
@@ -190,8 +224,34 @@ function replyFor(code: string, data: Record<string, unknown>): string {
       return `Your car is already on its way.${slip} It will be at the gate within 15 minutes.`
     case 'no_car':
       return 'We could not find a parked car for this number. Please show your parking slip at the valet desk.'
+    // ── ONE OUTCOME, THREE ANSWERS ────────────────────────────────────
+    // The rating is carried on `data` so this can branch. All three go as plain
+    // text inside the window the guest's own tap opened, so none of them needs
+    // Meta's approval and any of them can be reworded today.
     case 'rated':
-      return 'Thank you for the feedback.'
+      if (data?.rating === 'excellent') {
+        // The link comes from the PROPERTY, not from a secret — every venue has
+        // its own public listing, and one shared link would send three
+        // quarters of guests to review the wrong place. guest_record_review
+        // returns it alongside the outcome, so this costs no extra query.
+        const link = String(data?.review_link ?? '').trim()
+        // Only ask for a public review when there is somewhere to send them.
+        // A property with no link set must not produce "review us here:" with
+        // nothing after it.
+        return link
+          ? `Thank you for your feedback! 🙏 Kindly review us here: ${link}`
+          : 'Thank you for your feedback! 🙏'
+      }
+      if (data?.rating === 'poor') {
+        // A question, and the answer is captured — see guest_add_comment. Only
+        // Poor is asked: pressing someone who said Good for a complaint invents
+        // one, and Excellent is being sent to the public review instead.
+        return (
+          'We are sorry for the inconvenience you faced. ' +
+          'Please suggest what we can do to make it better — just reply to this message.'
+        )
+      }
+      return 'Thank you for your feedback.'
     case 'already_rated':
       return 'Thanks — we already have your feedback for this visit.'
     case 'no_recent_visit':
@@ -320,8 +380,44 @@ Deno.serve(async (req) => {
       ''
 
     const action = classify(label)
-    console.log(`[wa-webhook] ${waId} from ${from}: "${label}" -> ${action ?? 'ignored'}`)
-    if (!action) continue
+
+    // ── FREE TEXT: is this the answer to "please tell us what went wrong"? ──
+    //
+    // A guest who tapped Poor was asked to type a suggestion. Their reply is
+    // ordinary text and matches no button, so it lands here.
+    //
+    // Nothing is stored to remember that we asked. The review row itself is the
+    // state: rating 'poor' with no comment yet means we are waiting. So this
+    // just offers the text and lets the database decide whether anyone is
+    // expecting it — no session, nothing to expire.
+    //
+    // >>> THIS DEPENDS ON THE WA_BTN_* SECRETS BEING SET. <<<
+    // Without them classify() falls back to keyword matching, and a complaint
+    // containing the word "poor" or "good" is read as a fresh rating instead of
+    // as the explanation. The guest then gets thanked for a rating they did not
+    // give, and what they wrote is lost.
+    if (!action) {
+      const typed = msg.text?.body ?? ''
+      if (typed.trim()) {
+        const { data: added } = await supabase.rpc('guest_add_comment', {
+          p_phone: from,
+          p_comment: typed,
+        })
+        const saved = String(added?.code ?? '') === 'comment_saved'
+        console.log(
+          `[wa-webhook] ${waId} from ${from}: free text -> ${saved ? 'comment saved' : 'ignored'}`,
+        )
+        if (saved) {
+          await replyText(from, 'Thank you for your feedback.')
+          continue
+        }
+      } else {
+        console.log(`[wa-webhook] ${waId} from ${from}: "${label}" -> ignored`)
+      }
+      continue
+    }
+
+    console.log(`[wa-webhook] ${waId} from ${from}: "${label}" -> ${action}`)
 
     let code = 'error'
     let data: Record<string, unknown> = {}
@@ -336,6 +432,12 @@ Deno.serve(async (req) => {
       } else {
         data = rpc.data ?? {}
         code = String(data.code ?? 'error')
+        // The reply differs per rating, and guest_record_review does not report
+        // which one it stored — it has no reason to. We already know: `action`
+        // IS the rating for these three. Carried on `data` so replyFor stays a
+        // pure function of (code, data) rather than reaching for a third
+        // argument only one branch uses.
+        if (action !== 'get_car') data.rating = action
       }
     } catch (err) {
       console.error(`[wa-webhook] rpc threw for ${waId}:`, err?.message ?? err)
@@ -344,6 +446,8 @@ Deno.serve(async (req) => {
     // Reply in the same chat. A template for the acknowledgement, free text for
     // everything else — see payloadFor. Both are legal because the guest
     // messaged us seconds ago, which opens the 24-hour service window.
+    // payloadFor decides template-or-text; the acknowledgement is the only one
+    // that can be a template, and only when its secret is set.
     const phoneNumberId = Deno.env.get('WA_PHONE_NUMBER_ID') ?? ''
     const accessToken = Deno.env.get('WA_ACCESS_TOKEN') ?? ''
     if (phoneNumberId && accessToken) {

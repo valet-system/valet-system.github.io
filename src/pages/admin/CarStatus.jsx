@@ -53,7 +53,7 @@ import {
   StatRowSkeleton,
 } from '@/components/ui/PageSkeleton'
 import StatTile, { StatRow } from '@/components/ui/StatTile'
-import { TierBadge, VehicleStatusBadge } from '@/components/ui/Badge'
+import { RatingBadge, TierBadge, VehicleStatusBadge } from '@/components/ui/Badge'
 import { useAuth } from '@/context/AuthContext'
 import { useT } from '@/i18n'
 import useRealtime from '@/hooks/useRealtime'
@@ -390,6 +390,12 @@ function CarRow({ car }) {
             </span>
             <TierBadge tier={car.car_tier} size="sm" />
             <VehicleStatusBadge status={car.status} size="sm" />
+            {/* Only when there IS one, unlike the Records table.
+                A table has a column that must hold something, so a blank cell
+                reads as missing data and gets a dash. A card has no column —
+                most guests never rate, and a "—" on nine cards out of ten is
+                noise pretending to be information. */}
+            {car.rating && <RatingBadge rating={car.rating} size="sm" />}
           </div>
 
           <p className="mt-1 truncate text-sm text-ink-muted">

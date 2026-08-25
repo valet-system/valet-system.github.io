@@ -217,11 +217,14 @@ export default function Properties() {
     }
   }, [properties, stats])
 
-  async function save({ id, name, address, phone }) {
+  async function save({ id, name, address, phone, reviewLink }) {
     const payload = {
       name: name.trim(),
       address: address.trim() || null,
       phone: phone.trim() || null,
+      // Trimmed to null, never ''. The CHECK constraint rejects a value that
+      // is not a URL, and an empty string is not one.
+      review_link: reviewLink?.trim() || null,
     }
 
     const { error: err } = id
@@ -706,6 +709,7 @@ function PropertyModal({ open, target, onClose, onSave }) {
   const [name, setName] = useState('')
   const [address, setAddress] = useState('')
   const [phone, setPhone] = useState('')
+  const [reviewLink, setReviewLink] = useState('')
   const [error, setError] = useState(null)
   const [nameError, setNameError] = useState(null)
 
@@ -714,6 +718,7 @@ function PropertyModal({ open, target, onClose, onSave }) {
     setName(target?.name ?? '')
     setAddress(target?.address ?? '')
     setPhone(target?.phone ?? '')
+    setReviewLink(target?.review_link ?? '')
     setError(null)
     setNameError(null)
   }, [open, target])
@@ -728,7 +733,7 @@ function PropertyModal({ open, target, onClose, onSave }) {
     setNameError(null)
     setError(null)
 
-    const failure = await onSave({ id: target?.id, name, address, phone })
+    const failure = await onSave({ id: target?.id, name, address, phone, reviewLink })
     if (failure) {
       // A duplicate name is a problem with the name field, not the form.
       if (failure.toLowerCase().includes('name')) setNameError(failure)
@@ -795,6 +800,20 @@ function PropertyModal({ open, target, onClose, onSave }) {
           // signage. Staff and guest numbers are 10-digit mobiles; this is not
           // one and must not be forced into that shape.
           hint={t('props.landlineHint')}
+        />
+
+        <Input
+          label={t('props.reviewLink')}
+          value={reviewLink}
+          onChange={(e) => setReviewLink(e.target.value)}
+          placeholder="https://g.page/r/..."
+          type="url"
+          inputMode="url"
+          // Per property, not one for the group: this is where a guest who
+          // rated Excellent is sent to post it publicly, and each venue has its
+          // own listing. Left empty, that guest is simply thanked — the message
+          // never offers a link it does not have.
+          hint={t('props.reviewLinkHint')}
         />
       </div>
     </Modal>
