@@ -134,6 +134,8 @@ const MISSING_MIGRATION = {
     'Parking is not fully set up in the database yet. Run migration 0035 (no_capacity_and_system_spaces) in the Supabase SQL Editor.',
   task_complete_reparking:
     'Re-parking is not fully set up in the database yet. Run migration 0035 (no_capacity_and_system_spaces) in the Supabase SQL Editor.',
+  dispatch_reparking:
+    'Sending someone to park a car again needs migration 0050 (desk_holds_the_car). Run it in the Supabase SQL Editor.',
   default:
     'The car lifecycle is not set up in the database yet. Run migration 0008 (operator_flow_rpc) in the Supabase SQL Editor.',
 }
@@ -359,6 +361,22 @@ export function guestAbsent(taskId) {
 /** "Car Re-parked" — closes out a no-show, MSG 4 queued, operator free. */
 export function completeReparking(taskId, location) {
   return call('task_complete_reparking', { p_task_id: taskId, p_location: location })
+}
+
+/**
+ * Admin sends a free operator to park a no-show again.
+ *
+ * The counterpart to assignRetrieval, for the other end of the flow. It exists
+ * because since migration 0050 the operator who brought the car to the door is
+ * released immediately — so by the time the ten minutes run out he is usually
+ * on another car, and the task still carrying his name has to be handed to
+ * whoever is actually free.
+ *
+ * REASSIGNS the task rather than creating a second one. See the migration's
+ * header for what that costs in the operator report.
+ */
+export function dispatchReparking(taskId, operatorId) {
+  return call('dispatch_reparking', { p_task_id: taskId, p_operator_id: operatorId })
 }
 
 

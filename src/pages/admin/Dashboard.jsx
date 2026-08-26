@@ -46,6 +46,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PageHeader } from '@/components/AppShell'
+import { cn } from '@/utils/cn'
 import Button from '@/components/ui/Button'
 import Card, { SectionHeading } from '@/components/ui/Card'
 import { SearchInput } from '@/components/ui/Field'
@@ -63,11 +64,26 @@ import { useAuth } from '@/context/AuthContext'
 import { useT } from '@/i18n'
 import { useToast } from '@/context/ToastContext'
 import useRealtime from '@/hooks/useRealtime'
-import { assignRetrieval, availableOperators, dispatchVehicle } from '@/lib/valetApi'
+import {
+  assignRetrieval,
+  availableOperators,
+  dispatchReparking,
+  dispatchVehicle,
+  guestAbsent,
+  guestArrived,
+} from '@/lib/valetApi'
 import { supabase, describeDbError, selectOptional } from '@/supabase'
 import { alertLoud, playSuccess } from '@/utils/sounds'
-import { formatPhone, istToday, personName, prettyCarNumber, timeAgo } from '@/utils/format'
-import { ACTIVE_TASK_STATUSES, CAR_TIERS, TASK_TYPES, VEHICLE_AT_REST, VEHICLE_STATUS } from '@/types'
+import { formatDuration, formatPhone, istToday, personName, prettyCarNumber, timeAgo } from '@/utils/format'
+import useTimer from '@/hooks/useTimer'
+import {
+  ACTIVE_TASK_STATUSES,
+  CAR_TIERS,
+  TASK_STATUS,
+  TASK_TYPES,
+  VEHICLE_AT_REST,
+  VEHICLE_STATUS,
+} from '@/types'
 
 /**
  * Two variants, because name_hi arrives with migration 0022 and this screen
@@ -366,6 +382,87 @@ export default function Dashboard() {
     load()
   }
 
+  /**
+   * The car is at the door and the guest has come for it.
+   *
+   * This used to be the operator's button. Since migration 0050 his job ends
+   * when he brings the car, so the hand-over is the desk's — and this is the tap
+   * that sends the guest their thank-you and the rating buttons. Same RPC the
+   * operator called; claim_task() has always allowed a valet_admin at the same
+   * property, so nothing in the database had to change for it.
+   */
+  const handleHandedOver = async (taskId, token) => {
+    const result = await guestArrived(taskId)
+    if (!result.ok) {
+      toast.error(result.error)
+      load()
+      return
+    }
+    playSuccess()
+    toast.success(t('queue.handedOverToast', { token: token ?? '?' }))
+    load()
+  }
+
+  /**
+   * The guest is not coming, and the desk knows it before the clock does.
+   *
+   * Without this the only way to a no-show is waiting out the full ten minutes
+   * on pg_cron, with the car standing at the porch the whole time. The operator
+   * had this button; somebody has to keep it.
+   */
+  const handleNoShow = async (taskId) => {
+    const result = await guestAbsent(taskId)
+    if (!result.ok) {
+      toast.error(result.error)
+      load()
+      return
+    }
+    toast.success(t('queue.noShowToast'))
+    load()
+  }
+
+  /** Send a free operator to park a no-show again. */
+  const handleRepark = async (taskId, operatorId) => {
+    const result = await dispatchReparking(taskId, operatorId)
+    if (!result.ok) {
+      toast.error(result.error)
+      // OPERATOR_BUSY or WRONG_STATUS both mean this screen is behind.
+      load()
+      return
+    }
+    playSuccess()
+    const assigned = operators.find((op) => op.id === operatorId)
+    toast.success(
+      t('queue.sentTo', {
+        name: assigned ? personName(assigned.name, assigned.name_hi) : result.operator_name,
+      }),
+    )
+    load()
+  }
+
+  /**
+   * Three lists out of one query, because they are three different jobs.
+   *
+   * `active` holds every open task. Splitting it here rather than running three
+   * queries keeps the screen consistent: all three views are the same snapshot,
+   * so a car cannot appear in two of them because one fetch was a second later.
+   *
+   *   atDoor    waiting for a guest. The countdown is running and the desk has
+   *             to hand it over or send it back.
+   *   toRepark  the guest never came. Needs an operator sent to park it again.
+   *   working   somebody is driving. Read-only — the operator drives these.
+   */
+  const atDoor = active.filter((task) => task.status === TASK_STATUS.AT_PICKUP)
+  const toRepark = active.filter(
+    (task) => task.status === TASK_STATUS.RE_PARKING || task.status === TASK_STATUS.RETURNED,
+  )
+  const working = active.filter(
+    (task) =>
+      task.status !== TASK_STATUS.AT_PICKUP &&
+      task.status !== TASK_STATUS.RE_PARKING &&
+      task.status !== TASK_STATUS.RETURNED,
+  )
+
   // Two tall placeholders, not four short ones: a pending card carries a
   // token, a car, a location, a waiting time and an assign row.
   if (loading) {
@@ -420,7 +517,24 @@ export default function Dashboard() {
           // tile with a blank where its three neighbours had a line, and a row
           // of four cards with one short is read as something failing to load.
           hint={t(active.length > 0 ? 'queue.beingWorkedOn' : 'queue.nothingInHand')}
-          onClick={active.length > 0 ? () => scrollToSection('queue-active') : undefined}
+          // The count is still every open task, but those are now spread over
+          // THREE sections. Scrolling to 'queue-active' unconditionally would
+          // be a dead tap whenever the only open cars are at the door — the
+          // section would not be rendered, getElementById returns null, and
+          // scrollToSection quietly does nothing. So it aims at the topmost
+          // section that actually exists.
+          onClick={
+            active.length > 0
+              ? () =>
+                  scrollToSection(
+                    atDoor.length > 0
+                      ? 'queue-door'
+                      : toRepark.length > 0
+                        ? 'queue-repark'
+                        : 'queue-active',
+                  )
+              : undefined
+          }
         />
         <StatTile
           label={t('queue.delivered')}
@@ -533,17 +647,68 @@ export default function Dashboard() {
         <p className="mt-4 px-1 text-sm text-ink-subtle">{t('queue.noParkedMatch')}</p>
       )}
 
-      {active.length > 0 && (
+      {/* ── AT THE DOOR ─────────────────────────────────────────────────
+          Above In progress on purpose. A car here has a guest who may walk up
+          any second and a clock running out; an in-progress car has neither. */}
+      {atDoor.length > 0 && (
+        <div className="mt-8">
+          <SectionHeading
+            title={t('queue.atTheDoor')}
+            count={atDoor.length}
+            icon="car"
+            className="scroll-mt-24"
+            id="queue-door"
+          />
+          <div className="space-y-2">
+            {atDoor.map((task) => (
+              <DoorCard
+                key={task.id}
+                task={task}
+                onHandedOver={handleHandedOver}
+                onNoShow={handleNoShow}
+                onRefresh={load}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── NEEDS PARKING AGAIN ─────────────────────────────────────────
+          The guest never came. Each one needs an operator sent to it, which is
+          why these carry a picker and the In progress rows below do not. */}
+      {toRepark.length > 0 && (
+        <div className="mt-8">
+          <SectionHeading
+            title={t('queue.needsRepark')}
+            count={toRepark.length}
+            icon="refresh"
+            className="scroll-mt-24"
+            id="queue-repark"
+          />
+          <div className="space-y-2">
+            {toRepark.map((task) => (
+              <ReparkCard
+                key={task.id}
+                task={task}
+                operators={operators}
+                onRepark={handleRepark}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {working.length > 0 && (
         <div className="mt-8">
           <SectionHeading
             title={t('queue.inProgress')}
-            count={active.length}
+            count={working.length}
             icon="car"
             className="scroll-mt-24"
             id="queue-active"
           />
           <div className="space-y-2">
-            {active.map((task) => (
+            {working.map((task) => (
               <ActiveRow key={task.id} task={task} />
             ))}
           </div>
@@ -740,6 +905,154 @@ function PendingCard({ task, operators, onAssign }) {
           className="shrink-0 sm:w-40"
         >
           {t('queue.assign')}
+        </Button>
+      </div>
+    </Card>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// AT THE DOOR — the desk's ten minutes
+//
+// This card and the one below it are new with migration 0050, and they are the
+// admin's half of a flow that used to live entirely on the operator's phone.
+// He brings the car, taps once, and is gone; from that moment the countdown,
+// the hand-over and the no-show are all the desk's.
+// ═══════════════════════════════════════════════════════════════════
+
+function DoorCard({ task, onHandedOver, onNoShow, onRefresh }) {
+  const t = useT()
+  const vehicle = task.parked_vehicles
+
+  const { secondsLeft, isWarning, isExpired } = useTimer(task.pickup_started_at, {
+    // No status write here. pg_cron owns the expiry — see expire_stale_pickups.
+    // This only nudges the screen so it stops showing a stale countdown.
+    onExpire: onRefresh,
+  })
+
+  return (
+    <Card accent={isExpired ? 'danger' : isWarning ? 'warning' : undefined}>
+      <div className="flex items-start gap-3">
+        <span className="tnum flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-sm font-bold text-ink">
+          {vehicle?.token_number}
+        </span>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-semibold tracking-wide text-ink">
+              {prettyCarNumber(vehicle?.car_number)}
+            </span>
+            <TierBadge tier={vehicle?.car_tier} size="sm" />
+          </div>
+          {vehicle?.guest_name && (
+            <p className="mt-0.5 truncate text-sm text-ink-subtle">
+              {personName(vehicle.guest_name, vehicle.guest_name_hi)}
+            </p>
+          )}
+          {/* Who fetched it. He is free now and probably on another car, but the
+              desk still needs to know whose car this was if anything is wrong. */}
+          {task.operator && (
+            <p className="mt-0.5 truncate text-xs text-ink-subtle">
+              {personName(task.operator.name, task.operator.name_hi)}
+            </p>
+          )}
+        </div>
+
+        {/* The clock. tnum so the digits do not jitter as they count down. */}
+        <div className="shrink-0 text-right">
+          <p
+            className={cn(
+              'tnum text-xl font-bold leading-none',
+              isExpired || isWarning ? 'text-danger' : 'text-ink',
+            )}
+          >
+            {formatDuration(secondsLeft ?? 0)}
+          </p>
+          <p className="mt-1 text-[0.7rem] leading-tight text-ink-subtle">
+            {t(isExpired ? 'tasks.timeUp' : 'tasks.untilBack')}
+          </p>
+        </div>
+      </div>
+
+      {/* Both stay visible past zero. A guest who turns up at 10:30 still gets
+          their car, and the desk must never hunt for the right button. */}
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <Button
+          variant="success"
+          fullWidth
+          icon="check"
+          onClick={() => onHandedOver(task.id, vehicle?.token_number)}
+        >
+          {t('tasks.guestArrived')}
+        </Button>
+        <Button variant="danger" fullWidth icon="x" onClick={() => onNoShow(task.id)}>
+          {t('tasks.guestAbsent')}
+        </Button>
+      </div>
+    </Card>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// NEEDS PARKING AGAIN — the guest never came
+// ═══════════════════════════════════════════════════════════════════
+
+function ReparkCard({ task, operators, onRepark }) {
+  const t = useT()
+  const [operatorId, setOperatorId] = useState('')
+  const vehicle = task.parked_vehicles
+
+  return (
+    <Card accent="danger">
+      <div className="flex items-start gap-3">
+        <span className="tnum flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-danger-soft text-sm font-bold text-danger">
+          {vehicle?.token_number}
+        </span>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-semibold tracking-wide text-ink">
+              {prettyCarNumber(vehicle?.car_number)}
+            </span>
+            <TierBadge tier={vehicle?.car_tier} size="sm" />
+          </div>
+          <p className="mt-0.5 truncate text-sm text-ink-subtle">
+            {t('queue.guestNeverCame')}
+            {task.assigned_at && ` · ${timeAgo(task.assigned_at)}`}
+          </p>
+        </div>
+      </div>
+
+      {/* Same picker as PendingCard, because it is the same decision: who is
+          free, and send them. The operator who brought the car is offered here
+          like anybody else — he is genuinely free once it reaches the door. */}
+      <div className="mt-3 flex gap-2">
+        {/* A raw select with the same classes PendingCard uses, not the Select
+            component — this file already picks operators in two places and both
+            do it this way. One more import would make three spellings of one
+            control. */}
+        <select
+          value={operatorId}
+          onChange={(e) => setOperatorId(e.target.value)}
+          aria-label={t('queue.assignTo', { token: vehicle?.token_number })}
+          className="h-touch min-w-0 flex-1 rounded-xl border border-line-strong bg-surface px-3 text-sm text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 sm:px-4 sm:text-base"
+        >
+          <option value="">
+            {t(operators.length === 0 ? 'queue.everyoneBusy' : 'queue.chooseOperator')}
+          </option>
+          {operators.map((op) => (
+            <option key={op.id} value={op.id}>
+              {personName(op.name, op.name_hi)}
+            </option>
+          ))}
+        </select>
+        <Button
+          variant="primary"
+          icon="arrow-right"
+          disabled={!operatorId}
+          onClick={() => onRepark(task.id, operatorId)}
+        >
+          {t('queue.sendToRepark')}
         </Button>
       </div>
     </Card>

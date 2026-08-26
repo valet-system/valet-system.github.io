@@ -40,13 +40,14 @@
  * │   card just goes red and waits for the update to arrive.             │
  * │                                                                     │
  * │ NOTHING HERE SENDS A STATUS                                          │
- * │   Every button calls a named RPC — guestArrived(), guestAbsent() —   │
+ * │   Every button calls a named RPC — startPickup(),                    │
+ * │   completeReparking() — through lib/valetApi.                        │
  * │   and Postgres decides what the task becomes and refuses a move from │
  * │   the wrong current status. A stale screen therefore cannot skip a   │
  * │   step; it gets told to refresh. See lib/valetApi.                   │
  * │                                                                     │
  * │ DEPENDS ON                                                          │
- * │   lib/valetApi, lib/serverClock, hooks/useTimer, hooks/useRealtime,  │
+ * │   lib/valetApi, lib/serverClock, hooks/useRealtime,                  │
  * │   utils/sounds, components/ui/*, utils/format, types                 │
  * └─────────────────────────────────────────────────────────────────────┘
  */
@@ -65,21 +66,18 @@ import { useT } from '@/i18n'
 import { useToast } from '@/context/ToastContext'
 import useParkSubmit from '@/hooks/useParkSubmit'
 import useRealtime from '@/hooks/useRealtime'
-import useTimer from '@/hooks/useTimer'
 import { noteServerTime } from '@/lib/serverClock'
 import {
   acceptTask,
   completeParking,
   completeReparking,
-  guestArrived,
-  guestAbsent,
   startPickup,
 } from '@/lib/valetApi'
 import { supabase, describeDbError } from '@/supabase'
 import { alertOnce } from '@/lib/taskAlerts'
-import { playSuccess, playWarning } from '@/utils/sounds'
-import { formatDuration, formatTime, istDayStart, istToday, personName, prettyCarNumber, timeAgo } from '@/utils/format'
-import { ACTIVE_TASK_STATUSES, TASK_STATUS, TASK_TYPES } from '@/types'
+import { playSuccess } from '@/utils/sounds'
+import { formatTime, istDayStart, istToday, personName, prettyCarNumber, timeAgo } from '@/utils/format'
+import { OPERATOR_OPEN_STATUSES, TASK_STATUS, TASK_TYPES } from '@/types'
 
 /** Everything the cards need, in one round trip. */
 const TASK_SELECT = `
@@ -136,7 +134,7 @@ export default function MyTasks() {
         // it in buried the one list that DOES have a guest standing at a porch
         // attached to it.
         .eq('task_type', TASK_TYPES.RETRIEVAL)
-        .in('status', ACTIVE_TASK_STATUSES)
+        .in('status', OPERATOR_OPEN_STATUSES)
         .order('created_at', { ascending: true }),
       supabase
         .from('valet_tasks')
@@ -475,27 +473,27 @@ function LocationForm({ label, buttonLabel, buttonIcon, onSubmit, spaces }) {
 function RetrievalCard({ task, run, onRefresh, spaces }) {
   const t = useT()
   const vehicle = task.parked_vehicles
-  const isAtPickup = task.status === TASK_STATUS.AT_PICKUP
   const needsReparking =
     task.status === TASK_STATUS.RE_PARKING || task.status === TASK_STATUS.RETURNED
   // 'assigned' means dispatched but not yet acknowledged. This is the state the
   // alarm keeps sounding for.
   const needsAccept = task.status === TASK_STATUS.ASSIGNED
 
-  const { secondsLeft, isWarning, isExpired } = useTimer(
-    // Null unless a hand-over is actually running, so the hook idles on the
-    // other states instead of counting against a stale timestamp.
-    isAtPickup ? task.pickup_started_at : null,
-    {
-      onWarning: playWarning,
-      // Do NOT write a status change here. pg_cron owns the expiry — see the
-      // file header. This only nudges the screen to catch up.
-      onExpire: onRefresh,
-    },
-  )
+  // NO COUNTDOWN, AND NO 'at_pickup' STATE, since migration 0050.
+  //
+  // The operator's job ends when he taps "Car at Delivery Point": the car
+  // becomes the desk's, the ten-minute countdown is the admin's to watch, and
+  // the hand-over is the admin's to mark. OPERATOR_OPEN_STATUSES leaves
+  // AT_PICKUP out, so a task in that state is never fetched here at all — the
+  // card simply leaves his list.
+  //
+  // The countdown, the Guest Arrived button and the Guest Not Here button all
+  // moved to the admin's Dashboard with it. They are not hidden here; they are
+  // gone, because a card he cannot act on sitting beside the car he has just
+  // been assigned is the confusion this change exists to remove.
 
   return (
-    <Card accent={isWarning || isExpired ? 'danger' : 'warning'}>
+    <Card accent="warning">
       <div className="mb-3 flex items-center justify-between gap-2">
         <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-warning">
           <Icon name="car" size={16} />
@@ -519,7 +517,7 @@ function RetrievalCard({ task, run, onRefresh, spaces }) {
       <NotesLine notes={vehicle?.notes} />
 
       {/* ── dispatched: accept it, or go straight there ───────────── */}
-      {!isAtPickup && !needsReparking && (
+      {!needsReparking && (
         <div className="mt-4 grid gap-2">
           {/* Only while unacknowledged. Accepting is what silences the
               repeating alarm — see the alarm effect at the top of this file.
@@ -557,42 +555,6 @@ function RetrievalCard({ task, run, onRefresh, spaces }) {
           >
             {t('tasks.atDeliveryPoint')}
           </Button>
-        </div>
-      )}
-
-      {/* ── at the delivery point: the countdown ──────────────────── */}
-      {isAtPickup && (
-        <div className="mt-4">
-          <Countdown secondsLeft={secondsLeft} isWarning={isWarning} isExpired={isExpired} />
-
-          {/* Both buttons stay visible the whole time, including past zero:
-              a guest who turns up at 10:30 still gets their car, and the
-              operator must never have to hunt for the right button. */}
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            <Button
-              variant="success"
-              fullWidth
-              icon="check"
-              onClick={() =>
-                run(
-                  () => guestArrived(task.id),
-                  t('tasks.toastDelivered', { token: vehicle?.token_number }),
-                )
-              }
-            >
-              {t('tasks.guestArrived')}
-            </Button>
-            <Button
-              variant="danger"
-              fullWidth
-              icon="x"
-              onClick={() =>
-                run(() => guestAbsent(task.id), t('tasks.toastAbsent'))
-              }
-            >
-              {t('tasks.guestAbsent')}
-            </Button>
-          </div>
         </div>
       )}
 
@@ -636,30 +598,3 @@ function noteStart(result) {
   return result
 }
 
-function Countdown({ secondsLeft, isWarning, isExpired }) {
-  const t = useT()
-  const tone = isExpired || isWarning ? 'text-danger' : 'text-ink'
-
-  return (
-    <div
-      className={
-        isExpired || isWarning
-          ? 'rounded-xl bg-danger-soft px-4 py-3 text-center'
-          : 'rounded-xl bg-surface-sunken px-4 py-3 text-center'
-      }
-      // Polite, not assertive: the number changes every second and an
-      // assertive region would have a screen reader read all of them.
-      aria-live="polite"
-    >
-      <p className="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-subtle">
-        {t(isExpired ? 'tasks.timeUp' : 'tasks.guestHas')}
-      </p>
-      <p className={`tnum text-4xl font-bold leading-tight tracking-tight ${tone}`}>
-        {formatDuration(secondsLeft ?? 0)}
-      </p>
-      <p className="text-xs text-ink-subtle">
-        {t(isExpired ? 'tasks.willReturnAuto' : 'tasks.untilBack')}
-      </p>
-    </div>
-  )
-}

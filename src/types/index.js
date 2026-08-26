@@ -28,8 +28,9 @@
  * │ WHEN YOU CHANGE THIS FILE                                            │
  * │   Check whether the SQL needs the same change. The CHECK constraints │
  * │   in supabase/migrations are the real authority; this file must not  │
- * │   drift from them. ACTIVE_TASK_STATUSES in particular is mirrored    │
- * │   inside get_available_operators() — see the note on it below.       │
+ * │   drift from them. ACTIVE_TASK_STATUSES used to be mirrored inside   │
+ * │   get_available_operators(); since migration 0050 it deliberately    │
+ * │   is not. See the long note on both lists below.                     │
  * │                                                                     │
  * │ USED BY                                                             │
  * │   Every page, ui/Badge, AuthContext, useTimer.                       │
@@ -132,11 +133,50 @@ export const TASK_STATUS_META = {
  * that operator was immediately offered for another car. Now a no-show goes
  * to RE_PARKING. RETURNED stays here so any row already stranded on it keeps
  * its operator held until the task is actually finished.
+ *
+ * ── THIS NO LONGER MIRRORS get_available_operators() ──────────────────
+ * It did, and the note at the top of this file still said so until migration
+ * 0050 made it false. Correcting it rather than deleting it, because the two
+ * lists LOOK like they should be the same and somebody will try to re-sync
+ * them:
+ *
+ *   ACTIVE_TASK_STATUSES        what work is OPEN. A car at the door is open
+ *                               work — the admin's screen has to show it and
+ *                               count it. AT_PICKUP belongs here.
+ *
+ *   get_available_operators()   who is UNAVAILABLE. Since 0050 a car at the
+ *                               door belongs to the desk, so the operator who
+ *                               brought it is free. AT_PICKUP is absent there.
+ *
+ * They were the same list by accident, not by design: "there is open work" and
+ * "somebody's hands are full" happened to coincide until the desk took the car.
  */
 export const ACTIVE_TASK_STATUSES = [
   TASK_STATUS.ASSIGNED,
   TASK_STATUS.IN_PROGRESS,
   TASK_STATUS.AT_PICKUP,
+  TASK_STATUS.RE_PARKING,
+  TASK_STATUS.RETURNED,
+]
+
+/**
+ * What an OPERATOR still has to do — his own task list.
+ *
+ * AT_PICKUP is deliberately absent, and that is the whole point of a second
+ * list. Under the flow from migration 0050 the operator's job ends the moment
+ * he taps "Car at Delivery Point": the car is the desk's from then on, the
+ * countdown is the admin's to watch, and the hand-over is the admin's to mark.
+ *
+ * Leaving it in would put a card he can no longer act on next to the new car he
+ * has just been assigned — two countdowns on one screen, one of them not his
+ * job — which is exactly the confusion the change was made to remove.
+ *
+ * RE_PARKING is present: when the admin dispatches him to park a no-show again,
+ * that IS his work, and this list is what puts it on his screen.
+ */
+export const OPERATOR_OPEN_STATUSES = [
+  TASK_STATUS.ASSIGNED,
+  TASK_STATUS.IN_PROGRESS,
   TASK_STATUS.RE_PARKING,
   TASK_STATUS.RETURNED,
 ]
