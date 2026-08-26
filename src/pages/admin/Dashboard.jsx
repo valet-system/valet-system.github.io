@@ -1016,9 +1016,14 @@ function ReparkCard({ task, operators, onRepark }) {
             </span>
             <TierBadge tier={vehicle?.car_tier} size="sm" />
           </div>
+          {/* pickup_started_at, NOT assigned_at. Since migration 0052 a no-show
+              has no operator, and assigned_at still holds the moment the car
+              was dispatched to be FETCHED — which reads as "assigned 20 minutes
+              ago" about a job nobody currently has. When the car reached the
+              door is the number the desk actually wants. */}
           <p className="mt-0.5 truncate text-sm text-ink-subtle">
             {t('queue.guestNeverCame')}
-            {task.assigned_at && ` · ${timeAgo(task.assigned_at)}`}
+            {task.pickup_started_at && ` · ${timeAgo(task.pickup_started_at)}`}
           </p>
         </div>
       </div>
