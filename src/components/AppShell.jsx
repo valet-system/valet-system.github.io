@@ -49,7 +49,7 @@ import { ROLES } from '@/types'
 import { cn } from '@/utils/cn'
 import { subscribeToPush } from '@/lib/pushApi'
 import { isStandalone, onInstallable, promptInstall } from '@/pwa'
-import { primeAudio } from '@/utils/sounds'
+import { isAudioRunning, primeAudio } from '@/utils/sounds'
 import { useUnacceptedAlarm } from '@/hooks/useUnacceptedAlarm'
 import { useT } from '@/i18n'
 import LanguageToggle from '@/components/LanguageToggle'
@@ -255,8 +255,40 @@ function usePushRefresh(operatorId) {
 
 function useAudioPriming() {
   useEffect(() => {
-    const prime = () => primeAudio()
-    const options = { once: true, capture: true, passive: true }
+    // NOT `once: true`, and that is the fix for a silent alarm.
+    //
+    // `once` gave the unlock exactly ONE attempt per mount. resume() can fail —
+    // it is a promise, the browser can reject it, and primeAudio swallows the
+    // rejection because there is nothing useful to do with it. One failed
+    // attempt and the listener had already removed itself, so audio stayed
+    // locked for the rest of the shift with nothing on screen to say so.
+    //
+    // ── WHY THIS SURFACED WHEN IT DID ──────────────────────────────────
+    // A page that never reloads keeps the context it unlocked at login, so the
+    // single attempt was enough. Then applyUpdate() was fixed — before that,
+    // auto-apply posted SKIP_WAITING to a worker that was already the
+    // controller, controllerchange never fired, and the reload silently never
+    // happened. Now it does. So the app genuinely reloads mid-shift, the
+    // AudioContext comes back SUSPENDED, and the one unlock attempt lands on
+    // whatever tap comes next — or on none at all, because the phone is in a
+    // pocket and the next thing to happen is a car being assigned.
+    //
+    // Retrying on every gesture until the context is actually running costs a
+    // state check per tap and closes the hole for good.
+    const prime = () => {
+      primeAudio()
+      // Stop listening only once it has genuinely worked, not merely once it
+      // has been tried.
+      if (isAudioRunning()) {
+        window.removeEventListener('pointerdown', prime, options)
+        window.removeEventListener('keydown', prime, options)
+      }
+    }
+    const options = { capture: true, passive: true }
+
+    // One attempt immediately: a session restored into an already-running
+    // context needs no gesture, and this removes the listeners straight away.
+    prime()
 
     window.addEventListener('pointerdown', prime, options)
     window.addEventListener('keydown', prime, options)

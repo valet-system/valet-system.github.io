@@ -84,6 +84,19 @@ export function primeAudio() {
 }
 
 /**
+ * Is audio ACTUALLY unlocked?
+ *
+ * primeAudio() cannot answer this: resume() returns a promise, so the state is
+ * still 'suspended' when it returns, and a rejection is swallowed. Callers that
+ * need to know whether to keep trying have to ask separately — which is exactly
+ * what AppShell's priming hook does, because one failed attempt used to leave
+ * the loud alarm silent for a whole shift.
+ */
+export function isAudioRunning() {
+  return audioContext?.state === 'running'
+}
+
+/**
  * Plays one note.
  *
  * The gain envelope (ramp up over 12ms, exponential decay) is not decoration.
