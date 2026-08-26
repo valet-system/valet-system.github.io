@@ -556,20 +556,6 @@ export default function Dashboard() {
         id="queue-waiting"
       />
 
-      {/* ── SEARCH: a car nobody asked for ──────────────────────────────
-          Above the queue because that is where it is reached from — a guest is
-          standing at the desk and the admin is typing, not scrolling. Costs one
-          input line when empty; results only exist while something is typed. */}
-      <div className="mb-4">
-        <SearchInput
-          value={carQuery}
-          onChange={(e) => setCarQuery(e.target.value)}
-          onClear={() => setCarQuery('')}
-          placeholder={t('queue.searchToSend')}
-        />
-
-      </div>
-
       {error ? (
         <EmptyState
           variant="error"
@@ -585,8 +571,8 @@ export default function Dashboard() {
         /* One line, not an EmptyState.
            The big empty card was right when this section was the whole page —
            it filled a screen that would otherwise look broken. It is not the
-           whole page any more: the on-site list sits directly below it, so a
-           tall empty box is just distance between the search and the cars. */
+           whole page any more: four more sections sit below it, so a tall empty
+           box is just distance between the reader and the cars that matter. */
         <p className="flex items-center gap-2 px-1 text-sm text-ink-subtle">
           <Icon name="check-circle" size={15} />
           {t('queue.nobodyIsWaiting')}
@@ -602,49 +588,6 @@ export default function Dashboard() {
             />
           ))}
         </div>
-      )}
-
-      {/* ── ON SITE, NOT ASKED FOR ──────────────────────────────────────
-          Every car in a bay right now. A guest who walks up to the desk is in
-          here, not in the queue above — they never tapped anything.
-
-          Below the queue, not above it: the queue is guests already waiting
-          with a clock running, and nothing should push them down the page. */}
-      {available.length > 0 && (
-        <div className="mt-8">
-          <SectionHeading
-            title={t('queue.onSite')}
-            count={available.length}
-            icon="parking"
-            className="scroll-mt-24"
-            id="queue-onsite"
-          />
-          <div className="space-y-3">
-            {available.slice(0, SHOW_ON_SITE).map((car) => (
-              <SendCard
-                key={car.id}
-                car={car}
-                operators={operators}
-                onDispatch={handleDispatch}
-              />
-            ))}
-          </div>
-
-          {/* Capped, and it SAYS it is capped. Rendering two hundred cards makes
-              the page crawl, and silently showing forty of them would read as
-              "that is all the cars", which is worse than a slow page. */}
-          {available.length > SHOW_ON_SITE && (
-            <p className="mt-3 px-1 text-sm text-ink-subtle">
-              {t('queue.andMoreOnSite', { n: available.length - SHOW_ON_SITE })}
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* Something was typed and nothing matched — said plainly, because an
-          empty area looks like a list that failed to load. */}
-      {carQuery.trim() && available.length === 0 && (
-        <p className="mt-4 px-1 text-sm text-ink-subtle">{t('queue.noParkedMatch')}</p>
       )}
 
       {/* ── AT THE DOOR ─────────────────────────────────────────────────
@@ -714,6 +657,70 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* ══ ON SITE, NOT ASKED FOR — LAST ON THE PAGE ═══════════════════
+          Every car in a bay right now. A guest who walks up to the desk is in
+          here, not in the queue at the top: they never tapped anything.
+
+          LAST on purpose, and it used to be second. Everything above this point
+          is a car with somebody either waiting or a clock running — a guest in
+          the queue, a car at the door, a no-show blocking the porch. This
+          section is a BROWSE list: nothing in it is late, and nothing in it
+          needs doing unless somebody walks up and asks.
+
+          THE SEARCH MOVED DOWN WITH IT. It used to sit under the queue heading
+          at the top, which was right while the list was directly below it. With
+          the list down here, a box at the top would change a list off the bottom
+          of the screen — you would type and watch nothing happen. */}
+      <div className="mt-8">
+        <SectionHeading
+          title={t('queue.onSite')}
+          count={available.length}
+          icon="parking"
+          className="scroll-mt-24"
+          id="queue-onsite"
+        />
+
+        <div className="mb-4">
+          <SearchInput
+            value={carQuery}
+            onChange={(e) => setCarQuery(e.target.value)}
+            onClear={() => setCarQuery('')}
+            placeholder={t('queue.searchToSend')}
+          />
+        </div>
+
+        {available.length > 0 ? (
+          <>
+            <div className="space-y-3">
+              {available.slice(0, SHOW_ON_SITE).map((car) => (
+                <SendCard
+                  key={car.id}
+                  car={car}
+                  operators={operators}
+                  onDispatch={handleDispatch}
+                />
+              ))}
+            </div>
+
+            {/* Capped, and it SAYS it is capped. Rendering two hundred cards
+                makes the page crawl, and silently showing forty would read as
+                "that is all the cars", which is worse than a slow page. */}
+            {available.length > SHOW_ON_SITE && (
+              <p className="mt-3 px-1 text-sm text-ink-subtle">
+                {t('queue.andMoreOnSite', { n: available.length - SHOW_ON_SITE })}
+              </p>
+            )}
+          </>
+        ) : (
+          /* Two different nothings, and they must not read the same. A search
+             that matched nothing is the admin's next move; an empty car park is
+             just a quiet evening. */
+          <p className="px-1 text-sm text-ink-subtle">
+            {t(carQuery.trim() ? 'queue.noParkedMatch' : 'queue.noCarsOnSite')}
+          </p>
+        )}
+      </div>
 
     </>
   )
