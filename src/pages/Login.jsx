@@ -82,6 +82,36 @@ export default function Login() {
   const [formError, setFormError] = useState(null)
   const [fieldErrors, setFieldErrors] = useState({})
 
+  /**
+   * Has this sign-in earned the right to type a longer, legacy PIN?
+   *
+   * The field is PIN_LENGTH for everybody until a four-digit attempt has
+   * actually been refused. That is the only honest way round a problem with no
+   * good answer: at this screen we do not know WHO is typing, so we cannot know
+   * whether they still hold a six-digit PIN.
+   *
+   * ── WHY NOT JUST LOOK IT UP ────────────────────────────────────────────
+   * The phone number is on screen before the PIN, so the app could ask the
+   * server how long that account's PIN is. It must not. Anyone who can type a
+   * colleague's number would learn the length of their PIN, which is the single
+   * most useful thing to know before guessing one — and with no login lockout
+   * (see migration 0047) that is a real hand-out, not a theoretical one.
+   *
+   * ── WHY A FAILED ATTEMPT IS THE RIGHT TRIGGER ──────────────────────────
+   * A refusal is the one signal that costs nothing to give away: they already
+   * know their own PIN did not work. It also converges on its own — once
+   * nobody holds a six-digit PIN, nothing ever sets this and the field is
+   * simply four digits for everyone, for good.
+   *
+   * NOT persisted, deliberately. A wrong four-digit PIN is usually a typo, not
+   * a legacy PIN, and remembering it would leave the longer field on a device
+   * for ever on the strength of one fat finger.
+   */
+  const [allowLegacyPin, setAllowLegacyPin] = useState(false)
+
+  // Four for everyone, six only once a four has been refused.
+  const pinMax = allowLegacyPin ? PIN_INPUT_MAX : PIN_LENGTH
+
   const pinRef = useRef(null)
 
   /** Where ProtectedRoute wanted to send them before bouncing them here. */
@@ -130,9 +160,9 @@ export default function Login() {
   }
 
   function handlePinChange(event) {
-    // PIN_INPUT_MAX, not PIN_LENGTH: an existing six-digit PIN has to be
-    // typeable here or its owner cannot sign in. See src/types.
-    const digits = event.target.value.replace(/\D/g, '').slice(0, PIN_INPUT_MAX)
+    // pinMax, not a constant: PIN_LENGTH normally, PIN_INPUT_MAX only after a
+    // four-digit attempt has been refused. See allowLegacyPin above.
+    const digits = event.target.value.replace(/\D/g, '').slice(0, pinMax)
     setPin(digits)
     if (fieldErrors.pin) setFieldErrors((prev) => ({ ...prev, pin: null }))
   }
@@ -158,6 +188,12 @@ export default function Login() {
 
     if (error) {
       setFormError(error)
+      // A four-digit PIN was refused. That is almost always a typo — but it is
+      // also exactly what somebody still holding a six-digit PIN sees, and they
+      // have no other way to discover that the field will take more. So widen
+      // it, once, and say so. Only ever widens: a second failure changes
+      // nothing, and it resets when the page does.
+      if (pin.length === PIN_LENGTH) setAllowLegacyPin(true)
       // Clear the PIN, keep the number. Re-entering 10 digits after every
       // mistyped PIN is needless friction, and the PIN is the part that was
       // probably wrong.
@@ -319,6 +355,9 @@ export default function Login() {
               label={t('login.pin', { n: PIN_LENGTH })}
               htmlFor="login-pin"
               error={fieldErrors.pin}
+              // Only after a four-digit PIN was refused, and only then. Shown
+              // to nobody else, because for everybody else it is not true.
+              hint={!fieldErrors.pin && allowLegacyPin ? t('login.legacyPinHint') : undefined}
               required
             >
               <div className="relative">
@@ -334,7 +373,7 @@ export default function Login() {
                   autoComplete="current-password"
                   // "Go" on the last field, so Enter submits from here.
                   enterKeyHint="go"
-                  maxLength={PIN_INPUT_MAX}
+                  maxLength={pinMax}
                   placeholder={'•'.repeat(PIN_LENGTH)}
                   aria-invalid={fieldErrors.pin ? true : undefined}
                   aria-describedby={fieldErrors.pin ? 'login-pin-error' : undefined}

@@ -133,6 +133,10 @@ export const en = {
   'login.hidePin': 'Hide PIN',
   'login.mobile': 'Mobile number',
   'login.mobileHint': 'The 10-digit number registered with your admin',
+  // Shown ONLY after a four-digit PIN was refused. Never says "your PIN is
+  // six digits" -- we do not know that; it says the field will take one.
+  'login.legacyPinHint':
+    'Still using a 6-digit PIN? You can enter all 6 here. Change it to 4 digits after signing in.',
   'login.pin': '{n}-digit PIN',
   'login.signIn': 'Sign in',
   'login.signingIn': 'Signing in…',
@@ -891,6 +895,8 @@ export const hi = {
   'login.hidePin': 'पिन छिपाएँ',
   'login.mobile': 'मोबाइल नंबर',
   'login.mobileHint': 'वही 10 अंकों का नंबर जो एडमिन ने दर्ज किया है',
+  'login.legacyPinHint':
+    'अब भी 6 अंक का पिन है? यहाँ पूरे 6 अंक डाल सकते हैं। साइन इन के बाद इसे 4 अंक का कर लें।',
   'login.pin': '{n} अंकों का पिन',
   'login.signIn': 'साइन इन करें',
   'login.signingIn': 'साइन इन हो रहा है…',
