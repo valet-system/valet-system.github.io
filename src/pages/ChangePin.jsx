@@ -101,7 +101,11 @@ export default function ChangePin() {
     getStaffPin(operatorId).then((result) => {
       if (cancelled) return
       const pin = result.ok ? String(result.pin ?? '') : ''
-      if (pin.length !== PIN_LENGTH) return
+      // A RANGE, not an equality test. `!== PIN_LENGTH` refused to prefill a
+      // legacy six-digit PIN — and those are precisely the people who have to
+      // retype one here, so they were the only ones getting no help at all.
+      // Anything outside the range is not a PIN this screen can show.
+      if (pin.length < PIN_LENGTH || pin.length > PIN_INPUT_MAX) return
       setCurrent(pin)
       // Straight to the field they actually have to fill. Landing on a filled
       // one and tabbing past it is a step that exists for no reason.
@@ -198,13 +202,23 @@ export default function ChangePin() {
             </div>
           )}
 
+          {/* ALWAYS VISIBLE, not governed by the toggle below.
+              Masking this one was pointless in a way the other two are not.
+              The app fills it in from the database — so the dots were hiding a
+              value the screen had just looked up and handed over, from the one
+              person entitled to read it. Nobody could check what was in the
+              field, and the label promising it was "already filled in" could
+              not be verified at all.
+              The toggle still covers the two NEW PIN fields, where the person
+              is typing something nobody has seen yet and shoulder-surfing is a
+              real concern. */}
           <PinField
             id="pin-current"
-            label={t('pin.current')}
+            label={current ? t('pin.current') : t('pin.currentEmpty')}
             value={current}
             onChange={makeHandler(setCurrent, 'current', nextRef, PIN_INPUT_MAX)}
             error={errors.current}
-            reveal={reveal}
+            reveal
             autoComplete="current-password"
             max={PIN_INPUT_MAX}
           />
@@ -234,8 +248,10 @@ export default function ChangePin() {
             autoComplete="new-password"
           />
 
-          {/* One toggle for all three fields. Three separate eye buttons is
-              clutter, and the whole form is either private or it is not. */}
+          {/* One toggle for the two NEW PIN fields — the current one above is
+              always visible, since the app filled it in itself. Three separate
+              eye buttons would be clutter, and what is being typed here is
+              either private or it is not. */}
           <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-ink-muted">
             <input
               type="checkbox"

@@ -77,6 +77,25 @@ let applying = false
 let reloading = false
 
 /**
+ * How long applyUpdate waits for the new worker to take control before
+ * reloading anyway.
+ *
+ * This is a watchdog, and it is the reason the button can no longer be dead.
+ * Every path out of applyUpdate() used to depend on 'controllerchange' firing;
+ * when it did not, the tap produced nothing, no error, and no second chance.
+ * A reload is the correct outcome either way — at worst it is a page refresh
+ * and the banner comes back.
+ */
+const CONTROLLER_WAIT_MS = 3000
+
+/** reload(), at most once, from whichever path gets there first. */
+function reloadOnce() {
+  if (reloading) return
+  reloading = true
+  window.location.reload()
+}
+
+/**
  * True when reloading right now would take something away from the operator.
  *
  * A reload during check-in loses the car's details and the guest is standing
@@ -229,9 +248,23 @@ export function onUpdateReady(callback) {
 /**
  * Activates the waiting version and reloads.
  *
- * The `controllerchange` listener is registered BEFORE postMessage, and guarded
- * by `reloading`. Without the guard, Chrome can fire controllerchange more than
- * once and the page reloads in a loop.
+ * MUST ALWAYS RELOAD. That is the contract, and it was the bug: this function
+ * used to hand the outcome entirely to 'controllerchange', so any state where
+ * that event does not fire made the Update button do nothing whatsoever — no
+ * reload, no error, and `applying` left set so it never worked again either.
+ *
+ * The two states where it does not fire:
+ *
+ *   - the worker we stashed is ALREADY the controller. sw.js used to call
+ *     skipWaiting() during install, so this was the NORMAL case rather than an
+ *     edge case. skipWaiting() on an active worker is a no-op, and the
+ *     controller cannot change to what it already is.
+ *   - the worker went 'redundant' — replaced by a third version, or the
+ *     activate handler threw.
+ *
+ * The install-time skipWaiting is gone now, but the race survives it: a worker
+ * can still activate in the gap between the banner appearing and the tap. So
+ * this checks the worker's actual state, and keeps a watchdog behind that.
  */
 export function applyUpdate() {
   // MODULE level, not per call. The guard used to be a local `let reloading`,
@@ -242,17 +275,23 @@ export function applyUpdate() {
   if (applying) return
   applying = true
 
-  if (!waitingWorker) {
-    window.location.reload()
+  // Nothing is waiting, or what was waiting has already taken over. Either
+  // way the new version is what a reload will load, so reload is the entire
+  // update — asking a worker to skip a wait it is no longer in does nothing.
+  const state = waitingWorker?.state
+  if (!waitingWorker || state === 'activating' || state === 'activated' || state === 'redundant') {
+    reloadOnce()
     return
   }
 
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    // Chrome can fire this more than once; reload() must happen at most once.
-    if (reloading) return
-    reloading = true
-    window.location.reload()
-  })
+  // Registered BEFORE postMessage, or a fast activation lands before anything
+  // is listening for it. Guarded by `reloading` because Chrome can fire this
+  // more than once and a second reload() would loop the page.
+  navigator.serviceWorker.addEventListener('controllerchange', reloadOnce)
+
+  // The watchdog. If the controller has not changed by now, reload regardless
+  // rather than leaving a tap that visibly did nothing.
+  setTimeout(reloadOnce, CONTROLLER_WAIT_MS)
 
   waitingWorker.postMessage({ type: 'SKIP_WAITING' })
 }

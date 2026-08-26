@@ -6,7 +6,7 @@
   "description": "Valet Parking Management System - 4 properties, multi-user, WhatsApp integrated",
   "scripts": {
     "dev": "vite",
-    "check": "node scripts/check-undefined.mjs src && node scripts/check-icons.mjs && node scripts/check-autotranslate.mjs && node scripts/check-i18n.mjs && node scripts/check-select-optional.mjs && node scripts/check-hindi-input.mjs && node scripts/check-service-day.mjs",
+    "check": "node scripts/check-undefined.mjs src && node scripts/check-icons.mjs && node scripts/check-pwa-update.mjs && node scripts/check-autotranslate.mjs && node scripts/check-i18n.mjs && node scripts/check-select-optional.mjs && node scripts/check-hindi-input.mjs && node scripts/check-service-day.mjs",
     "test:push": "node --experimental-strip-types --no-warnings scripts/test-webpush.mjs",
     "vapid": "node scripts/generate-vapid.mjs",
     "build": "npm run check && vite build && node scripts/stamp-sw.mjs",

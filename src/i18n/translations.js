@@ -723,6 +723,9 @@ export const en = {
   'pwa.installBody': 'Add it to your home screen for faster access and fewer dropped alerts.',
   'pwa.installShort': 'Install',
   'pin.current': 'Current PIN (already filled in)',
+  // When the prefill failed — an unencrypted legacy PIN, or a failed read.
+  // Saying "already filled in" over an empty box reads as a broken screen.
+  'pin.currentEmpty': 'Current PIN',
   'pin.new': 'New PIN',
   'pin.confirm': 'Confirm new PIN',
   'pin.save': 'Change PIN',
@@ -1469,6 +1472,7 @@ export const hi = {
   'pwa.installBody': 'होम स्क्रीन पर लगा लीजिए — जल्दी खुलेगा और अलर्ट कम छूटेंगे।',
   'pwa.installShort': 'इंस्टॉल',
   'pin.current': 'मौजूदा पिन (पहले से भरा है)',
+  'pin.currentEmpty': 'मौजूदा पिन',
   'pin.new': 'नया पिन',
   'pin.confirm': 'नया पिन दोबारा डालें',
   'pin.save': 'पिन बदलें',

@@ -69,7 +69,7 @@
 // v4: + "Car delivered" (migration 0023).
 // v5: + "by <operator>" on the parked/delivered bodies (migration 0024).
 // v6: + "Car re-parked" (migration 0025).
-const VERSION = 'v6'
+const VERSION = 'v7'
 
 const SHELL_CACHE = `valet-shell-${VERSION}`
 const ASSET_CACHE = `valet-assets-${VERSION}`
@@ -174,9 +174,32 @@ self.addEventListener('install', (event) => {
       // addAll is atomic: one 404 fails the whole install. Add individually so
       // a single missing icon cannot stop the app being installable.
       await Promise.allSettled(SHELL_FILES.map((file) => cache.add(new Request(file, { cache: 'reload' }))))
-      // Do not wait for existing tabs to close before this SW takes over.
-      // Paired with clients.claim() below, an update applies on next load.
-      await self.skipWaiting()
+
+      // NO skipWaiting() HERE. This is deliberate, and removing it fixed a bug
+      // where the "Update" button did nothing at all.
+      //
+      // skipWaiting() in install makes a new version activate the moment it
+      // finishes installing. That directly contradicts the update flow this app
+      // is built around (see the header of src/pwa.js): a new version is
+      // supposed to WAIT so an operator halfway through a check-in is not
+      // reloaded out of their form.
+      //
+      // What actually happened with it here:
+      //
+      //   1. new SW installs -> skipWaiting -> activates -> clients.claim()
+      //   2. pwa.js sees state 'installed' and shows the update banner
+      //   3. the operator taps Update
+      //   4. pwa.js posts SKIP_WAITING to a worker that is ALREADY the
+      //      controller, where skipWaiting() is a no-op
+      //   5. 'controllerchange' therefore never fires, so the reload that the
+      //      button's whole job is to trigger never happens
+      //
+      // The button looked live, did nothing, and left a module flag set so it
+      // stayed dead for the rest of the page's life.
+      //
+      // Now the worker genuinely waits, and the SKIP_WAITING message below has
+      // something real to do. An update still applies on its own once the
+      // operator is idle — pwa.js's tryAutoApply() handles that on a timer.
     })(),
   )
 })
