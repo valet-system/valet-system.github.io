@@ -57,7 +57,7 @@ import { PageHeader } from '@/components/AppShell'
 import Button from '@/components/ui/Button'
 import Card, { SectionHeading } from '@/components/ui/Card'
 import EmptyState from '@/components/ui/EmptyState'
-import { Field, Input, Select, Textarea } from '@/components/ui/Field'
+import { Field, Input, Select } from '@/components/ui/Field'
 import SpacePicker, { useParkingSpaces } from '@/components/ui/SpacePicker'
 import Icon from '@/components/ui/Icon'
 import { Skeleton } from '@/components/ui/Spinner'
@@ -83,7 +83,6 @@ const BLANK = {
   guestPhone: '',
   carNumber: '',
   carTier: CAR_TIERS.STANDARD,
-  notes: '',
 }
 
 export default function CheckIn() {
@@ -161,7 +160,7 @@ export default function CheckIn() {
             .from('valet_tasks')
             .select(
               `id, created_at,
-               parked_vehicles ( id, token_number, car_number, car_tier, guest_name, guest_name_hi, notes )`,
+               parked_vehicles ( id, token_number, car_number, car_tier, guest_name, guest_name_hi )`,
             )
             .eq('assigned_operator_id', operatorId)
             .eq('task_type', TASK_TYPES.PARKING)
@@ -221,13 +220,21 @@ export default function CheckIn() {
     else if (!PHONE_REGEX.test(phone))
       next.guestPhone = t('login.badPhone')
 
-    // OPTIONAL. The token is what identifies the car — it is on the guest's
-    // stub and it is what they quote — so holding up a check-in over four
-    // digits nobody depends on would cost time at the porch for nothing.
-    // Given at all, it has to be four digits, because a partial one is worse
-    // than none: it looks like a cross-check and is not.
+    // REQUIRED, on request. It used to be optional, on the reasoning that the
+    // token is what identifies the car — it is on the guest's stub and it is
+    // what they quote — so holding up a check-in over four digits was time lost
+    // at the porch.
+    //
+    // What that reasoning left out: the token identifies the car to US, and the
+    // plate is the only thing that identifies it to a GUEST who has lost their
+    // stub, or to anyone standing in the car park looking for it. A blank here
+    // is a car that can only be found through us.
+    //
+    // Still exactly four digits when given — a partial one is worse than none,
+    // because it looks like a cross-check and is not.
     const car = formatCarNumber(form.carNumber)
-    if (car && car.length !== 4) next.carNumber = t('checkin.carNumberError')
+    if (!car) next.carNumber = t('checkin.carNumberRequired')
+    else if (car.length !== 4) next.carNumber = t('checkin.carNumberError')
 
     setErrors(next)
     return Object.keys(next).length === 0
@@ -267,7 +274,6 @@ export default function CheckIn() {
       guestPhone: normalisePhone(form.guestPhone),
       carNumber: formatCarNumber(form.carNumber),
       carTier: form.carTier,
-      notes: form.notes.trim(),
     })
 
     if (!result.ok) {
@@ -443,6 +449,7 @@ export default function CheckIn() {
             <Input
               label={t('checkin.carNumber')}
               icon="car"
+              required
               autoComplete="off"
               spellCheck={false}
               type="tel"
@@ -472,15 +479,18 @@ export default function CheckIn() {
             />
           </div>
 
-          <Textarea
-            label={t('checkin.notes')}
-            rows={2}
-            maxLength={200}
-            placeholder={t('checkin.notesPlaceholder')}
-            value={form.notes}
-            onChange={(e) => setField('notes', e.target.value)}
-            hint={t('checkin.notesHint')}
-          />
+          {/* NO NOTES, ANYWHERE ON THIS SCREEN. Removed on request — the input
+              here, the note shown on the park-the-car card below, and `notes`
+              from that card's select.
+
+              The parked_vehicles.notes COLUMN stays, and so do the other
+              screens that read it — CarStatus, MyTasks, Records. Rows written
+              before today still carry notes, and hiding those would be losing
+              data rather than removing a field.
+
+              valetApi's checkIn() also still accepts `notes`; this form simply
+              stops sending one. So nothing writes the column any more and it
+              reads null on every new car. */}
 
           <Button
             type="submit"
@@ -819,13 +829,6 @@ function UnparkedCard({ task, spaces, onParked }) {
             </p>
           )}
 
-          {/* A note the operator wrote at check-in — a scratch, a child seat. */}
-          {vehicle?.notes && (
-            <p className="mt-2 flex items-start gap-2 rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning">
-              <Icon name="info" size={15} className="mt-0.5 shrink-0" />
-              <span className="min-w-0">{vehicle.notes}</span>
-            </p>
-          )}
         </div>
       </div>
 
