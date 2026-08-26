@@ -356,21 +356,13 @@ Deno.serve(async (req) => {
     const from = msg.from
     const waId = msg.id
 
-    // Meta redelivers on any non-200, including one caused by something
-    // unrelated later in this loop. The log has a unique index on
-    // wa_message_id, so the insert is the lock: if it conflicts, this exact
-    // message has already been acted on.
-    const { error: dupe } = await supabase
-      .from('wa_message_log')
-      .insert({ wa_message_id: waId, direction: 'inbound', message_type: msg.type ?? 'unknown' })
-    if (dupe) {
-      console.log(`[wa-webhook] ${waId} already handled — skipping`)
-      continue
-    }
-
     // Quick-reply buttons on a TEMPLATE arrive as type 'button'; buttons on an
     // interactive message arrive as 'interactive'. Our templates use the
     // former, but both are read so a template rebuilt the other way still works.
+    //
+    // COMPUTED BEFORE THE INSERT BELOW, which used to come first. It is pure —
+    // no network, no database — so moving it up cannot weaken the dedupe lock,
+    // and it has to be up here because the insert now stores it.
     const label =
       msg.button?.text ??
       msg.button?.payload ??
@@ -378,6 +370,42 @@ Deno.serve(async (req) => {
       msg.interactive?.button_reply?.id ??
       msg.text?.body ??
       ''
+
+    // Meta redelivers on any non-200, including one caused by something
+    // unrelated later in this loop. The log has a unique index on
+    // wa_message_id, so the insert is the lock: if it conflicts, this exact
+    // message has already been acted on.
+    //
+    // ── IT IS ALSO THE CAPTURE, AND THAT IS THE POINT ───────────────────
+    // from_phone and body are stored here, on the one write that is guaranteed
+    // to happen for EVERY inbound message, before anything has been decided
+    // about it. Everything after this line is conditional — the classifier, the
+    // pending-review lookup, the reply — and a message that matched none of it
+    // used to reach the end of the loop and vanish.
+    //
+    // Vanish literally. WhatsApp Cloud API has no history endpoint and no
+    // inbox: Meta will not tell you later what somebody sent. This row is the
+    // only copy that will ever exist. See migration 0048.
+    //
+    // Storing before acting also means a message we then fail to handle is
+    // still kept — the guest's words survive our own bugs.
+    const { error: dupe } = await supabase
+      .from('wa_message_log')
+      .insert({
+        wa_message_id: waId,
+        direction: 'inbound',
+        message_type: msg.type ?? 'unknown',
+        from_phone: from,
+        // `label` for every type, not just text: a button tap is a guest input
+        // too, and "Poor" in the log is what makes a later complaint legible.
+        // Empty string stored as null so "sent nothing readable" and "not
+        // captured" are not the same value.
+        body: label || null,
+      })
+    if (dupe) {
+      console.log(`[wa-webhook] ${waId} already handled — skipping`)
+      continue
+    }
 
     const action = classify(label)
 
@@ -395,7 +423,9 @@ Deno.serve(async (req) => {
     // Without them classify() falls back to keyword matching, and a complaint
     // containing the word "poor" or "good" is read as a fresh rating instead of
     // as the explanation. The guest then gets thanked for a rating they did not
-    // give, and what they wrote is lost.
+    // give, and what they wrote is misread. It is no longer LOST — since 0048
+    // every inbound message is stored before this point — but a misread one is
+    // still a guest thanked for the wrong thing.
     if (!action) {
       const typed = msg.text?.body ?? ''
       if (typed.trim()) {
@@ -404,15 +434,24 @@ Deno.serve(async (req) => {
           p_comment: typed,
         })
         const saved = String(added?.code ?? '') === 'comment_saved'
+        // "not a review comment" is not "ignored" any more — the message was
+        // stored before this branch ran. Only its INTERPRETATION was declined,
+        // and the text is in wa_message_log either way. Saying "ignored" here
+        // is what would send somebody looking in the wrong place.
         console.log(
-          `[wa-webhook] ${waId} from ${from}: free text -> ${saved ? 'comment saved' : 'ignored'}`,
+          `[wa-webhook] ${waId} from ${from}: free text -> ${
+            saved ? 'comment saved' : 'stored, not a review comment'
+          }`,
         )
         if (saved) {
           await replyText(from, 'Thank you for your feedback.')
           continue
         }
       } else {
-        console.log(`[wa-webhook] ${waId} from ${from}: "${label}" -> ignored`)
+        // Nothing readable — a sticker, an image, a location. The row still
+        // exists with message_type set, which is how you find out that guests
+        // are sending photos of a scratched bumper that nobody can see.
+        console.log(`[wa-webhook] ${waId} from ${from}: no text (${msg.type ?? 'unknown'}) -> stored`)
       }
       continue
     }

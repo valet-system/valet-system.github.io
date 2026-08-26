@@ -39,7 +39,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { PageHeader } from '@/components/AppShell'
-import { MeterList } from '@/components/ui/BarChart'
 import Button from '@/components/ui/Button'
 import Card, { SectionHeading } from '@/components/ui/Card'
 import EmptyState from '@/components/ui/EmptyState'
@@ -248,28 +247,11 @@ export default function CarStatus() {
         />
       ) : (
         <>
-          <SectionHeading
-            title={t('status.breakdown')}
-            icon="chart"
-            action={<span className="text-xs text-ink-subtle">{t('common.today')}</span>}
-          />
-          <Card className="mb-6 max-w-3xl">
-            <MeterList
-              rows={GROUPS.map((g) => ({
-                key: g.key,
-                label: t(g.labelKey),
-                value: counts[g.key] ?? 0,
-                tone: g.tone,
-              }))}
-              total={counts.all}
-              unit={t('status.unit')}
-            />
-
-            <p className="mt-4 flex items-start gap-2 border-t border-line pt-3 text-xs leading-relaxed text-ink-subtle">
-              <Icon name="info" size={13} className="mt-0.5 shrink-0" />
-              <span>{t('status.explainer')}</span>
-            </p>
-          </Card>
+          {/* NO BREAKDOWN BAR HERE. Removed on request.
+              GROUPS survives and must: it still drives the filter pills below,
+              which is the reason it was defined once rather than twice. The
+              same counts are also still on the StatRow above, so nothing that
+              was being shown is now unavailable — only the bar chart of it. */}
 
           {/* ── the cars themselves ─────────────────────────────────── */}
           <div className="mb-4 space-y-3">

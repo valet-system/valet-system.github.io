@@ -666,9 +666,6 @@ export const en = {
   'status.showOnly': 'Show only these',
   'status.noneToday': 'No cars yet today',
   'status.noneTodayBody': 'Check-ins appear here as they happen, and this page updates on its own.',
-  'status.breakdown': 'Breakdown',
-  'status.explainer':
-    'In progress is every car somebody is working on right now — being parked, requested, being fetched, or waiting at the door. Re-parked is a car whose guest did not turn up: it is back in the car park but counted separately, because it is a thing that went wrong.',
   'status.searchPlaceholder': 'Token, car number, guest name or phone',
   'status.all': 'All',
   'status.showingRecent':
@@ -1415,9 +1412,6 @@ export const hi = {
   'status.showOnly': 'सिर्फ़ यही दिखाएँ',
   'status.noneToday': 'आज अभी कोई गाड़ी नहीं',
   'status.noneTodayBody': 'गाड़ियाँ दर्ज होते ही यहाँ दिखेंगी, और यह पेज अपने आप अपडेट होता है।',
-  'status.breakdown': 'ब्यौरा',
-  'status.explainer':
-    '"काम चल रहा है" यानी हर वह गाड़ी जिस पर अभी कोई काम कर रहा है — पार्क हो रही, माँगी गई, लाई जा रही, या गेट पर खड़ी। "दोबारा पार्क" वह गाड़ी है जिसके गेस्ट नहीं आए: वह वापस पार्किंग में है पर अलग गिनी जाती है, क्योंकि वह एक गड़बड़ है।',
   'status.searchPlaceholder': 'टोकन, गाड़ी नंबर, गेस्ट का नाम या फ़ोन',
   'status.all': 'सभी',
   'status.showingRecent':
