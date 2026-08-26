@@ -283,13 +283,48 @@ export const COUNTRY_CODE = '91'
 export const PIN_LENGTH = 4
 
 /**
- * The PIN a new staff member starts with.
+ * The PIN a NEW staff member starts with — the value prefilled in the Add
+ * Staff dialog, so an admin has something easy to read out over a counter.
  *
- * They are still forced through Change PIN on first login — that is unchanged
- * — so this is a handover value, not a resting one. Its only job is to be
- * easy to read out over a counter.
+ * TWO THINGS IT IS NOT.
+ *
+ * It never touches an existing account. Creating this constant did not reset
+ * anybody; staff who already have a PIN keep it and sign in with it.
+ *
+ * And nothing forces a change afterwards. An earlier version of this comment
+ * claimed staff are "forced through Change PIN on first login" — they are not,
+ * and no such mechanism exists in the codebase. Change PIN is a menu item in
+ * AppShell that somebody has to choose to open. So 1234 is not a handover
+ * value that expires, it is where the account rests until the operator is
+ * told to change it. Anyone who knows a new hire started this week can guess
+ * it, which is the cost of a memorable default and the reason this paragraph
+ * is here rather than in a commit message.
  */
 export const DEFAULT_PIN = '1234'
+
+/**
+ * The longest PIN a field must still ACCEPT — as opposed to the length a NEW
+ * one must be, which is PIN_LENGTH above.
+ *
+ * ── WHY THE TWO NUMBERS ARE DIFFERENT ─────────────────────────────────
+ * PINs were six digits until this change, and every existing staff member
+ * still has one. Capping the login field at the new PIN_LENGTH would have
+ * locked all of them out — not at the moment of the change, because a live
+ * session survives it, but the next time anybody signed out or picked up
+ * another phone. The field simply would not have let them type their own PIN.
+ *
+ * So: a new PIN is four digits, and a field somebody types an EXISTING PIN
+ * into accepts up to six. Legacy PINs keep working, and each person moves to
+ * four the next time theirs is changed. No mass reset, nobody stranded.
+ *
+ * This can drop to PIN_LENGTH once no six-digit PIN is left:
+ *
+ *   select count(*) from public.staff_pins
+ *    where length(public.decrypt_pin(pin_encrypted)) <> 4;
+ *
+ * Until that returns 0, it stays.
+ */
+export const PIN_INPUT_MAX = 6
 
 /**
  * Default daily token range, PER PROPERTY.

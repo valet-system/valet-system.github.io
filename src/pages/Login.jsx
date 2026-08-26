@@ -4,7 +4,7 @@
  * │                                                                     │
  * │ WHAT THIS FILE IS                                                   │
  * │   The only unauthenticated screen. Two numeric fields: a 10-digit    │
- * │   mobile number and a 6-digit PIN. AuthContext then loads the role   │
+ * │   mobile number and a PIN. AuthContext then loads the role           │
  * │   and ProtectedRoute routes to the right dashboard.                  │
  * │                                                                     │
  * │   NO SMS. NO OTP. NO THIRD PARTY. The number is an identifier, not a │
@@ -67,7 +67,7 @@ import { subscribeToPush } from '@/lib/pushApi'
 import LanguageToggle from '@/components/LanguageToggle'
 import ThemeToggle from '@/components/ThemeToggle'
 import { useT } from '@/i18n'
-import { PIN_LENGTH } from '@/types'
+import { PIN_INPUT_MAX, PIN_LENGTH } from '@/types'
 import { cn } from '@/utils/cn'
 
 export default function Login() {
@@ -130,7 +130,9 @@ export default function Login() {
   }
 
   function handlePinChange(event) {
-    const digits = event.target.value.replace(/\D/g, '').slice(0, PIN_LENGTH)
+    // PIN_INPUT_MAX, not PIN_LENGTH: an existing six-digit PIN has to be
+    // typeable here or its owner cannot sign in. See src/types.
+    const digits = event.target.value.replace(/\D/g, '').slice(0, PIN_INPUT_MAX)
     setPin(digits)
     if (fieldErrors.pin) setFieldErrors((prev) => ({ ...prev, pin: null }))
   }
@@ -332,7 +334,7 @@ export default function Login() {
                   autoComplete="current-password"
                   // "Go" on the last field, so Enter submits from here.
                   enterKeyHint="go"
-                  maxLength={PIN_LENGTH}
+                  maxLength={PIN_INPUT_MAX}
                   placeholder={'•'.repeat(PIN_LENGTH)}
                   aria-invalid={fieldErrors.pin ? true : undefined}
                   aria-describedby={fieldErrors.pin ? 'login-pin-error' : undefined}
@@ -370,7 +372,7 @@ export default function Login() {
                   )}
                 />
 
-                {/* Reveal toggle. A masked 6-digit field gives no way to spot a
+                {/* Reveal toggle. A masked PIN field gives no way to spot a
                     fat-fingered digit; without this a typo means starting over
                     with no idea what went wrong. */}
                 <button
@@ -393,7 +395,10 @@ export default function Login() {
               {/* Progress dots — readable at arm's length in daylight, which a
                   small "3/6" counter is not. */}
               <div className="mt-2.5 flex justify-center gap-2" aria-hidden="true">
-                {Array.from({ length: PIN_LENGTH }, (_, i) => (
+                {/* PIN_LENGTH dashes normally — that is what a new PIN is —
+                    but grown to fit a longer legacy PIN as it is typed, so the
+                    row does not fill up and then look frozen. */}
+                {Array.from({ length: Math.max(PIN_LENGTH, pin.length) }, (_, i) => (
                   <span
                     key={i}
                     className={cn(

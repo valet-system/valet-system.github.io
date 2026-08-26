@@ -3,8 +3,8 @@
  * │ FILE: src/pages/ChangePin.jsx                                       │
  * │                                                                     │
  * │ WHAT THIS FILE IS                                                   │
- * │   Where a signed-in user replaces their own 6-digit PIN. Three       │
- * │   fields: current PIN, new PIN, confirm new PIN.                     │
+ * │   Where a signed-in user replaces their own PIN. Three fields:      │
+ * │   current PIN, new PIN, confirm new PIN.                            │
  * │                                                                     │
  * │ WHY IT EXISTS                                                       │
  * │   An admin sets the FIRST PIN when creating the account and reads it │
@@ -50,7 +50,7 @@ import Icon from '@/components/ui/Icon'
 import { Field } from '@/components/ui/Field'
 import { isPinAcceptable } from '@/lib/phoneAuth'
 import { formatPhone, personName } from '@/utils/format'
-import { PIN_LENGTH } from '@/types'
+import { PIN_INPUT_MAX, PIN_LENGTH } from '@/types'
 import { getStaffPin } from '@/lib/adminApi'
 import { cn } from '@/utils/cn'
 
@@ -113,17 +113,25 @@ export default function ChangePin() {
     }
   }, [operatorId])
 
-  /** One handler for all three fields: digits only, capped at PIN_LENGTH. */
-  function makeHandler(setter, key, advanceTo) {
+  /**
+   * One handler for all three fields: digits only, capped per field.
+   *
+   * `max` differs between them, and it matters. The CURRENT PIN may be a legacy
+   * six-digit one, so its field has to accept six or somebody cannot type their
+   * own PIN to change it. A NEW PIN is four. See src/types for the two numbers.
+   */
+  function makeHandler(setter, key, advanceTo, max = PIN_LENGTH) {
     return (event) => {
-      const digits = event.target.value.replace(/\D/g, '').slice(0, PIN_LENGTH)
+      const digits = event.target.value.replace(/\D/g, '').slice(0, max)
       setter(digits)
       if (errors[key]) setErrors((prev) => ({ ...prev, [key]: null }))
       if (formError) setFormError(null)
-      // Auto-advance when full. Two fields now rather than three, since the
-      // current PIN arrives filled in — but tapping between them by hand is
-      // still a step nobody needs.
-      if (digits.length === PIN_LENGTH && advanceTo) advanceTo.current?.focus()
+      // Auto-advance only on a field with a FIXED length. The current-PIN field
+      // does not know whether four digits is the whole PIN or the first four of
+      // six, so jumping away at four would cut somebody off mid-PIN.
+      if (max === PIN_LENGTH && digits.length === PIN_LENGTH && advanceTo) {
+        advanceTo.current?.focus()
+      }
     }
   }
 
@@ -132,7 +140,10 @@ export default function ChangePin() {
 
     const nextErrors = {}
 
-    if (current.length !== PIN_LENGTH) nextErrors.current = t('pin.enterCurrent')
+    // `<`, not `!==`. An existing six-digit PIN is a valid current PIN, and
+    // demanding exactly PIN_LENGTH here would refuse it before the network
+    // call — telling somebody their own correct PIN is wrong.
+    if (current.length < PIN_LENGTH) nextErrors.current = t('pin.enterCurrent')
 
     const strength = isPinAcceptable(next)
     if (!strength.ok) nextErrors.next = strength.error
@@ -191,10 +202,11 @@ export default function ChangePin() {
             id="pin-current"
             label={t('pin.current')}
             value={current}
-            onChange={makeHandler(setCurrent, 'current', nextRef)}
+            onChange={makeHandler(setCurrent, 'current', nextRef, PIN_INPUT_MAX)}
             error={errors.current}
             reveal={reveal}
             autoComplete="current-password"
+            max={PIN_INPUT_MAX}
           />
 
           <hr className="border-t border-line" />
@@ -268,11 +280,16 @@ export default function ChangePin() {
 }
 
 /**
- * One PIN input. Extracted because three near-identical 6-digit fields on one
+ * One PIN input. Extracted because three near-identical PIN fields on one
  * screen is precisely where copy-paste drift starts — one field ends up
  * missing inputMode and shows a full keyboard on a phone.
  */
-function PinField({ id, inputRef, label, value, onChange, error, reveal, hint, autoComplete }) {
+function PinField({
+  id, inputRef, label, value, onChange, error, reveal, hint, autoComplete,
+  // Defaults to the length of a NEW PIN. The current-PIN field passes
+  // PIN_INPUT_MAX, because an existing six-digit PIN has to be typeable.
+  max = PIN_LENGTH,
+}) {
   return (
     <Field label={label} htmlFor={id} error={error} hint={!error ? hint : undefined} required>
       <input
@@ -284,7 +301,7 @@ function PinField({ id, inputRef, label, value, onChange, error, reveal, hint, a
         type={reveal ? 'tel' : 'password'}
         inputMode="numeric"
         autoComplete={autoComplete}
-        maxLength={PIN_LENGTH}
+        maxLength={max}
         placeholder={'•'.repeat(PIN_LENGTH)}
         aria-invalid={error ? true : undefined}
         className={cn(
