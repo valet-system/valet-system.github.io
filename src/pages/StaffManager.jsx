@@ -345,7 +345,7 @@ export default function StaffManager() {
 
               <div className="relative">
                 <Icon
-                  name="map-pin"
+                  name="location"
                   size={15}
                   className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle"
                 />
@@ -595,7 +595,7 @@ function StaffRow({ person, isSelf, showProperty, onEdit, onToggleActive, isFirs
           </Badge>
           {showProperty && person.properties?.name && (
             <span className="flex items-center gap-1 rounded-md bg-surface-sunken px-2 py-0.5 text-[0.6875rem] font-medium text-ink-subtle ring-1 ring-inset ring-line-strong">
-              <Icon name="map-pin" size={10} />
+              <Icon name="location" size={10} />
               {person.properties.name}
             </span>
           )}

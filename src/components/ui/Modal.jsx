@@ -26,12 +26,11 @@
  * │   admin/TokenMgmt (create / extend range), any confirm prompt.       │
  * │                                                                     │
  * │ DEPENDS ON                                                          │
- * │   ui/Icon, ui/Button, utils/cn                                      │
+ * │   ui/Button, utils/cn                                                │
  * └─────────────────────────────────────────────────────────────────────┘
  */
 
 import { useEffect, useRef } from 'react'
-import Icon from './Icon'
 import Button from './Button'
 import { useT } from '@/i18n'
 import { cn } from '@/utils/cn'
@@ -129,9 +128,11 @@ export default function Modal({
               onClick={onClose}
               aria-label={t('common.close')}
               className="-mr-1 -mt-1"
-            >
-              <Icon name="close" size={19} />
-            </Button>
+              // The `icon` prop, not a child. Button sizes an icon-only glyph
+              // itself, so passing it this way keeps every icon button in the
+              // app the same size.
+              icon="close"
+            />
           </div>
         )}
 

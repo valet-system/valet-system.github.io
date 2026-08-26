@@ -164,7 +164,19 @@ const Button = forwardRef(function Button(
       ) : (
         <>
           {icon && <Icon name={icon} size={iconOnly ? 20 : 18} />}
-          {!iconOnly && children}
+          {/* ── CHILDREN ON AN ICON-ONLY BUTTON ─────────────────────────
+              This used to be `!iconOnly && children`, which DISCARDED them.
+              A caller writing
+
+                <Button size="icon-sm"><Icon name="close" /></Button>
+
+              got a button with nothing in it — the box rendered, the cross did
+              not, and nothing said why. Modal's close button was exactly that
+              for however long it has been there.
+
+              Now children render when no `icon` prop was passed. `icon` still
+              wins, so a caller giving both is not shown two glyphs. */}
+          {(!iconOnly || !icon) && children}
           {iconRight && <Icon name={iconRight} size={18} />}
         </>
       )}
