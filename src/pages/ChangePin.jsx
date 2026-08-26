@@ -38,7 +38,7 @@
  * └─────────────────────────────────────────────────────────────────────┘
  */
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { useT } from '@/i18n'
@@ -51,10 +51,11 @@ import { Field } from '@/components/ui/Field'
 import { isPinAcceptable } from '@/lib/phoneAuth'
 import { formatPhone, personName } from '@/utils/format'
 import { PIN_LENGTH } from '@/types'
+import { getStaffPin } from '@/lib/adminApi'
 import { cn } from '@/utils/cn'
 
 export default function ChangePin() {
-  const { changePin, phone, displayName, displayNameHi, homePath } = useAuth()
+  const { changePin, phone, displayName, displayNameHi, homePath, operatorId } = useAuth()
   const toast = useToast()
   const navigate = useNavigate()
 
@@ -69,6 +70,49 @@ export default function ChangePin() {
   const nextRef = useRef(null)
   const confirmRef = useRef(null)
 
+  /**
+   * Fill in the current PIN for them.
+   *
+   * Anyone may read their OWN PIN — migration 0008 decided that explicitly, and
+   * can_view_staff_pin() returns "allowed" the moment the target is the caller.
+   * So this asks for the signed-in person's own, and nobody else's is reachable
+   * from here.
+   *
+   * ── WHAT THIS GIVES UP ────────────────────────────────────────────────
+   * The Current PIN field was a verification step: it proved the person holding
+   * the phone was the account holder rather than someone who found it
+   * unlocked. Filled in, it is a question the screen has already answered.
+   *
+   * That is the trade being made deliberately. The screen is reached straight
+   * after a successful sign-in with that same PIN, so it was mostly asking
+   * something already proven a moment ago — and on a phone, three PIN fields is
+   * a lot of tapping for that.
+   *
+   * ── WHY IT FAILS QUIETLY ──────────────────────────────────────────────
+   * If the read fails, or the PIN predates encrypted storage (`stored: false`),
+   * the field is simply left empty and they type it as before. A blocking error
+   * here would strand somebody on a screen they are forced through and cannot
+   * skip.
+   */
+  useEffect(() => {
+    if (!operatorId) return
+    let cancelled = false
+
+    getStaffPin(operatorId).then((result) => {
+      if (cancelled) return
+      const pin = result.ok ? String(result.pin ?? '') : ''
+      if (pin.length !== PIN_LENGTH) return
+      setCurrent(pin)
+      // Straight to the field they actually have to fill. Landing on a filled
+      // one and tabbing past it is a step that exists for no reason.
+      nextRef.current?.focus()
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [operatorId])
+
   /** One handler for all three fields: digits only, capped at PIN_LENGTH. */
   function makeHandler(setter, key, advanceTo) {
     return (event) => {
@@ -76,8 +120,9 @@ export default function ChangePin() {
       setter(digits)
       if (errors[key]) setErrors((prev) => ({ ...prev, [key]: null }))
       if (formError) setFormError(null)
-      // Auto-advance when full — three 6-digit fields is a lot of tapping
-      // otherwise.
+      // Auto-advance when full. Two fields now rather than three, since the
+      // current PIN arrives filled in — but tapping between them by hand is
+      // still a step nobody needs.
       if (digits.length === PIN_LENGTH && advanceTo) advanceTo.current?.focus()
     }
   }

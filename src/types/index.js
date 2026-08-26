@@ -262,41 +262,34 @@ export const PHONE_REGEX = /^[6-9]\d{9}$/
 export const COUNTRY_CODE = '91'
 
 /**
- * PIN length. SIX, not four, and that is a security decision rather than a
- * preference:
+ * PIN length. FOUR, on request.
+ *
+ * This was six, and the reason it was six is worth leaving on the record
+ * rather than deleting, because it has not stopped being true:
  *
  *   4 digits =    10,000 combinations
  *   6 digits = 1,000,000 combinations
  *
- * There is deliberately no application-level lockout in this system, so the
- * only two things standing between an attacker and an account are this number
- * and Supabase's own per-IP rate limit (Dashboard -> Authentication -> Rate
- * Limits, which must be tightened — see migration 0004's header).
+ * There is deliberately no application-level lockout in this system. So the
+ * only things between an attacker and an account are this number and
+ * Supabase's own per-IP rate limit (Dashboard -> Authentication -> Rate
+ * Limits). At four digits with no weak-PIN check and a default of 1234, that
+ * rate limit is doing effectively all of the work — it is worth confirming it
+ * is actually tightened. See migration 0004's header.
  *
- * Do not lower this without re-reading that header.
+ * The weak-PIN list and the sequential/repeated checks were removed with it,
+ * also on request: a PIN of 1234 or 1111 is now accepted and permanent.
  */
-export const PIN_LENGTH = 6
+export const PIN_LENGTH = 4
 
 /**
- * PINs refused when an admin SETS one. Not checked at login — rejecting a weak
- * PIN there would tell an attacker it is not the right one.
+ * The PIN a new staff member starts with.
  *
- * Without a lockout, a guessable PIN is the one realistic way into this system:
- * '123456' falls in the first few attempts instead of the 500,000th, which
- * makes the 1,000,000-combination space irrelevant. Hence the list.
- *
- * Purely sequential and repeated-digit PINs are caught algorithmically in
- * phoneAuth.js; these are the ones a pattern check would miss.
+ * They are still forced through Change PIN on first login — that is unchanged
+ * — so this is a handover value, not a resting one. Its only job is to be
+ * easy to read out over a counter.
  */
-export const WEAK_PINS = new Set([
-  '123456', '654321', '111111', '000000', '121212', '112233', '123123',
-  '789456', '159753', '147258', '102030', '135790', '246800', '696969',
-  '123321', '456654', '999999', '888888', '777777', '666666', '555555',
-  '444444', '333333', '222222', '101010', '010101', '123654', '321123',
-  '520520', '143143', '786786', '420420', '007007', '100100', '110011',
-  // Common Indian years / dates people reach for
-  '200000', '201010', '202020', '199999', '150847', '260150', '151515',
-])
+export const DEFAULT_PIN = '1234'
 
 /**
  * Default daily token range, PER PROPERTY.

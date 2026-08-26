@@ -346,8 +346,11 @@ export default function Login() {
                     //
                     // Matching the left padding to the right (px-14) aligned
                     // them and then clipped the first digit at 320px: six digits
-                    // at this size and tracking need 148px, and 56px of padding
-                    // each side leaves 132px. So the padding stays narrow and
+                    // at this size and tracking needed 148px, and 56px of
+                    // padding each side leaves 132px. The PIN is four digits
+                    // now so that particular sum no longer overflows — but the
+                    // fix stays, because it was never really about the count.
+                    // So the padding stays narrow and
                     // the button simply overlays the right-hand padding — it is
                     // absolutely positioned, so it costs the text nothing.
                     'tnum h-touch w-full rounded-xl border bg-surface px-4',

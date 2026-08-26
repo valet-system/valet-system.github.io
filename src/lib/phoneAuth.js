@@ -38,7 +38,7 @@
 
 import { pickLang } from '@/i18n/activeLang'
 import { normalisePhone } from '@/utils/format'
-import { PHONE_REGEX, PIN_LENGTH, WEAK_PINS } from '@/types'
+import { PHONE_REGEX, PIN_LENGTH } from '@/types'
 
 /**
  * The domain half of the derived auth email.
@@ -122,14 +122,21 @@ export function validatePinInput(value) {
 }
 
 /**
- * Stricter check, used only where a PIN is being CHOSEN (the admin's add-user
- * and reset-PIN flows) — never on the login screen.
+ * The only check left on a PIN being CHOSEN: that it is four digits.
  *
- * Why the split: on login, rejecting a weak PIN would tell an attacker that
- * '123456' is not this account's PIN, which is information. When SETTING one,
- * refusing the obvious choices is the entire point — with no lockout in this
- * system, a PIN of '111111' is the one realistic way in, because it is
- * guessable in the first handful of attempts rather than the millionth.
+ * ── WHAT USED TO BE HERE, AND WHY IT IS GONE ──────────────────────────
+ * A weak-PIN list, a same-digit check, and a sequential-run check. All removed
+ * on request. '1234', '1111' and '0000' are now accepted and permanent.
+ *
+ * The length check stays because it is not a policy — it is a format. A PIN is
+ * stored as the account's password, so a three-digit or non-numeric value does
+ * not weaken the login, it breaks it.
+ *
+ * ── AND WHY THIS IS STILL A SEPARATE FUNCTION FROM LOGIN ──────────────
+ * validatePinInput() above is what the login screen uses, and the two must not
+ * be merged even now that this one barely does anything. Anything this function
+ * refuses is a hint about what the PIN is NOT, and on a login form that is
+ * information an attacker gets for free.
  */
 export function isPinAcceptable(pin) {
   const digits = String(pin || '').replace(/\D/g, '')
@@ -141,28 +148,6 @@ export function isPinAcceptable(pin) {
     }
   }
 
-  if (WEAK_PINS.has(digits)) {
-    return {
-      ok: false,
-      error: pickLang(
-        'That PIN is too common. Choose a different one.',
-        'यह पिन बहुत आम है। कोई और चुनिए।',
-      ),
-    }
-  }
-
-  // All the same digit: 000000, 111111, ...
-  if (/^(\d)\1+$/.test(digits)) {
-    return { ok: false, error: pickLang('PIN cannot be the same digit repeated', 'पिन में सारे अंक एक जैसे नहीं हो सकते') }
-  }
-
-  // Straight runs up or down: 123456, 654321, 456789 ...
-  const ascending = digits.split('').every((d, i, all) => i === 0 || +d === +all[i - 1] + 1)
-  const descending = digits.split('').every((d, i, all) => i === 0 || +d === +all[i - 1] - 1)
-  if (ascending || descending) {
-    return { ok: false, error: pickLang('PIN cannot be consecutive digits', 'पिन क्रम में लगे अंकों का नहीं हो सकता') }
-  }
-
   return { ok: true, error: null }
 }
 
@@ -170,22 +155,18 @@ export function isPinAcceptable(pin) {
  * A cryptographically random PIN, for the admin's "generate" button.
  *
  * crypto.getRandomValues, not Math.random: Math.random is not uniform and is
- * predictable from earlier outputs. For a credential that matters. The loop
- * simply rejects anything isPinAcceptable() would refuse, so a generated PIN
- * is never '123456'.
+ * predictable from earlier outputs, which is the wrong property for something
+ * that is briefly a credential.
+ *
+ * The reject-and-retry loop is gone with the weak-PIN list — there is nothing
+ * left to reject, so a single draw is the answer. That does mean generate can
+ * now hand back '1234' about once in ten thousand presses. It is accepted
+ * everywhere else now, so refusing it only here would be inconsistent.
  */
 export function generatePin() {
-  const digits = new Uint8Array(PIN_LENGTH)
-
-  for (let attempt = 0; attempt < 50; attempt += 1) {
-    crypto.getRandomValues(digits)
-    // % 10 on a byte is very slightly biased toward 0-5; irrelevant at this
-    // scale, and avoiding it would add rejection sampling for no real gain.
-    const pin = Array.from(digits, (byte) => byte % 10).join('')
-    if (isPinAcceptable(pin).ok) return pin
-  }
-
-  // Unreachable in practice — a weak PIN 50 times in a row is astronomically
-  // unlikely — but never return a value that failed validation.
-  return '482913'
+  const bytes = new Uint8Array(PIN_LENGTH)
+  crypto.getRandomValues(bytes)
+  // % 10 on a byte is very slightly biased toward 0-5; irrelevant at this
+  // scale, and avoiding it would add rejection sampling for no real gain.
+  return Array.from(bytes, (byte) => byte % 10).join('')
 }

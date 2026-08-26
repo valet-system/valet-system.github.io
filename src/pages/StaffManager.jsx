@@ -94,7 +94,7 @@ import {
   personName,
   skipPhoneSeparator,
 } from '@/utils/format'
-import { PIN_LENGTH, ROLES, ROLE_META } from '@/types'
+import { DEFAULT_PIN, PIN_LENGTH, ROLES, ROLE_META } from '@/types'
 import { cn } from '@/utils/cn'
 
 export default function StaffManager() {
@@ -131,7 +131,7 @@ export default function StaffManager() {
    * Non-null shows PinRevealModal.
    *
    * A modal rather than a toast, even though the PIN can be read again from
-   * Edit: the admin has to say six digits out loud to someone standing in
+   * Edit: the admin has to say the PIN out loud to someone standing in
    * front of them, and a toast slides away on a timer while they are still
    * talking. PIN CHANGES do not come through here — the admin typed those
    * themselves inside Edit, so they already know them.
@@ -680,7 +680,11 @@ function AddStaffModal({
     if (!open) return
     setName('')
     setPhone('')
-    setPin(generatePin())
+    // DEFAULT_PIN, not a random one. The admin reads this out at a counter and
+    // the operator types it once, then Change PIN forces them off it on first
+    // login — so it is a handover value, and one everybody already knows beats
+    // one that has to be transcribed correctly. Generate is still one tap away.
+    setPin(DEFAULT_PIN)
     setRole(ROLES.OPERATOR)
     setProperty(defaultPropertyId ?? '')
     setErrors({})
@@ -911,7 +915,7 @@ function AddStaffModal({
 //
 // This used to be the only moment a PIN was readable. Since migration 0007 it
 // is not: the PIN is stored encrypted and can be read back from Edit. The
-// modal stays because saying six digits out loud to someone standing in front
+// modal stays because saying a PIN out loud to someone standing in front
 // of you needs a surface that does not disappear on a timer.
 // ═══════════════════════════════════════════════════════════════════════
 
