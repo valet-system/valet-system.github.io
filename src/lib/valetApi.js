@@ -103,8 +103,8 @@ const CODE_MESSAGES = {
   ],
   BAD_NAME: ['Enter the guest name.', 'गेस्ट का नाम डालिए।'],
   BAD_PHONE: [
-    'Enter a valid 10-digit mobile number starting 6-9.',
-    '6-9 से शुरू होने वाला सही 10 अंकों का मोबाइल नंबर डालिए।',
+    'Enter a valid 10-digit phone number starting 6-9.',
+    '6-9 से शुरू होने वाला सही 10 अंकों का फ़ोन नंबर डालिए।',
   ],
   BAD_CAR: ['Enter the car number.', 'गाड़ी का नंबर डालिए।'],
   BAD_TIER: ['Choose Standard, Premium or VIP.', 'Standard, Premium या VIP में से चुनिए।'],

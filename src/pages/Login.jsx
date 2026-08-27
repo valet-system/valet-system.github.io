@@ -141,7 +141,7 @@ export default function Login() {
    *      number at 10, so the extra digit was harmless in the field it was
    *      aimed at — but focus had already moved, so it became the first digit
    *      of the PIN. The PIN is masked, so nobody saw it, and the login failed
-   *      with "Wrong mobile number or PIN" for no visible reason.
+   *      with "Invalid phone number or PIN" for no visible reason.
    *
    *   2. Correcting a typo was impossible. Fixing the third digit means the
    *      length passes through 9 and back to 10, which fired the jump again —

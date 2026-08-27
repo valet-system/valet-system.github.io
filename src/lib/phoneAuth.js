@@ -96,13 +96,13 @@ export function validatePhoneInput(value) {
   // pickLang, not a t() hook: these are called from inside the login form's
   // submit handler and from JSX expressions, and this module is not a
   // component. See i18n/activeLang for why that is safe here.
-  if (!digits) return pickLang('Enter your mobile number', 'अपना मोबाइल नंबर डालिए')
+  if (!digits) return pickLang('Enter your phone number', 'अपना फ़ोन नंबर डालिए')
   if (digits.length < 10) {
     const left = 10 - digits.length
     return pickLang(`${left} more digit${left > 1 ? 's' : ''} needed`, `${left} अंक और डालिए`)
   }
   if (!PHONE_REGEX.test(digits)) {
-    return pickLang('Mobile numbers start with 6, 7, 8 or 9', 'मोबाइल नंबर 6, 7, 8 या 9 से शुरू होता है')
+    return pickLang('Phone numbers start with 6, 7, 8 or 9', 'फ़ोन नंबर 6, 7, 8 या 9 से शुरू होता है')
   }
 
   return null

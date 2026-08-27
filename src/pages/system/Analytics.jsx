@@ -143,11 +143,6 @@ export default function SystemAnalytics() {
       <PageHeader
         title={t('group.title')}
         subtitle={t('group.subtitle')}
-        actions={
-          <Button variant="secondary" size="md" icon="refresh" onClick={load}>
-            {t('common.refresh')}
-          </Button>
-        }
       />
 
       <RangePicker from={range.from} to={range.to} onChange={setRange} />

@@ -5,7 +5,7 @@
  * │ WHAT THIS FILE IS                                                   │
  * │   Who is logged in, what role they hold, and which property they     │
  * │   belong to — available anywhere via useAuth(). The actions are:      │
- * │     signInWithPin(phone, pin)  — mobile number + 6-digit PIN          │
+ * │     signInWithPin(phone, pin)  — phone number + PIN                  │
  * │     changePin(currentPin, newPin)                                    │
  * │     signOut()                                                       │
  * │     refreshProfile()                                                │
@@ -232,7 +232,12 @@ export function AuthProvider({ children }) {
   // ══════════════════════════════════════════════════════════════════
 
   /**
-   * Signs in with a mobile number and a 6-digit PIN.
+   * Signs in with a phone number and a PIN.
+   *
+   * No length is stated here on purpose. A new PIN is four digits, but an
+   * older one may still be six and both sign in — see PIN_LENGTH and
+   * PIN_INPUT_MAX in src/types. This function does not care: it hands the
+   * PIN to Supabase Auth as the password, whatever length it is.
    *
    * The phone is converted to the account's derived auth email and the PIN is
    * passed straight through as the password — Supabase Auth does the bcrypt
@@ -247,7 +252,7 @@ export function AuthProvider({ children }) {
     // Should be unreachable — Login validates first — but a malformed address
     // must never reach the auth endpoint.
     if (!authEmail) {
-      return { error: pickLang('Enter a valid 10-digit mobile number.', 'सही 10 अंकों का मोबाइल नंबर डालिए।') }
+      return { error: pickLang('Enter a valid 10-digit phone number.', 'सही 10 अंकों का फ़ोन नंबर डालिए।') }
     }
 
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -265,7 +270,7 @@ export function AuthProvider({ children }) {
         // Identical whether the NUMBER is unknown or the PIN is wrong, and it
         // deliberately reveals nothing about the internal derived address —
         // an operator has no idea that exists and should never be shown it.
-        return { error: pickLang('Wrong mobile number or PIN.', 'मोबाइल नंबर या पिन ग़लत है।') }
+        return { error: pickLang('Invalid phone number or PIN.', 'फ़ोन नंबर या पिन ग़लत है।') }
       }
       // This one is worth naming: it means the auth user was created without
       // "Auto Confirm" turned on. Since the derived address is unroutable, no
@@ -439,7 +444,7 @@ export function AuthProvider({ children }) {
       displayNameHi: userRole?.name_hi ?? null,
 
       /**
-       * The login identifier, as a human knows it: the 10-digit mobile number.
+       * The login identifier, as a human knows it: the 10-digit phone number.
        * This is what the UI shows.
        *
        * NOT session.user.email. That holds the derived internal address

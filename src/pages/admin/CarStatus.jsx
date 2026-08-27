@@ -199,11 +199,6 @@ export default function CarStatus() {
         subtitle={
           propertyName ? t('status.todaySubtitle', { property: propertyName }) : t('common.today')
         }
-        actions={
-          <Button variant="secondary" size="md" icon="refresh" onClick={load}>
-            {t('common.refresh')}
-          </Button>
-        }
       />
 
       <StatRow className="mb-5">

@@ -52,6 +52,7 @@ import {
 import RangePicker, { presetRange } from '@/components/ui/RangePicker'
 import StatTile, { StatRow } from '@/components/ui/StatTile'
 import { RatingBadge } from '@/components/ui/Badge'
+import { useRealtime } from '@/hooks/useRealtime'
 import { useAuth } from '@/context/AuthContext'
 import { useT } from '@/i18n'
 import { supabase, describeDbError, selectOptional } from '@/supabase'
@@ -168,6 +169,30 @@ export default function Reviews() {
     load()
   }, [load])
 
+  /**
+   * Ratings arrive while this page is open, so it has to hear about them.
+   *
+   * This page used to be the only one where the Refresh button was doing real
+   * work. load() rebuilds on [propertyId, range.from, range.to] — nothing
+   * re-queries unless somebody changes the date range — while guests keep
+   * tapping Excellent / Good / Poor all day. Removing the button without this
+   * would have meant an admin sitting on the page and never seeing a new one.
+   *
+   * NEEDS MIGRATION 0053. `reviews` was not in the supabase_realtime
+   * publication, so this hook on its own would connect, report success and
+   * deliver nothing — the failure looks exactly like a quiet evening. 0053 also
+   * sets replica identity full, without which the written comment on a Poor
+   * rating (an UPDATE, arriving minutes after the rating) never gets past the
+   * property filter.
+   */
+  useRealtime({
+    channel: `reviews:${propertyId}`,
+    table: 'reviews',
+    filter: propertyId ? `property_id=eq.${propertyId}` : undefined,
+    enabled: Boolean(propertyId),
+    onRefetch: load,
+  })
+
   // Filtering is client-side: a property does at most a few hundred reviews in
   // 90 days and they are already here, so a round trip per filter tap would
   // only add latency.
@@ -229,9 +254,6 @@ export default function Reviews() {
         subtitle={propertyName}
         actions={
           <>
-            <Button variant="secondary" size="md" icon="refresh" onClick={load}>
-              {t('common.refresh')}
-            </Button>
             <Button
               variant="secondary"
               size="md"

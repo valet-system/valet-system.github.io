@@ -213,11 +213,6 @@ export default function TodaysCars() {
       <PageHeader
         title={t('cars.title')}
         subtitle={propertyName ? `${propertyName} · ${istToday()}` : undefined}
-        actions={
-          <Button variant="secondary" size="md" icon="refresh" onClick={load}>
-            {t('common.refresh')}
-          </Button>
-        }
       />
 
       <div className="mb-4 space-y-3">

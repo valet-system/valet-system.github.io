@@ -318,9 +318,6 @@ export default function Records() {
         subtitle={t('records.subtitle')}
         actions={
           <>
-            <Button variant="secondary" size="md" icon="refresh" onClick={load}>
-              {t('common.refresh')}
-            </Button>
             <Button
               variant="primary"
               size="md"

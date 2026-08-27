@@ -276,11 +276,6 @@ export default function MyTasks() {
                 n: active.length,
               })
         }
-        actions={
-          <Button variant="secondary" size="md" icon="refresh" onClick={load}>
-            {t('common.refresh')}
-          </Button>
-        }
       />
 
       {error ? (

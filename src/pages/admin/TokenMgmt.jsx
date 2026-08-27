@@ -251,11 +251,6 @@ export default function TokenMgmt() {
       <PageHeader
         title={t('tokens.title')}
         subtitle={propertyName ? `${propertyName} · ${formatDate(`${todayDate}T12:00:00+05:30`)}` : undefined}
-        actions={
-          <Button variant="secondary" size="md" icon="refresh" onClick={load}>
-            {t('common.refresh')}
-          </Button>
-        }
       />
 
       {error ? (

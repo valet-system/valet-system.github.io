@@ -481,11 +481,6 @@ export default function Dashboard() {
       <PageHeader
         title={t('queue.title')}
         subtitle={propertyName}
-        actions={
-          <Button variant="secondary" size="md" icon="refresh" onClick={load}>
-            {t('common.refresh')}
-          </Button>
-        }
       />
 
       {/* Every tile stays on THIS page. They used to send "Cars today" and

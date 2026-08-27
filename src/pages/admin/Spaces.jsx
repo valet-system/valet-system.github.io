@@ -365,11 +365,6 @@ export default function Spaces() {
         // picks, so the picker IS the subtitle — repeating the name underneath
         // the control that sets it is one label too many.
         subtitle={isSystemAdmin ? undefined : propertyName}
-        actions={
-          <Button variant="secondary" size="md" icon="refresh" onClick={load}>
-            {t('common.refresh')}
-          </Button>
-        }
       />
 
       {/* ── CHIPS, not a dropdown ─────────────────────────────────────────

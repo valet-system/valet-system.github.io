@@ -145,11 +145,6 @@ export default function Analytics() {
       <PageHeader
         title={t('analytics.title')}
         subtitle={propertyName}
-        actions={
-          <Button variant="secondary" size="md" icon="refresh" onClick={load}>
-            {t('common.refresh')}
-          </Button>
-        }
       />
 
       <RangePicker from={range.from} to={range.to} onChange={setRange} />

@@ -274,7 +274,7 @@ export function describeDbError(error, fallback = null) {
     )
   }
   if (raw.includes('Invalid login credentials')) {
-    return pickLang('Wrong email or password.', 'ईमेल या पासवर्ड ग़लत है।')
+    return pickLang('Invalid email or password.', 'ईमेल या पासवर्ड ग़लत है।')
   }
   if (raw.includes('Email not confirmed')) {
     return pickLang(
