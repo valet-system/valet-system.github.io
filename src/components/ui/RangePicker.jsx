@@ -45,6 +45,7 @@ import Icon from '@/components/ui/Icon'
 import { useT } from '@/i18n'
 import { istDaysAgo, istToday } from '@/utils/format'
 import { cn } from '@/utils/cn'
+import DateFields from '@/components/ui/DateFields'
 
 /**
  * `back` is how many days to step BACK from today, so the range is inclusive of
@@ -111,6 +112,42 @@ export default function RangePicker({
 }) {
   const t = useT()
   const [custom, setCustom] = useState(false)
+
+  /**
+   * The dates being typed, held back until Search is pressed.
+   *
+   * ── WHY A DRAFT AND NOT onChange PER KEYSTROKE ──────────────────────
+   * The date inputs used to call onChange directly, and every caller runs its
+   * query off [range.from, range.to]. So picking a date re-queried the page
+   * IMMEDIATELY — and a <input type="date"> fires change more than once while a
+   * date is being assembled, so choosing one period could send several requests
+   * for periods nobody asked about. Half-built dates like 2026-06-0 went to the
+   * server, the screen flickered through wrong numbers, and the reader had no
+   * way to tell a loading state from a result.
+   *
+   * Now the fields write here, and nothing leaves this component until Search.
+   *
+   * PRESETS ARE NOT DRAFTED. One tap is one complete intent — there is no
+   * half-typed "last 7 days" — so those still apply straight away. Reset is the
+   * same: it is a discard, and making somebody confirm a discard is noise.
+   */
+  const [draft, setDraft] = useState({ from, to })
+
+  // Re-seed whenever the APPLIED range changes — a preset tap, or a parent
+  // restoring a saved range. Without this the draft would keep showing dates
+  // that are no longer in effect the next time the panel is opened.
+  useEffect(() => {
+    setDraft({ from, to })
+  }, [from, to])
+
+  // Is there anything to search for? Used to enable the button, and it is also
+  // the only signal on screen that a pick has not been applied yet.
+  const dirty = draft.from !== from || draft.to !== to
+
+  // Built once per render rather than inline twice, so both fields cannot drift
+  // apart, and so a new object identity is not handed to DateFields on every
+  // keystroke of the other one.
+  const dateLabels = { day: t('range.day'), month: t('range.month'), year: t('range.year') }
 
   /**
    * Which preset the current range matches, or null for a custom one.
@@ -184,58 +221,111 @@ export default function RangePicker({
 
       {custom && (
         <div className="rounded-xl border border-line bg-surface p-3">
-          <div className="flex flex-wrap items-end gap-2">
-            <label className="flex flex-col gap-1">
+          {/* gap-x-6, not gap-2. The two dates are six little boxes in a row,
+              and with the same gap outside as inside they read as ONE chain:
+              29 / 07 / 2026 / DD / MM / YYYY. The wide outer gap is the only
+              thing telling the eye where FROM ends and TO begins. */}
+          {/* items-START, not items-end.
+              DateFields grows a line of error text under itself when a date is
+              impossible. With items-end that made the OTHER group's boxes drop
+              to line up with the bottom of the errored one — an error in From
+              visibly nudged To downwards. Aligning tops keeps the six boxes on
+              one line whatever appears below them. */}
+          <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
+            {/* A div, not a label. A <label> points at ONE control; wrapping
+                three makes a click on the word land on whichever the browser
+                guesses. DateFields already labels each box for screen readers. */}
+            <div className="flex flex-col gap-1">
               <span className="text-[0.6875rem] font-bold uppercase tracking-wider text-ink-subtle">
                 {t('range.from')}
               </span>
-              <input
-                type="date"
-                value={from ?? ''}
-                // A start after the end is refused by the RPC as BAD_RANGE. `max`
-                // stops it being picked at all, which is a better place to stop
-                // it than an error message after a round trip.
-                max={to ?? today}
-                // Empty is passed through as null, not swallowed. Both ends are
-                // optional, and the server fills in what is missing — clearing a
-                // field has to actually clear it or the control lies about what
-                // is in effect.
-                onChange={(e) => onChange({ from: e.target.value || null, to })}
-                className="tnum h-11 rounded-xl border border-line-strong bg-surface px-3 text-base font-medium text-ink outline-none focus:border-brand sm:text-sm"
-              />
-            </label>
+              {/* Three fields, not <input type="date"> — see DateFields for
+                  why. A start after the end is refused by the RPC as
+                  BAD_RANGE, so `max` stops it being assembled at all, which is
+                  a better place to stop it than an error after a round trip.
 
-            <label className="flex flex-col gap-1">
+                  draft.to, not the applied `to`: bounded against what is on
+                  screen, or a From could be refused for clashing with an end
+                  date the reader has already changed.
+
+                  Empty comes back as null, not swallowed. Both ends are
+                  optional and the server fills in what is missing — clearing a
+                  field has to actually clear it, or the control lies about what
+                  is in effect. */}
+              <DateFields
+                value={draft.from}
+                max={draft.to ?? today}
+                onChange={(iso) => setDraft((d) => ({ ...d, from: iso }))}
+                labels={dateLabels}
+                invalidText={t('range.badDate')}
+                outOfRangeText={t('range.outOfRange')}
+              />
+            </div>
+
+            <div className="flex flex-col gap-1">
               <span className="text-[0.6875rem] font-bold uppercase tracking-wider text-ink-subtle">
                 {t('range.to')}
               </span>
-              <input
-                type="date"
-                value={to ?? ''}
-                min={from ?? undefined}
-                // No future dates. There is no data there, and an empty chart
-                // reads as "we had no cars" rather than "that has not happened".
+              {/* No future dates. There is no data there, and an empty chart
+                  reads as "we had no cars" rather than "that has not happened". */}
+              <DateFields
+                value={draft.to}
+                min={draft.from ?? undefined}
                 max={today}
-                onChange={(e) => onChange({ from, to: e.target.value || null })}
-                className="tnum h-11 rounded-xl border border-line-strong bg-surface px-3 text-base font-medium text-ink outline-none focus:border-brand sm:text-sm"
+                onChange={(iso) => setDraft((d) => ({ ...d, to: iso }))}
+                labels={dateLabels}
+                invalidText={t('range.badDate')}
+                outOfRangeText={t('range.outOfRange')}
               />
-            </label>
+            </div>
 
+            {/* Their own group. Loose in the row they inherited the same gap as
+                the date boxes and Search ended up flush against YYYY, reading
+                as a seventh segment. */}
+            <div className="flex flex-col gap-1">
+              {/* A spacer label, so this group has the same shape as the two
+                  beside it and items-start lines all three up on its own. A
+                  hard-coded top margin would do the same until somebody changes
+                  the label's font size. */}
+              <span aria-hidden="true" className="text-[0.6875rem] font-bold uppercase tracking-wider">
+                &nbsp;
+              </span>
+              <div className="flex items-center gap-3">
+            {/* Nothing is queried until this is pressed. Disabled while the
+                draft matches what is already on screen, which is also how the
+                reader can tell whether a pick is still waiting to be applied. */}
             <button
               type="button"
-              onClick={() => {
-                setCustom(false)
-                onChange(presetRange('30d'))
-              }}
-              className="h-11 px-2 text-xs font-semibold text-info hover:text-ink"
+              onClick={() => onChange(draft)}
+              disabled={!dirty}
+              className={cn(
+                'h-11 rounded-xl px-4 text-sm font-semibold transition-colors',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40',
+                dirty
+                  ? 'bg-brand text-ink-inverse hover:opacity-90'
+                  : 'cursor-not-allowed border border-line-strong bg-surface-sunken text-ink-subtle',
+              )}
             >
-              {t('range.reset')}
+              {t('range.search')}
             </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setCustom(false)
+                  onChange(presetRange('30d'))
+                }}
+                className="h-11 px-1 text-xs font-semibold text-info hover:text-ink"
+              >
+                {t('range.reset')}
+              </button>
+              </div>
+            </div>
           </div>
 
-          {/* A date input cannot carry a placeholder, so what "empty" means has
-              to be said out loud — otherwise a blank To looks unfinished and
-              nobody trusts the numbers on screen. */}
+          {/* The DD / MM / YYYY placeholders say what goes in each box, but not
+              what LEAVING them empty means — and a blank To looks unfinished,
+              so nobody trusts the numbers on screen until it is said. */}
           <p className="mt-2 flex items-start gap-1.5 text-xs leading-relaxed text-ink-subtle">
             <Icon name="info" size={13} className="mt-0.5 shrink-0" />
             <span>{t('range.emptyHint')}</span>
