@@ -435,11 +435,37 @@ the download button in section 8 uses.
       "parked_by_hi": "संदीप",
       "fetched_by": "Vikash",
       "fetched_by_hi": null,
+      "rating": "excellent",
+      "review_comment": null,
       "total_count": 4182
     }
   ]
 }
 ```
+
+#### The two rating fields
+
+| Field | What it holds |
+|---|---|
+| `rating` | `excellent`, `good`, `poor`, or `null` |
+| `review_comment` | Free text, and **only ever on a `poor` rating** |
+
+`null` on `rating` is not "bad service" — it is **no answer**. The guest is only
+asked once, in the hand-over message, and most people do not reply. Counting
+nulls as anything other than "did not answer" will make every property look
+worse than it is.
+
+`review_comment` fills in minutes AFTER the rating, in a second message: a guest
+who taps Poor is asked what went wrong, and types back. So a `poor` row with a
+null comment usually means the reply has not arrived yet — not that they had
+nothing to say.
+
+Both arrived with migration 0044. A valet database that has not run it yet
+returns the row **without these two keys**, rather than with them set to null —
+so read them defensively (`row.rating ?? null`) instead of assuming the key is
+present.
+
+---
 
 **You must page. This endpoint will not do it for you.**
 
