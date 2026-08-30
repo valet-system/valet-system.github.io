@@ -160,16 +160,27 @@ Deno.serve(async (req) => {
   // Oldest first, and a bounded batch: a function that tries to drain an
   // unbounded queue times out and then retries the same head of the queue
   // forever, delivering nothing.
-  const { data: queued, error } = await supabase
-    .from('push_outbox')
-    // task_id travels through to the worker as `taskId`. The outbox has always
-    // carried it; it was simply never selected, so data.taskId in sw.js was
-    // always null. The worker needs it to close the previous nag about the same
-    // car — see the push handler.
-    .select('id, user_role_id, title, body, url, tag, critical, attempts, task_id')
-    .eq('status', 'queued')
-    .order('created_at', { ascending: true })
-    .limit(50)
+  // ── CLAIM THE BATCH, DO NOT JUST READ IT ────────────────────────────
+  //
+  // This was a plain select on status = 'queued', and that is what made one
+  // notification arrive twice.
+  //
+  // enqueue_task_push inserts ONE ROW PER ADMIN in a single statement, and the
+  // trigger on push_outbox is FOR EACH ROW — so two admins at a property means
+  // this function is invoked twice, moments apart. With a plain select both
+  // invocations saw both rows, sent both, and only then marked them 'sent'.
+  // Each admin got two pushes while the outbox still held exactly one row for
+  // them, which is why the in-app bell was right and the phone was not.
+  //
+  // claim_push_batch marks rows 'sending' with `for update skip locked`, so a
+  // second invocation takes DIFFERENT rows — or none — instead of the same
+  // ones. It also returns anything stranded on 'sending' by a run that died
+  // mid-batch. See migration 0057.
+  //
+  // task_id comes back with the row. The outbox has always carried it; it was
+  // simply never selected, so data.taskId in sw.js was always null. The worker
+  // needs it to close the previous nag about the same car.
+  const { data: queued, error } = await supabase.rpc('claim_push_batch', { p_limit: 50 })
 
   if (error) {
     console.error('[push-send] could not read the outbox:', error.message)
