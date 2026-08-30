@@ -134,6 +134,10 @@ export default function StaffManager() {
   // instant, and two overlapping runs would double every request.
   const [bulkBusy, setBulkBusy] = useState(false)
 
+  // Open confirmation for "deactivate every operator". Not a plain boolean —
+  // it carries the list, so the dialog can state exactly who and how many.
+  const [allOffTarget, setAllOffTarget] = useState(null)
+
   const [addOpen, setAddOpen] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
   const [deactivateTarget, setDeactivateTarget] = useState(null)
@@ -210,7 +214,10 @@ export default function StaffManager() {
     const needle = search.trim().toLowerCase()
     const digits = normalisePhone(search)
 
-    return staff.filter((person) => {
+    // Named, because it is sorted below. .sort() mutates, and sorting the array
+    // returned by .filter() is safe only because that array is new — sorting
+    // `staff` itself would reorder state under React.
+    const rows = staff.filter((person) => {
       // ONLY inactive, not "inactive as well".
       //
       // This used to be `if (!showInactive && !person.is_active)` — an INCLUDE
@@ -229,6 +236,29 @@ export default function StaffManager() {
         person.name?.toLowerCase().includes(needle) ||
         (digits.length >= 3 && person.phone?.includes(digits))
       )
+    })
+    /**
+     * Sorted by ROLE first, then by name.
+     *
+     * The list arrives ordered by name alone, which mixes the three roles
+     * together — a system admin, an operator, another system admin. That is
+     * fine for looking one person up, and wrong for reading the list as a
+     * structure: seniority is the thing the eye is actually scanning for, and
+     * the role chips were the only clue to it.
+     *
+     * The rank is explicit rather than alphabetical on the role string, which
+     * would sort operator, system_admin, valet_admin — alphabetically correct
+     * and organisationally backwards.
+     *
+     * localeCompare inside a rank, not a raw `<`: names here are Indian and
+     * mixed-case, and a byte comparison puts every capital before every
+     * lowercase, so "kanishk" would sort after "Zoya".
+     */
+    const rank = { [ROLES.SYSTEM_ADMIN]: 0, [ROLES.VALET_ADMIN]: 1, [ROLES.OPERATOR]: 2 }
+    return rows.sort((a, b) => {
+      const byRole = (rank[a.role] ?? 9) - (rank[b.role] ?? 9)
+      if (byRole !== 0) return byRole
+      return (a.name ?? '').localeCompare(b.name ?? '')
     })
   }, [staff, search, roleFilter, propertyFilter, showInactive])
 
@@ -356,6 +386,69 @@ export default function StaffManager() {
       toast.success(t(next ? 'staff.bulkActivated' : 'staff.bulkDeactivated', { n: done }))
     }
     // Named, not counted. "2 failed" tells an admin nothing they can act on.
+    for (const f of failed) toast.error(`${f.name}: ${f.error}`)
+  }
+
+  /**
+   * Everyone on the list in front of you who this button will switch off.
+   *
+   * ── SYSTEM ADMINS ARE NEVER IN HERE ─────────────────────────────────
+   * On request: end of shift closes everybody EXCEPT the system admins. They
+   * are what remains able to sign in and put it all back in the morning, and a
+   * button that can lock the last person out of the system is not a button, it
+   * is a trap. Excluding the whole role rather than just YOU also means a
+   * second system admin cannot be shut out by the first.
+   *
+   * ── WHAT A VALET ADMIN CAN ACTUALLY DO ──────────────────────────────
+   * can_manage_staff() lets a system_admin manage anyone, and a valet_admin
+   * only OPERATORS at their own property. So the list is narrowed by the
+   * caller's role rather than being the same for both: a valet_admin offered
+   * their fellow valet admins here would get "you can only manage operators"
+   * once per row, having already confirmed a destructive action.
+   *
+   * ── SCOPED TO WHAT IS VISIBLE, NOT TO THE DATABASE ──────────────────
+   * Unfiltered, "everyone" is exactly what this is. But if a system_admin has
+   * narrowed to one property, closing the other three sites because the button
+   * says "all" would be a disaster dressed as a feature. The confirmation names
+   * the count, so the two readings cannot diverge unseen.
+   */
+  const shiftEndTargets = useMemo(
+    () =>
+      visible.filter((p) => {
+        if (!p.is_active) return false
+        // Never yourself, whatever the role rules say. Belt and braces: the RPC
+        // refuses it, and a refusal on your own name inside a bulk run reads
+        // like the whole thing failed.
+        if (p.id === operatorId) return false
+        if (p.role === ROLES.SYSTEM_ADMIN) return false
+        // A valet_admin can only reach operators; anything else is a guaranteed
+        // refusal, so it is not offered.
+        if (!isSystemAdmin && p.role !== ROLES.OPERATOR) return false
+        return true
+      }),
+    [visible, operatorId, isSystemAdmin],
+  )
+
+  async function handleDeactivateAllOperators() {
+    const list = allOffTarget ?? []
+    setAllOffTarget(null)
+    if (!list.length || bulkBusy) return
+
+    setBulkBusy(true)
+    const failed = []
+    for (const person of list) {
+      const result = await setStaffActive(person.id, false)
+      if (!result.ok) failed.push({ name: person.name, error: result.error })
+    }
+    setBulkBusy(false)
+    setSelected(new Set())
+    await load()
+
+    const done = list.length - failed.length
+    if (done > 0) toast.success(t('staff.bulkDeactivated', { n: done }))
+    // Named. On a busy evening the refusals ARE the useful half of the result:
+    // they are the operators still holding a car, and the admin has to go and
+    // find them.
     for (const f of failed) toast.error(`${f.name}: ${f.error}`)
   }
 
@@ -488,6 +581,23 @@ export default function StaffManager() {
             />
             {t('staff.showInactive')}
           </label>
+
+          {/* DEACTIVATE ALL — everyone on this list off in one go.
+              Only on the ACTIVE list: on the inactive one they are already off
+              and the button could do nothing.
+              Hidden when there are none, rather than disabled — a permanently
+              greyed destructive button is just clutter with a warning colour. */}
+          {!showInactive && shiftEndTargets.length > 0 && (
+            <Button
+              variant="danger"
+              size="md"
+              icon="x-circle"
+              loading={bulkBusy}
+              onClick={() => setAllOffTarget(shiftEndTargets)}
+            >
+              {t('staff.closeAllOperators', { n: shiftEndTargets.length })}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -654,6 +764,24 @@ export default function StaffManager() {
             : t('staff.reactivateBody')
         }
         confirmLabel={t(deactivateTarget?.is_active ? 'staff.deactivate' : 'staff.reactivate')}
+      />
+
+      {/* A CONFIRMATION, even though "seedha" was asked for.
+          This one tap ends every operator's shift: nobody can sign in, no car
+          can be checked in or fetched, and putting it back means finding each
+          name again. One extra tap against a stopped porch is the right trade.
+
+          It states the COUNT, which is also the only place the visible-scoping
+          becomes visible — "Switch off 5 operators" against a filtered list
+          reads differently from "Switch off 23", and that is the point. */}
+      <ConfirmModal
+        open={Boolean(allOffTarget)}
+        onClose={() => setAllOffTarget(null)}
+        onConfirm={handleDeactivateAllOperators}
+        tone="danger"
+        title={t('staff.closeAllQ', { n: allOffTarget?.length ?? 0 })}
+        description={t('staff.closeAllBody')}
+        confirmLabel={t('staff.closeAllConfirm')}
       />
     </>
   )
