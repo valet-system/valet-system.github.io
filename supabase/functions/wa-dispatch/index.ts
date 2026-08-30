@@ -151,11 +151,19 @@ function guestLabel(name: unknown): string {
  */
 function queuedText(row: Record<string, unknown>) {
   const name = guestLabel(row.guest_name)
-  return (
-    `Hi ${name}, your car is in the queue. ` +
-    `Our team is on other cars right now — we will send someone the moment one is free. ` +
-    `You will get a message as soon as your car is at the entrance.`
-  )
+
+  // A template literal with REAL line breaks, not escapes — WhatsApp renders
+  // them as written, so the code reads the way the message looks on the phone.
+  // The blank lines are load-bearing: on a narrow screen four short paragraphs
+  // are scanned, one long one is skipped.
+  return `Hi ${name},
+
+Your car is in the queue. 🚗
+Our valet team will assist you shortly.
+
+We'll notify you once your car reaches the entrance.
+
+Thank you for your patience.`
 }
 
 function templateParams(type: string, row: Record<string, unknown>) {
