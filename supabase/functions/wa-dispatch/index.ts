@@ -133,6 +133,31 @@ function guestLabel(name: unknown): string {
  * reviewer; they are never substituted at send time, so every variable in the
  * body has to be supplied here on every send.
  */
+/**
+ * The one message that is NOT a template.
+ *
+ * 'queued' goes out about three minutes after the guest tapped Get My Car, so
+ * their own message opened the 24-hour customer service window and free-form
+ * text is allowed inside it. That is worth having: no Meta review to wait on,
+ * and the wording can be changed in this file whenever, which a template's
+ * cannot.
+ *
+ * Every OTHER type here has to be a template — car_parked goes out at check-in
+ * when the guest has sent nothing at all and no window exists.
+ *
+ * NO TOKEN NUMBER IN THE TEXT. The guest already has it: they were sent it when
+ * the car was parked, and it is on the stub in their hand. Repeating it here
+ * would make a reassurance read like an instruction.
+ */
+function queuedText(row: Record<string, unknown>) {
+  const name = guestLabel(row.guest_name)
+  return (
+    `Hi ${name}, your car is in the queue. ` +
+    `Our team is on other cars right now — we will send someone the moment one is free. ` +
+    `You will get a message as soon as your car is at the entrance.`
+  )
+}
+
 function templateParams(type: string, row: Record<string, unknown>) {
   const token = String(row.token_number ?? '')
   const car = String(row.car_number ?? '')
@@ -222,13 +247,16 @@ Deno.serve(async (req) => {
 
   for (const row of queued) {
     const vehicle = row.parked_vehicles ?? {}
-    const templateName = Deno.env.get(TEMPLATE_ENV[row.message_type] ?? '') ?? ''
+    // 'queued' is plain text and has no template — see queuedText. Looking one
+    // up for it would find nothing and fail the row permanently, two lines down.
+    const isText = row.message_type === 'queued'
+    const templateName = isText ? '' : (Deno.env.get(TEMPLATE_ENV[row.message_type] ?? '') ?? '')
     const to = toE164(vehicle.guest_phone)
 
     // Both of these are permanent for this row — a missing template name will
     // still be missing next sweep, and a malformed number will still be
     // malformed. Fail them outright instead of burning five attempts each.
-    if (!templateName) {
+    if (!isText && !templateName) {
       const msg = `no template configured for ${row.message_type} (set ${TEMPLATE_ENV[row.message_type]})`
       console.error(`[wa-dispatch] row ${row.id}: ${msg}`)
       await supabase.from('wa_outbox')
@@ -247,19 +275,28 @@ Deno.serve(async (req) => {
       continue
     }
 
-    const params = templateParams(row.message_type, vehicle)
-    const body = {
-      messaging_product: 'whatsapp',
-      to,
-      type: 'template',
-      template: {
-        name: templateName,
-        language: { code: lang },
-        components: params.length
-          ? [{ type: 'body', parameters: params.map((text) => ({ type: 'text', text })) }]
-          : [],
-      },
-    }
+    const params = isText ? [] : templateParams(row.message_type, vehicle)
+    const body = isText
+      ? {
+          messaging_product: 'whatsapp',
+          to,
+          type: 'text',
+          // No link in this text, so preview_url is off — with it on, Meta
+          // scans for one on every send for nothing.
+          text: { preview_url: false, body: queuedText(vehicle) },
+        }
+      : {
+          messaging_product: 'whatsapp',
+          to,
+          type: 'template',
+          template: {
+            name: templateName,
+            language: { code: lang },
+            components: params.length
+              ? [{ type: 'body', parameters: params.map((text) => ({ type: 'text', text })) }]
+              : [],
+          },
+        }
 
     try {
       const res = await fetch(`${GRAPH}/${phoneNumberId}/messages`, {
