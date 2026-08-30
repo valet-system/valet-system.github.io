@@ -103,6 +103,7 @@ export default function AppShell() {
   useAudioPriming()
   // Every open, not only at login — see the hook for why that mattered.
   usePushRefresh(operatorId)
+  useNotificationRouting()
   // Here rather than in operator/MyTasks, so a dispatched car starts sounding
   // the moment it is assigned — not whenever the operator next opens the task
   // list, which is after they needed telling. See the hook.
@@ -251,6 +252,48 @@ function usePushRefresh(operatorId) {
       if (!result?.ok) console.info('[push] not registered on this device:', result?.state)
     })
   }, [operatorId])
+}
+
+/**
+ * Sends the app where a tapped notification pointed.
+ *
+ * The service worker used to do this itself with client.navigate(). That only
+ * works on a window it CONTROLS, and notificationclick has to match with
+ * includeUncontrolled — otherwise an open PWA window is not found at all — so
+ * it could reject on the very window it had just matched. The failure was
+ * silent: the window came to the front showing whatever screen it was already
+ * on, which for a "Car requested" tap is the one place the admin does not need
+ * to be.
+ *
+ * It also reloaded the whole app when it did work. This routes in one frame and
+ * keeps the session, the realtime subscription and the alarm alive.
+ *
+ * ── WHY THE URL IS CHECKED ──────────────────────────────────────────────
+ * The message comes from our own worker, so this is not a real threat — but a
+ * postMessage handler is an entry point, and one that passes whatever it is
+ * given straight to the router is the kind of thing that becomes a threat later
+ * when something else starts posting. Only a same-origin path is accepted.
+ */
+function useNotificationRouting() {
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return undefined
+
+    const onMessage = (event) => {
+      if (event.data?.type !== 'NAVIGATE') return
+
+      const url = String(event.data.url ?? '')
+      // A path on this site and nothing else. '//evil.com' is a protocol-
+      // relative URL, not a path, which is why the second character matters.
+      if (!url.startsWith('/') || url.startsWith('//')) return
+
+      navigate(url)
+    }
+
+    navigator.serviceWorker.addEventListener('message', onMessage)
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage)
+  }, [navigate])
 }
 
 function useAudioPriming() {

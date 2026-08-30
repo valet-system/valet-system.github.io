@@ -449,16 +449,25 @@ self.addEventListener('notificationclick', (event) => {
 
       for (const client of clients) {
         if ('focus' in client) {
-          // Navigate the existing window rather than opening another. The
-          // operator taps the notification to get to the task, not to get a
-          // fresh copy of the app.
-          if ('navigate' in client) {
-            try {
-              await client.navigate(target)
-            } catch {
-              /* cross-origin or unsupported — focusing is still better */
-            }
-          }
+          // ── TELL THE APP WHERE TO GO, DO NOT NAVIGATE IT ────────────
+          //
+          // client.navigate() was here and it failed quietly in the case that
+          // matters. Two problems with it:
+          //
+          //   1. It only works on a client this worker CONTROLS. We match with
+          //      includeUncontrolled: true — we have to, or an open PWA window
+          //      is not found at all — so navigate() can reject on exactly the
+          //      window we just matched. The catch swallowed it, focus() still
+          //      ran, and the admin was handed the screen they were already on
+          //      with a guest waiting.
+          //
+          //   2. Even when it works it is a FULL PAGE LOAD. The app reboots,
+          //      re-authenticates, re-subscribes to realtime — several seconds,
+          //      for a tap whose whole purpose is to be quick.
+          //
+          // A message costs nothing and the router handles it in one frame. The
+          // app listens in components/AppShell.
+          client.postMessage({ type: 'NAVIGATE', url: target })
           return client.focus()
         }
       }
