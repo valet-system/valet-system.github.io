@@ -342,7 +342,7 @@ export const en = {
   'staff.filterProperty': 'Filter by property',
   'staff.allProperties': 'All properties',
   'staff.noneYet': 'No staff yet',
-  'staff.noMatches': 'No matches',
+  'staff.noMatches': 'No matches found',
   'staff.addFirstUser': 'Add your first user to get started.',
   'staff.addFirstValet': 'Add your first valet to get started.',
   'staff.tryDifferent': 'Try a different search or clear the filters.',
