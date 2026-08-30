@@ -122,6 +122,18 @@ export default function StaffManager() {
   const [propertyFilter, setPropertyFilter] = useState('all')
   const [showInactive, setShowInactive] = useState(false)
 
+  /**
+   * Which rows are ticked, by user_role id.
+   *
+   * A Set and not an array: every row asks "am I in here" on every render, and
+   * `has` is the only lookup that stays flat as the list grows.
+   */
+  const [selected, setSelected] = useState(() => new Set())
+
+  // Blocks a second tap while a run is in flight. The loop below is not
+  // instant, and two overlapping runs would double every request.
+  const [bulkBusy, setBulkBusy] = useState(false)
+
   const [addOpen, setAddOpen] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
   const [deactivateTarget, setDeactivateTarget] = useState(null)
@@ -199,7 +211,14 @@ export default function StaffManager() {
     const digits = normalisePhone(search)
 
     return staff.filter((person) => {
-      if (!showInactive && !person.is_active) return false
+      // ONLY inactive, not "inactive as well".
+      //
+      // This used to be `if (!showInactive && !person.is_active)` — an INCLUDE
+      // toggle, so ticking it appended the closed accounts to the open ones and
+      // you had to hunt through both. The point of the box is to work ON the
+      // inactive ones: find them, tick them, turn them back on. That needs a
+      // list containing nothing else.
+      if (person.is_active === showInactive) return false
       if (roleFilter !== 'all' && person.role !== roleFilter) return false
       if (propertyFilter !== 'all' && person.property_id !== propertyFilter) return false
 
@@ -212,6 +231,17 @@ export default function StaffManager() {
       )
     })
   }, [staff, search, roleFilter, propertyFilter, showInactive])
+
+  /**
+   * Drop the selection whenever the filters move.
+   *
+   * Without this a tick survives the row leaving the screen, and "Deactivate 3"
+   * would act on somebody the admin can no longer see — including, after
+   * flipping to the inactive list, people they never meant to touch.
+   */
+  useEffect(() => {
+    setSelected(new Set())
+  }, [showInactive, roleFilter, propertyFilter, search])
 
   const counts = useMemo(
     () => ({
@@ -249,6 +279,84 @@ export default function StaffManager() {
     toast.success(t(next ? 'staff.reactivated' : 'staff.deactivated', { name: deactivateTarget.name }))
     setDeactivateTarget(null)
     await load()
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // BULK
+  // ══════════════════════════════════════════════════════════════════
+
+  /**
+   * Rows a tick may be placed on.
+   *
+   * Not simply `visible`: admin_set_staff_active refuses to deactivate the
+   * caller, so offering yourself a checkbox is offering an action that is
+   * guaranteed to fail. The row still renders — you are on the list — it just
+   * has no box.
+   */
+  const selectable = useMemo(() => visible.filter((p) => p.id !== operatorId), [visible, operatorId])
+
+  // Intersected with what is on screen. Belt and braces next to the clearing
+  // effect above: whatever happens to the filters, a hidden row cannot be acted
+  // on, because the action reads from here.
+  const chosen = useMemo(
+    () => selectable.filter((p) => selected.has(p.id)),
+    [selectable, selected],
+  )
+
+  const allChosen = selectable.length > 0 && chosen.length === selectable.length
+
+  function toggleOne(id) {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleAll() {
+    setSelected(allChosen ? new Set() : new Set(selectable.map((p) => p.id)))
+  }
+
+  /**
+   * Turn every ticked account on, or off.
+   *
+   * ── WHY THIS IS A LOOP AND NOT ONE CALL ─────────────────────────────
+   * There is no bulk RPC, and adding one would have to re-implement the checks
+   * admin_set_staff_active already makes — who may manage whom, and whether an
+   * operator is holding a car right now. Calling it once per person keeps ONE
+   * place deciding, and the cost is a handful of round trips on a list that is
+   * at most a few dozen rows.
+   *
+   * ── WHY FAILURES ARE COUNTED AND NAMED ──────────────────────────────
+   * A partial failure is the NORMAL case, not an edge one: the RPC refuses to
+   * deactivate an operator who is holding a car, and on a busy evening several
+   * of them will be. Reporting "5 updated" when two were refused would leave an
+   * admin certain those two were switched off while they are still signed in.
+   *
+   * Sequential, not Promise.all: a dozen concurrent writes to user_roles for no
+   * gain on a list this size, and the order of the toasts would be arbitrary.
+   */
+  async function handleBulkActive(next) {
+    if (!chosen.length || bulkBusy) return
+    setBulkBusy(true)
+
+    const failed = []
+    for (const person of chosen) {
+      const result = await setStaffActive(person.id, next)
+      if (!result.ok) failed.push({ name: person.name, error: result.error })
+    }
+
+    setBulkBusy(false)
+    setSelected(new Set())
+    await load()
+
+    const done = chosen.length - failed.length
+    if (done > 0) {
+      toast.success(t(next ? 'staff.bulkActivated' : 'staff.bulkDeactivated', { n: done }))
+    }
+    // Named, not counted. "2 failed" tells an admin nothing they can act on.
+    for (const f of failed) toast.error(`${f.name}: ${f.error}`)
   }
 
   const canCreateAdmins = isSystemAdmin
@@ -423,10 +531,60 @@ export default function StaffManager() {
       ) : (
         <>
           {/* ── table header ──────────────────────────────────────── */}
-          <div className="mb-1 flex items-center px-4 text-[0.6875rem] font-semibold uppercase tracking-widest text-ink-subtle">
+          <div className="mb-1 flex items-center gap-3 px-4 text-[0.6875rem] font-semibold uppercase tracking-widest text-ink-subtle">
+            {/* Only when there is something to tick. On a list of one — you —
+                a select-all box is a control that cannot do anything. */}
+            {selectable.length > 0 && (
+              <input
+                type="checkbox"
+                checked={allChosen}
+                // Ticked-some looks different from ticked-none AND from
+                // ticked-all. Without this the box reads "nothing selected"
+                // while three rows are.
+                ref={(el) => {
+                  if (el) el.indeterminate = chosen.length > 0 && !allChosen
+                }}
+                onChange={toggleAll}
+                aria-label={t('staff.selectAll')}
+                className="h-4 w-4 rounded border-line-strong accent-brand"
+              />
+            )}
             <span className="flex-1">{t('staff.heading')} <span className="ml-1.5 rounded-full bg-brand-soft px-1.5 py-0.5 text-[0.6rem] font-bold text-ink-muted">{visible.length}</span></span>
             <span className="w-24 text-right">Actions</span>
           </div>
+
+          {/* ── BULK BAR ──────────────────────────────────────────────
+              Only while something is ticked. A permanently visible bar with
+              nothing to act on is a button that spends most of its life
+              disabled, and the page already has enough controls. */}
+          {chosen.length > 0 && (
+            <div className="mb-2 flex flex-wrap items-center gap-3 rounded-xl border border-brand/30 bg-brand-soft px-4 py-2.5">
+              <span className="text-sm font-semibold text-ink">
+                {t('staff.nSelected', { n: chosen.length })}
+              </span>
+              <div className="ml-auto flex items-center gap-2">
+                {/* One button, and WHICH one depends on the list being shown.
+                    On the inactive list every row is already off, so offering
+                    "Deactivate" there would be an action with no effect. */}
+                <Button
+                  variant={showInactive ? 'success' : 'danger'}
+                  size="sm"
+                  icon={showInactive ? 'check' : 'x-circle'}
+                  loading={bulkBusy}
+                  onClick={() => handleBulkActive(showInactive)}
+                >
+                  {t(showInactive ? 'staff.activateSelected' : 'staff.deactivateSelected')}
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => setSelected(new Set())}
+                  className="px-1 text-xs font-semibold text-info hover:text-ink"
+                >
+                  {t('staff.clearSelection')}
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
             {visible.map((person, i) => (
@@ -435,6 +593,8 @@ export default function StaffManager() {
                 person={person}
                 isSelf={person.id === operatorId}
                 showProperty={isSystemAdmin}
+                selected={selected.has(person.id)}
+                onSelect={() => toggleOne(person.id)}
                 onEdit={() => setEditTarget(person)}
                 onToggleActive={() => setDeactivateTarget(person)}
                 isFirst={i === 0}
@@ -514,7 +674,9 @@ export default function StaffManager() {
  * past — and every read is a logged, deliberate act rather than a side effect
  * of loading a list.
  */
-function StaffRow({ person, isSelf, showProperty, onEdit, onToggleActive, isFirst, isLast }) {
+function StaffRow({
+  person, isSelf, showProperty, selected, onSelect, onEdit, onToggleActive, isFirst, isLast,
+}) {
   const t = useT()
   const meta = ROLE_META[person.role]
 
@@ -538,9 +700,27 @@ function StaffRow({ person, isSelf, showProperty, onEdit, onToggleActive, isFirs
         'group relative flex items-center gap-4 px-5 py-4 transition-colors duration-100',
         'hover:bg-surface-sunken',
         !isFirst && 'border-t border-line',
-        !person.is_active && 'opacity-50',
+        // Dimmed when closed — but NOT once ticked, or the rows being acted
+        // on are the hardest ones to read on a screen full of them.
+        !person.is_active && !selected && 'opacity-50',
+        selected && 'bg-brand-soft/60',
       )}
     >
+      {/* No box on your own row. admin_set_staff_active refuses to deactivate
+          the caller, so a tick here could only ever produce an error — and the
+          empty gap keeps the avatars in one column. */}
+      {isSelf ? (
+        <span className="w-4 shrink-0" aria-hidden="true" />
+      ) : (
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={onSelect}
+          aria-label={person.name}
+          className="h-4 w-4 shrink-0 rounded border-line-strong accent-brand"
+        />
+      )}
+
       {/* Role accent stripe — 3 px left edge inside the row */}
       {person.role !== ROLES.OPERATOR && (
         <span
