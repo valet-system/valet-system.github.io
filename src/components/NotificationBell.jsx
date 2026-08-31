@@ -181,7 +181,52 @@ export default function NotificationBell() {
     onRefetch: load,
   })
 
-  const unread = useMemo(() => items.filter((n) => !n.read_at).length, [items])
+  /**
+   * One entry per TASK, not one per push_outbox row.
+   *
+   * ── WHY ────────────────────────────────────────────────────────────
+   * The nag re-pushes an unaccepted retrieval every five seconds for up to ten
+   * minutes. Every one of those is a real row, correctly — each is a real push
+   * that really went to a phone. But listing them one-per-row meant a SINGLE
+   * car nobody accepted filled the bell with a hundred identical lines and a
+   * badge that only ever went up.
+   *
+   * The rows are not the problem and are not touched. This is a display
+   * decision: an operator wants to know WHICH CARS need them, not how many
+   * times they were told.
+   *
+   * ── THE KEY ────────────────────────────────────────────────────────
+   * `task_id ?? 'row:' + id`. Rows with no task — anything not tied to one car
+   * — must each stand alone; grouping them all under `null` would collapse
+   * unrelated notices into one line.
+   *
+   * ── READ STATE ─────────────────────────────────────────────────────
+   * A group is unread if ANY row in it is unread, and marking it read marks
+   * EVERY row in it. Reading the newest nag while twenty older ones stayed
+   * unread would leave a badge nobody can clear — the count would not match
+   * anything on screen.
+   */
+  const groups = useMemo(() => {
+    const byTask = new Map()
+
+    // items is already newest-first from the query, so the first row seen for a
+    // key is the one to show.
+    for (const n of items) {
+      const key = n.task_id ?? `row:${n.id}`
+      const found = byTask.get(key)
+      if (found) {
+        found.ids.push(n.id)
+        if (!n.read_at) found.read_at = null
+        found.repeats += 1
+      } else {
+        byTask.set(key, { ...n, ids: [n.id], repeats: 1 })
+      }
+    }
+
+    return [...byTask.values()]
+  }, [items])
+
+  const unread = useMemo(() => groups.filter((n) => !n.read_at).length, [groups])
 
   // ── close on outside click, Escape, or navigation ──────────────────
   useEffect(() => {
@@ -204,6 +249,11 @@ export default function NotificationBell() {
 
   useEffect(() => setOpen(false), [location.pathname])
 
+  /**
+   * `ids` is a LIST because one bell entry can stand for many rows — see
+   * `groups`. Marking a grouped entry read has to mark all of its rows, or the
+   * badge keeps counting the ones that were collapsed out of sight.
+   */
   async function markRead(ids) {
     // Optimistic: the panel is a list of things you have just looked at, and
     // waiting on a round trip to grey one out feels broken.
@@ -231,7 +281,9 @@ export default function NotificationBell() {
 
   function handleOpenItem(item) {
     setOpen(false)
-    if (!item.read_at) markRead([item.id])
+    // item.ids, not item.id: a grouped entry stands for every nag about that
+    // car, and all of them have to be marked or the badge never clears.
+    if (!item.read_at) markRead(item.ids ?? [item.id])
     if (item.url) navigate(item.url)
   }
 
@@ -367,7 +419,7 @@ export default function NotificationBell() {
                   the PANEL is now what bounds the height, and it bounds it by
                   the viewport. */}
               <ul className="scrollbar-slim min-h-0 flex-1 divide-y divide-line overflow-y-auto">
-                {items.map((item) => (
+                {groups.map((item) => (
                   <li key={item.id}>
                     <button
                       type="button"

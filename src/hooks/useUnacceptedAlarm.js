@@ -3,8 +3,9 @@
  * │ FILE: src/hooks/useUnacceptedAlarm.js                               │
  * │                                                                     │
  * │ WHAT THIS FILE IS                                                   │
- * │   Sounds the continuous alarm for as long as this operator has a     │
- * │   retrieval dispatched to them that they have not accepted.          │
+ * │   Sounds the continuous alarm for as long as this operator has work  │
+ * │   dispatched to them that they have not accepted — a car to fetch,    │
+ * │   or a no-show to park again. See the query for how the two differ.   │
  * │                                                                     │
  * │ WHY IT IS A HOOK IN AppShell AND NOT AN EFFECT IN MyTasks            │
  * │   It started life inside operator/MyTasks, which meant it only ran   │
@@ -75,12 +76,37 @@ export function useUnacceptedAlarm(operatorId, role) {
 
     // head + count: we need "is there one", never the rows themselves, and this
     // runs on every task change all shift.
+    /**
+     * TWO KINDS OF UNACCEPTED WORK, not one.
+     *
+     *   status = 'assigned'                     a car to fetch. Accepting moves
+     *                                           it to 'in_progress', so the
+     *                                           status IS the acknowledgement.
+     *
+     *   status = 're_parking', accepted_at null a no-show the admin has just
+     *                                           sent them to park again. Its
+     *                                           status CANNOT move — MyTasks
+     *                                           and task_complete_reparking
+     *                                           both key on it — so the
+     *                                           acknowledgement is a timestamp.
+     *
+     * accepted_at arrived with migration 0059. On a database without it this
+     * .or() errors, `error` is set, and the effect below deliberately leaves the
+     * previous state alone rather than silencing a live alarm over one failed
+     * request.
+     *
+     * 'returned' is the older spelling of a no-show and is included for rows
+     * already carrying it.
+     */
     const { count, error } = await supabase
       .from('valet_tasks')
       .select('id', { count: 'exact', head: true })
       .eq('assigned_operator_id', operatorId)
       .eq('task_type', TASK_TYPES.RETRIEVAL)
-      .eq('status', TASK_STATUS.ASSIGNED)
+      .or(
+        `status.eq.${TASK_STATUS.ASSIGNED},` +
+          `and(status.in.(${TASK_STATUS.RE_PARKING},${TASK_STATUS.RETURNED}),accepted_at.is.null)`,
+      )
 
     if (!alive.current) return
     // On error, leave the current state alone. Flipping to zero would silence a

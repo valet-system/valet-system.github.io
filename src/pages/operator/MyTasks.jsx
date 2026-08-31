@@ -81,7 +81,8 @@ import { OPERATOR_OPEN_STATUSES, TASK_STATUS, TASK_TYPES } from '@/types'
 
 /** Everything the cards need, in one round trip. */
 const TASK_SELECT = `
-  id, task_type, status, return_count, assigned_at, pickup_started_at, completed_at, created_at,
+  id, task_type, status, return_count, assigned_at, accepted_at, pickup_started_at, completed_at,
+  created_at,
   parked_vehicles ( id, token_number, car_number, car_tier, guest_name, guest_name_hi, guest_phone,
                     parking_location, notes, status, parked_at )
 `
@@ -474,6 +475,13 @@ function RetrievalCard({ task, run, onRefresh, spaces }) {
   // alarm keeps sounding for.
   const needsAccept = task.status === TASK_STATUS.ASSIGNED
 
+  // A re-park the admin has dispatched but this operator has not acknowledged.
+  // accepted_at, not the status: a re-park's status has to stay 're_parking'
+  // (see migration 0059), so the timestamp is the only thing that can carry
+  // "seen". `?? null` because a database without 0059 omits the column, and
+  // undefined would make every re-park look unaccepted for ever.
+  const needsReparkAccept = needsReparking && (task.accepted_at ?? null) === null
+
   // NO COUNTDOWN, AND NO 'at_pickup' STATE, since migration 0050.
   //
   // The operator's job ends when he taps "Car at Delivery Point": the car
@@ -560,6 +568,36 @@ function RetrievalCard({ task, run, onRefresh, spaces }) {
             <Icon name="alert" size={15} className="mt-0.5 shrink-0" />
             <span>{t('tasks.guestDidNotCollect')}</span>
           </p>
+
+          {/* ── ACCEPT, AND ONLY THEN THE LOCATION FORM ──────────────
+              The alarm sounds while accepted_at is null, and this is the tap
+              that clears it. Without it the alarm would run for the whole
+              drive: a re-park's status cannot move on acknowledgement the way
+              a fetch's does — MyTasks reads this very state from it, and
+              task_complete_reparking will only accept 're_parking'. So the
+              acknowledgement is a timestamp, and this is where it is set.
+
+              The form is HIDDEN until then, deliberately. Showing both would
+              let somebody enter a location and finish the task without ever
+              silencing the alarm, which is the one thing they have to do
+              first. */}
+          {needsReparkAccept ? (
+            <div className="mt-4">
+              <Button
+                variant="primary"
+                fullWidth
+                icon="check"
+                onClick={() =>
+                  run(
+                    () => acceptTask(task.id),
+                    t('tasks.toastAccepted', { token: vehicle?.token_number }),
+                  )
+                }
+              >
+                {t('tasks.accept')}
+              </Button>
+            </div>
+          ) : (
           <LocationForm
             label={t('tasks.whereParkedAgain')}
             spaces={spaces}
@@ -572,6 +610,7 @@ function RetrievalCard({ task, run, onRefresh, spaces }) {
               )
             }
           />
+          )}
         </>
       )}
 
