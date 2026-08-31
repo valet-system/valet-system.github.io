@@ -81,17 +81,6 @@ export function primeAudio() {
   const ctx = getContext()
   if (!ctx) return
   if (ctx.state === 'suspended') ctx.resume().catch(() => {})
-
-  // Build the alarm element now, on a gesture, rather than at alarm time.
-  //
-  // NOT for permission — Chrome's activation is sticky per DOCUMENT, so once
-  // anybody has tapped anything, play() is allowed on any element. This is
-  // about LATENCY: rendering the figure and decoding the blob takes a moment,
-  // and doing it while a guest is already waiting would delay the first note.
-  //
-  // Fire and forget. It caches into alarmAudio, and a failure here changes
-  // nothing — getAlarmAudio simply tries again when the alarm actually starts.
-  getAlarmAudio().catch(() => {})
 }
 
 /**
@@ -286,40 +275,9 @@ export function playLoud() {
 
 /** The rendered figure, built once on first use and reused after that. */
 let alarmBuffer = null
-/**
- * The looping <audio> element, once it exists.
- *
- * ── WHY AN ELEMENT AND NOT A BUFFER SOURCE ──────────────────────────────
- * This started as an AudioBufferSourceNode with loop = true, which fixed the
- * FIRST background problem — a throttled setInterval starving the schedule.
- * It was not enough, and the reason is a second, separate mechanism:
- *
- *   Chrome on Android SUSPENDS the whole AudioContext when the page is hidden.
- *
- * Nothing scheduled on a suspended context plays. The Web Audio API has no
- * background playback rights at all, however the notes were queued.
- *
- * A media ELEMENT does. <audio> goes through the platform's media pipeline —
- * the same one that keeps music playing when you press home — and Android
- * deliberately keeps that alive. So the figure is rendered once, encoded as a
- * WAV blob, and handed to an <audio loop>.
- *
- * ── WHAT THAT COSTS ─────────────────────────────────────────────────────
- * The phone may show a media notification while it plays. That is the price of
- * the background rights, and it doubles as a visible "the alarm is running"
- * indicator the operator can see without unlocking.
- *
- * ── WHAT IT STILL CANNOT DO ─────────────────────────────────────────────
- * If the OS kills the app — swiped away, or reclaimed under memory pressure —
- * nothing here runs. That is what the push notification is for.
- */
-let alarmAudio = null
-/** The blob URL behind it. Kept so it can be revoked if this is ever torn down. */
-let alarmUrl = null
+/** The looping source, or null when silent. Doubles as "is it running". */
+let alarmSource = null
 let alarmBuzzTimer = null
-/** Is the alarm meant to be sounding? The element alone cannot say so — it
- *  reports 'paused' for a moment while it decodes. */
-let alarmRunning = false
 
 /**
  * Renders LOUD_FIGURE into an AudioBuffer, offline.
@@ -360,158 +318,83 @@ function renderAlarmBuffer(ctx) {
 }
 
 /**
- * An AudioBuffer as a 16-bit PCM WAV blob.
- *
- * Written by hand because there is no browser API for it, and because the
- * alternative was shipping a binary asset: the alarm has to be a real media
- * file for <audio> to accept it, and generating one from the tones already
- * defined in this file keeps a single source of truth for what the alarm
- * SOUNDS like. Change LOUD_FIGURE and the file changes with it.
- *
- * Mono, because the figure is mono and stereo would double the size for
- * nothing.
- */
-function bufferToWav(buffer) {
-  const samples = buffer.getChannelData(0)
-  const rate = buffer.sampleRate
-  const bytes = new ArrayBuffer(44 + samples.length * 2)
-  const view = new DataView(bytes)
-
-  const ascii = (offset, text) => {
-    for (let i = 0; i < text.length; i += 1) view.setUint8(offset + i, text.charCodeAt(i))
-  }
-
-  ascii(0, 'RIFF')
-  view.setUint32(4, 36 + samples.length * 2, true)
-  ascii(8, 'WAVE')
-  ascii(12, 'fmt ')
-  view.setUint32(16, 16, true)          // PCM header size
-  view.setUint16(20, 1, true)           // format: PCM
-  view.setUint16(22, 1, true)           // channels
-  view.setUint32(24, rate, true)
-  view.setUint32(28, rate * 2, true)    // byte rate: rate * channels * 2
-  view.setUint16(32, 2, true)           // block align
-  view.setUint16(34, 16, true)          // bits per sample
-  ascii(36, 'data')
-  view.setUint32(40, samples.length * 2, true)
-
-  // Clamped before scaling. A gain envelope can overshoot 1.0 by a hair, and
-  // an out-of-range value wraps rather than clipping — which is a loud pop
-  // instead of a slightly flattened peak.
-  let at = 44
-  for (let i = 0; i < samples.length; i += 1) {
-    const v = Math.max(-1, Math.min(1, samples[i]))
-    view.setInt16(at, v < 0 ? v * 0x8000 : v * 0x7fff, true)
-    at += 2
-  }
-
-  return new Blob([bytes], { type: 'audio/wav' })
-}
-
-/**
- * Builds the looping <audio> element, once.
- *
- * Resolves to the element, or null if anything at all goes wrong — a missing
- * OfflineAudioContext, a refused render, a blocked blob. Every caller treats
- * null as "no alarm sound", which is bad but survivable; a thrown error inside
- * an alert path is not.
- */
-async function getAlarmAudio() {
-  if (alarmAudio) return alarmAudio
-
-  const ctx = getContext()
-  if (!ctx) return null
-
-  try {
-    if (!alarmBuffer) {
-      const rendering = renderAlarmBuffer(ctx)
-      if (!rendering) return null
-      alarmBuffer = await rendering
-    }
-
-    alarmUrl = URL.createObjectURL(bufferToWav(alarmBuffer))
-
-    const el = new Audio(alarmUrl)
-    el.loop = true
-    // Background audio on Android surfaces a media notification. Without
-    // metadata it carries the page title and a generic icon, which on a lock
-    // screen reads as the app playing music. Naming it is the difference
-    // between "what is this" and "a car is waiting".
-    try {
-      if ('mediaSession' in navigator && window.MediaMetadata) {
-        navigator.mediaSession.metadata = new window.MediaMetadata({
-          title: 'A car is waiting',
-          artist: 'Ambria Valet',
-        })
-      }
-    } catch {
-      /* metadata is a nicety; never let it stop the alarm being built */
-    }
-    // Not 'auto': the file is a second and a half and is fetched from a blob
-    // already in memory, so preloading metadata alone is enough and avoids a
-    // decode nobody has asked for yet.
-    el.preload = 'auto'
-    el.volume = 1
-    alarmAudio = el
-    return el
-  } catch {
-    return null
-  }
-}
-
-/**
  * Starts the unbroken alarm. Safe to call repeatedly — a second call while it
  * is already running does nothing, rather than laying a second copy of the
  * figure on top of the first, which would double the amplitude and clip.
  */
 export function startLoudAlarm() {
-  if (alarmRunning) return
-  alarmRunning = true
+  if (alarmSource) return
 
-  // Haptics first and not awaited: the buzz is instant, the element may still
-  // be decoding, and waiting would delay the one channel that needs nothing.
-  // Foreground only — navigator.vibrate is ignored on a hidden page.
+  const ctx = getContext()
+  if (!ctx) return
+  // The alarm often starts from a push or a realtime event rather than a tap,
+  // so the context may still be locked. Nothing plays until it is running; this
+  // costs nothing and rescues the case where audio was primed a moment ago.
+  if (ctx.state === 'suspended') ctx.resume().catch(() => {})
+
+  // Haptics first, and not awaited on the buffer: the buzz is instant and the
+  // render is a promise, so waiting would delay the one channel that needs no
+  // decoding. Foreground only — see the header.
   vibrate()
   alarmBuzzTimer = setInterval(vibrate, Math.round(LOUD_FIGURE_SECONDS * 1000))
 
-  getAlarmAudio()
-    .then((el) => {
-      // stopLoudAlarm may have run while the element was being built. Without
-      // this the alarm starts AFTER being cancelled and never stops, because
-      // the caller has already let go of it.
-      if (!el || !alarmRunning) return
-      el.currentTime = 0
-      return el.play()
+  const begin = (buffer) => {
+    // stopLoudAlarm may have run while the render was in flight. Without this
+    // the alarm would start AFTER being cancelled and never stop, because the
+    // caller has already let go of it.
+    if (!alarmBuzzTimer || alarmSource || !buffer) return
+
+    try {
+      const src = ctx.createBufferSource()
+      src.buffer = buffer
+      src.loop = true
+      src.connect(ctx.destination)
+      // A hair in the future: starting AT currentTime races the audio thread
+      // and clips the first note on some browsers.
+      src.start(ctx.currentTime + 0.05)
+      alarmSource = src
+    } catch {
+      /* nothing to do — a silent alarm is bad, a thrown one is worse */
+    }
+  }
+
+  if (alarmBuffer) {
+    begin(alarmBuffer)
+    return
+  }
+
+  const rendering = renderAlarmBuffer(ctx)
+  if (!rendering) return
+
+  rendering
+    .then((buffer) => {
+      alarmBuffer = buffer
+      begin(buffer)
     })
-    .catch(() => {
-      // Autoplay refused, or no element. Nothing useful to do here: the push
-      // notification is the channel that does not need permission, and it has
-      // already been sent by the time this runs.
-    })
+    .catch(() => {})
 }
 
 /**
  * Stops it, now.
  *
- * pause() AND currentTime = 0. Pausing alone leaves the element mid-figure, so
- * the next alarm would begin halfway through a note — which sounds like a
- * glitch rather than an alert.
+ * One source to stop rather than a queue of scheduled notes to chase, which is
+ * the other thing the buffer bought: there is no lookahead tail that can keep
+ * sounding after the operator has accepted.
  */
 export function stopLoudAlarm() {
-  alarmRunning = false
-
   if (alarmBuzzTimer) {
     clearInterval(alarmBuzzTimer)
     alarmBuzzTimer = null
   }
 
-  if (alarmAudio) {
+  if (alarmSource) {
     try {
-      alarmAudio.pause()
-      alarmAudio.currentTime = 0
+      alarmSource.stop()
+      alarmSource.disconnect()
     } catch {
-      /* already stopped, or the element went away with the page */
+      /* already stopped, or the context went away with the page */
     }
+    alarmSource = null
   }
 }
 
