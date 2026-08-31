@@ -244,78 +244,20 @@ export function playLoud() {
 //   and a late tick changes nothing as long as it lands within the lookahead.
 // ═══════════════════════════════════════════════════════════════════
 
-/**
- * ── NO TIMER. A LOOPING BUFFER. ────────────────────────────────────────
- *
- * This was a setInterval pump that scheduled 0.5s of notes at a time, and the
- * comment where that lived even named the flaw: "throttled timers stop firing".
- * It was right, and it was the bug.
- *
- * Chrome throttles setInterval in a BACKGROUNDED page down to roughly once a
- * minute. With half a second of lookahead that produced half a second of alarm,
- * then a minute of silence, then another half second — for an operator who has
- * put the app in the background and is holding a guest's keys. Exactly when the
- * alarm is most needed is exactly when it stopped.
- *
- * A page that is PLAYING AUDIO is not frozen by Chrome — that is why music
- * keeps going in a background tab. The audio thread was never the problem; the
- * JavaScript feeding it was. So the figure is rendered ONCE into a buffer and
- * handed to the audio thread with loop = true. After start() no JavaScript runs
- * at all, so there is nothing left to throttle.
- *
- * ── WHAT STILL CANNOT WORK IN THE BACKGROUND ───────────────────────────
- * Vibration. navigator.vibrate() is ignored unless the page is visible, in
- * every browser that implements it, and no amount of scheduling changes that.
- * It is kept for the foreground case and simply does nothing behind.
- *
- * And if the OS KILLS the app — swiped away, or reclaimed under memory
- * pressure — nothing in this file can run. That is what the push notification
- * is for, and why both exist.
- */
+/** How often the queue is topped up. Well under the lookahead, so a late or
+ *  throttled tick still arrives before the queue runs dry. */
+const ALARM_TICK_MS = 250
 
-/** The rendered figure, built once on first use and reused after that. */
-let alarmBuffer = null
-/** The looping source, or null when silent. Doubles as "is it running". */
-let alarmSource = null
+/** How far ahead notes are scheduled. Also the worst-case tail after stopping,
+ *  for anything already handed to the audio thread — see stopLoudAlarm. */
+const ALARM_LOOKAHEAD = 0.5
+
+let alarmTimer = null
 let alarmBuzzTimer = null
-
-/**
- * Renders LOUD_FIGURE into an AudioBuffer, offline.
- *
- * Same oscillator and same gain envelope as toneAt, so the alarm sounds exactly
- * as it did — this changes how the notes are DELIVERED, not what they are. The
- * envelope is duplicated rather than shared because toneAt writes to the live
- * context and this has to write to an offline one.
- */
-function renderAlarmBuffer(ctx) {
-  const OfflineCtor = window.OfflineAudioContext || window.webkitOfflineAudioContext
-  if (!OfflineCtor) return null
-
-  try {
-    const length = Math.ceil(LOUD_FIGURE_SECONDS * ctx.sampleRate)
-    const offline = new OfflineCtor(1, length, ctx.sampleRate)
-
-    for (const note of LOUD_FIGURE) {
-      const osc = offline.createOscillator()
-      const gain = offline.createGain()
-      osc.type = LOUD_VOICE.type
-      osc.frequency.value = note.freq
-
-      const when = note.at
-      gain.gain.setValueAtTime(0.0001, when)
-      gain.gain.exponentialRampToValueAtTime(LOUD_VOICE.volume, when + 0.012)
-      gain.gain.exponentialRampToValueAtTime(0.0001, when + note.duration)
-
-      osc.connect(gain).connect(offline.destination)
-      osc.start(when)
-      osc.stop(when + note.duration + 0.02)
-    }
-
-    return offline.startRendering()
-  } catch {
-    return null
-  }
-}
+/** Absolute audio-clock time where the NEXT repetition of the figure begins. */
+let alarmCursor = 0
+/** Notes already scheduled, so they can be cut short rather than played out. */
+const alarmVoices = new Set()
 
 /**
  * Starts the unbroken alarm. Safe to call repeatedly — a second call while it
@@ -323,7 +265,7 @@ function renderAlarmBuffer(ctx) {
  * figure on top of the first, which would double the amplitude and clip.
  */
 export function startLoudAlarm() {
-  if (alarmSource) return
+  if (alarmTimer) return
 
   const ctx = getContext()
   if (!ctx) return
@@ -332,69 +274,79 @@ export function startLoudAlarm() {
   // costs nothing and rescues the case where audio was primed a moment ago.
   if (ctx.state === 'suspended') ctx.resume().catch(() => {})
 
-  // Haptics first, and not awaited on the buffer: the buzz is instant and the
-  // render is a promise, so waiting would delay the one channel that needs no
-  // decoding. Foreground only — see the header.
-  vibrate()
-  alarmBuzzTimer = setInterval(vibrate, Math.round(LOUD_FIGURE_SECONDS * 1000))
+  // A hair in the future: scheduling AT currentTime races the audio thread and
+  // drops the first note on some browsers.
+  alarmCursor = ctx.currentTime + 0.05
 
-  const begin = (buffer) => {
-    // stopLoudAlarm may have run while the render was in flight. Without this
-    // the alarm would start AFTER being cancelled and never stop, because the
-    // caller has already let go of it.
-    if (!alarmBuzzTimer || alarmSource || !buffer) return
+  const pump = () => {
+    const now = ctx.currentTime
 
-    try {
-      const src = ctx.createBufferSource()
-      src.buffer = buffer
-      src.loop = true
-      src.connect(ctx.destination)
-      // A hair in the future: starting AT currentTime races the audio thread
-      // and clips the first note on some browsers.
-      src.start(ctx.currentTime + 0.05)
-      alarmSource = src
-    } catch {
-      /* nothing to do — a silent alarm is bad, a thrown one is worse */
+    // If the tab was backgrounded the cursor can be far behind — throttled
+    // timers stop firing, the audio clock does not. Catching up would dump
+    // every missed repetition at once. Skip to the present instead.
+    if (alarmCursor < now) alarmCursor = now + 0.02
+
+    while (alarmCursor < now + ALARM_LOOKAHEAD) {
+      for (const note of LOUD_FIGURE) {
+        const osc = toneAt(alarmCursor + note.at, {
+          freq: note.freq,
+          duration: note.duration,
+          ...LOUD_VOICE,
+        })
+        if (osc) {
+          alarmVoices.add(osc)
+          osc.onended = () => alarmVoices.delete(osc)
+        }
+      }
+      alarmCursor += LOUD_FIGURE_SECONDS
     }
   }
 
-  if (alarmBuffer) {
-    begin(alarmBuffer)
-    return
-  }
+  pump()
+  alarmTimer = setInterval(pump, ALARM_TICK_MS)
 
-  const rendering = renderAlarmBuffer(ctx)
-  if (!rendering) return
-
-  rendering
-    .then((buffer) => {
-      alarmBuffer = buffer
-      begin(buffer)
-    })
-    .catch(() => {})
+  // Haptics on the same period. navigator.vibrate cannot loop by itself, and
+  // re-issuing it on the 250ms pump would restart the buzz four times a second
+  // — a constant hum rather than a pulse.
+  vibrate()
+  alarmBuzzTimer = setInterval(vibrate, Math.round(LOUD_FIGURE_SECONDS * 1000))
 }
 
 /**
  * Stops it, now.
  *
- * One source to stop rather than a queue of scheduled notes to chase, which is
- * the other thing the buffer bought: there is no lookahead tail that can keep
- * sounding after the operator has accepted.
+ * Clearing the timer alone is not enough: up to ALARM_LOOKAHEAD of notes are
+ * already on the audio thread and would play on regardless. An alarm that keeps
+ * going for half a second after the operator has accepted reads as a broken
+ * button, so the scheduled notes are cut short too.
  */
 export function stopLoudAlarm() {
+  if (alarmTimer) {
+    clearInterval(alarmTimer)
+    alarmTimer = null
+  }
   if (alarmBuzzTimer) {
     clearInterval(alarmBuzzTimer)
     alarmBuzzTimer = null
   }
 
-  if (alarmSource) {
+  const ctx = getContext()
+  for (const osc of alarmVoices) {
     try {
-      alarmSource.stop()
-      alarmSource.disconnect()
+      // stop() in the past is spec'd to stop immediately, and osc.stop() with
+      // no argument does the same. Either way the note dies with the ramp still
+      // in place, so there is no click.
+      osc.stop(ctx ? ctx.currentTime : 0)
     } catch {
-      /* already stopped, or the context went away with the page */
+      /* already stopped — that is the desired state */
     }
-    alarmSource = null
+  }
+  alarmVoices.clear()
+
+  try {
+    if (navigator.vibrate) navigator.vibrate(0)
+  } catch {
+    /* unsupported — ignore */
   }
 }
 
