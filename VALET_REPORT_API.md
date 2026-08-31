@@ -427,6 +427,7 @@ the download button in section 8 uses.
       "parking_location": "L2 Bay B4",
       "notes": null,
       "status": "delivered",
+      "auto_delivered": false,
       "parked_at": "2026-08-22T14:12:00Z",
       "delivered_at": "2026-08-22T19:40:00Z",
       "retrievals": 1,
@@ -442,6 +443,24 @@ the download button in section 8 uses.
   ]
 }
 ```
+
+#### `auto_delivered`
+
+`true` means **nobody handed this car over.** Half an hour before the valet day
+rolls over, anything still open — parked, being fetched, standing at the
+entrance — is closed out automatically so the night's cars reach the reports at
+all. Those rows read `status: "delivered"` like any other, and this is the only
+field that says a guest never actually collected the car.
+
+The delivered COUNT includes them. If you show a delivery rate, decide which
+number you mean and label it:
+
+```js
+const handedOver = rows.filter((r) => r.status === 'delivered' && !r.auto_delivered)
+```
+
+An older valet deployment omits the field, so test `r.auto_delivered === true`
+rather than truthiness on undefined.
 
 #### The two rating fields
 

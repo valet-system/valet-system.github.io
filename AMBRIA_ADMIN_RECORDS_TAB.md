@@ -100,6 +100,7 @@ Response:
 | `parking_location` | Free text — `L2 Bay B4` |
 | `notes` | Being retired; null on anything checked in from late Aug 2026 |
 | `status` | `parked` · `delivered` · `returned` · … |
+| `auto_delivered` | **`true` = nobody handed it over.** See trap 2. |
 | `parked_at`, `delivered_at` | timestamptz; `delivered_at` is null until handed over |
 | `retrievals` | How many times the guest asked for the car |
 | `no_shows` | How many times they did not turn up for it |
@@ -113,7 +114,7 @@ Use `hi ? x_hi || x : x` for the operator names, the way the rest of the app doe
 
 ---
 
-## Five things that will bite
+## Six things that will bite
 
 ### 1. Paging is not optional
 
@@ -124,26 +125,41 @@ For the table, page properly — `limit` + `offset`, and drive the pager off
 `total`. For a "download everything" button, use `allValetRecords()`, which
 already does the loop and reports progress.
 
-### 2. `rating: null` is "did not answer", not "bad"
+### 2. `auto_delivered: true` is not a hand-over
+
+Half an hour before the valet day rolls over, anything still open is closed out
+automatically so the night's cars reach the reports. Those rows read
+`status: "delivered"` like any other — this field is the only thing that says a
+guest never actually collected the car.
+
+Show it. A row that says only "delivered" about a car nobody collected is the
+table lying with a straight face. And if you show a delivery rate, say which
+one it is:
+
+```js
+const handedOver = rows.filter((r) => r.status === 'delivered' && !r.auto_delivered)
+```
+
+### 3. `rating: null` is "did not answer", not "bad"
 
 The guest is asked once, in the hand-over WhatsApp message, and most people never
 reply. Counting nulls as anything but "no answer" makes every property look worse
 than it is. Show them as `—`, and if you show a percentage, say what it is a
 percentage **of**.
 
-### 3. `review_comment` arrives late
+### 4. `review_comment` arrives late
 
 A guest who taps Poor is asked what went wrong and types back minutes later. So a
 `poor` row with no comment usually means *the reply has not arrived yet* — not
 that they had nothing to say. Do not render it as "no comment given".
 
-### 4. A valet database that has not run migration 0044 omits two keys
+### 5. A valet database that has not run migration 0044 omits two keys
 
 `rating` and `review_comment` are simply **absent** from the row, not null. Read
 them defensively — `row.rating ?? null` — or the table throws on an older valet
 deployment.
 
-### 5. Never put the API key in the browser
+### 6. Never put the API key in the browser
 
 The key lives in the `valet-analytics` edge function's secrets and must stay
 there. Call it only through `valetReport()`, which goes via that proxy.
@@ -190,7 +206,7 @@ Sensible defaults; adjust to taste.
 | Property | `property_name` — only when viewing all properties |
 | Parked / Fetched | `parked_by` / `fetched_by` |
 | Rating | `rating` chip; `review_comment` underneath when present |
-| Status | `status` |
+| Status | `status`, plus an **Auto delivered** chip when `auto_delivered` |
 
 Controls: a search box (`query`), the date range and property filter reused from
 Analytics, and a pager.

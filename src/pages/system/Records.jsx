@@ -530,6 +530,22 @@ export default function Records() {
                     <td className="px-4 py-3">
                       <span className="flex flex-wrap items-center gap-1.5">
                         <VehicleStatusBadge status={r.status} size="sm" />
+
+                        {/* AUTO DELIVERED, not handed over.
+                            close_open_cars() marks anything still open half an
+                            hour before the token reset, so the night's cars
+                            reach the reports (migration 0061). They then read
+                            as 'delivered' like any other, which is the report
+                            saying a guest collected a car nobody collected.
+                            This is the word that stops that.
+
+                            `?? null` — a database without 0062 omits the field
+                            entirely, and undefined is not false. */}
+                        {(r.auto_delivered ?? null) === true && (
+                          <span className="rounded bg-warning-soft px-1.5 py-0.5 text-[0.6875rem] font-semibold text-warning">
+                            {t('records.autoDelivered')}
+                          </span>
+                        )}
                         {Number(r.no_shows) > 0 && (
                           <span className="tnum text-xs text-warning">
                             {t(
