@@ -500,23 +500,53 @@ export async function showNotification(title, body, { critical = false, tag, url
 // ═══════════════════════════════════════════════════════════════════
 
 /**
- * Full-force alert: sound + haptics + OS notification.
+ * ── ONE EVENT, ONE OS NOTIFICATION ────────────────────────────────────
  *
- * Use for anything an operator must act on now. Three channels because each
- * one fails in a different situation — audio if the phone is muted, haptics
- * on iOS, notifications if permission was denied. Together, at least one
- * lands.
+ * These used to call showNotification() as well, and that is why a single
+ * "Car requested" arrived on the phone TWICE with two different wordings:
+ *
+ *   Token 5 — 1234        this file, from the page, via tasks.alarmBody
+ *   Token 5 · 1234 · P1   the service worker, from the server push
+ *
+ * Same event, two independent producers. The server push is the better of the
+ * two and it is not close:
+ *
+ *   app closed / phone locked   push arrives · the page cannot run at all
+ *   parking location in body    push has it · the page's format does not
+ *   who is told                 push reaches every admin at the property,
+ *                               the page only whoever has it open
+ *
+ * A page-made notification only fires when somebody is already looking at the
+ * screen — which is when a notification is least needed — and it was the
+ * duplicate.
+ *
+ * So the OS notification now has exactly ONE source: the push handler in
+ * public/sw.js. What these keep is the part the service worker cannot do —
+ * making a noise, immediately, in the app the operator is holding.
+ *
+ * showNotification() itself is untouched and still exported: sw.js is not the
+ * only conceivable caller, and removing it would take a working tool away to
+ * fix a duplicate that was never its fault.
  */
+
+/** Full-force alert: sound + haptics. The OS notification comes from the push. */
 export function alertLoud(title, body, tag, url) {
   playLoud()
   vibrate()
-  // Deliberately not awaited: the sound and the buzz must not wait on
-  // navigator.serviceWorker.ready, which can take a moment on a cold start.
-  showNotification(title, body, { critical: true, tag, url })
+  // title / body / tag / url are still in the signature on purpose. Every
+  // caller passes them, they are what the push carries, and dropping them from
+  // here would make the two paths look unrelated to the next reader.
+  void title
+  void body
+  void tag
+  void url
 }
 
-/** Quiet alert: soft tone + a non-sticky notification. No haptics. */
+/** Quiet alert: soft tone only. The OS notification comes from the push. */
 export function alertSoft(title, body, tag, url) {
   playSoft()
-  showNotification(title, body, { critical: false, tag, url })
+  void title
+  void body
+  void tag
+  void url
 }
