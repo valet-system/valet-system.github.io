@@ -1081,21 +1081,20 @@ function ReparkCard({ task, operators, onRepark }) {
             </option>
           ))}
         </select>
-        {/* Disabled until a DIFFERENT operator is picked.
+        {/* Grey once somebody has been sent.
             It used to be `!operatorId` alone, which left a live purple button
             sitting under "Sent to Vikash" — inviting the same dispatch twice,
-            and reading as though the first one had not worked.
-
-            Re-sending is still allowed, deliberately: the first operator may
-            simply not answer, and the admin has to be able to hand it to
-            somebody else. It just cannot be the person who already has it. */}
+            and reading as though the first one had not worked. The greyed
+            button IS the confirmation, which is why the label never changes:
+            one word that means one thing, in one colour that says whether it
+            can still be pressed. */}
         <Button
           variant="primary"
           icon="arrow-right"
-          disabled={!operatorId || operatorId === task.assigned_operator_id}
+          disabled={!operatorId || Boolean(sentTo)}
           onClick={() => onRepark(task.id, operatorId)}
         >
-          {t(sentTo ? 'queue.sendToSomeoneElse' : 'queue.sendToRepark')}
+          {t('queue.sendToRepark')}
         </Button>
       </div>
     </Card>
