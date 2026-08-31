@@ -102,7 +102,7 @@ const SHOW_ON_SITE = 40
 
 const TASK_SELECT_BASE = `
   id, task_type, status, return_count, created_at, assigned_at, pickup_started_at,
-  assigned_operator_id,
+  accepted_at, assigned_operator_id,
   parked_vehicles ( id, token_number, car_number, car_tier, guest_name, guest_name_hi, guest_phone,
                     parking_location, notes ),
 `
@@ -1004,6 +1004,16 @@ function ReparkCard({ task, operators, onRepark }) {
   const [operatorId, setOperatorId] = useState('')
   const vehicle = task.parked_vehicles
 
+  // Somebody has been sent. task.operator comes from the join in TASK_SELECT;
+  // since 0052 an undispatched no-show has no operator at all, so this is the
+  // honest test for "has this been handed to anyone".
+  const sentTo = task.operator ? personName(task.operator.name, task.operator.name_hi) : null
+
+  // And whether they have acknowledged it. accepted_at arrives with migration
+  // 0059; `?? null` so a database without it reads as "not accepted" rather
+  // than undefined, which would make every dispatch look accepted.
+  const accepted = sentTo && (task.accepted_at ?? null) !== null
+
   return (
     <Card accent="danger">
       <div className="flex items-start gap-3">
@@ -1027,6 +1037,24 @@ function ReparkCard({ task, operators, onRepark }) {
             {t('queue.guestNeverCame')}
             {task.pickup_started_at && ` · ${timeAgo(task.pickup_started_at)}`}
           </p>
+
+          {/* WHO WAS SENT, AND WHETHER THEY HAVE SEEN IT.
+              dispatch_reparking does not change the status — it cannot, because
+              MyTasks and task_complete_reparking both read 're_parking' — so
+              without this line the card looked identical before and after
+              sending somebody. The admin had no way to tell, and the obvious
+              reading of an unchanged card with a live button is that the tap
+              did nothing. */}
+          {sentTo && (
+            <p
+              className={cn(
+                'mt-1 truncate text-sm font-medium',
+                accepted ? 'text-success' : 'text-warning',
+              )}
+            >
+              {t(accepted ? 'queue.reparkAccepted' : 'queue.reparkSent', { name: sentTo })}
+            </p>
+          )}
         </div>
       </div>
 
@@ -1053,13 +1081,21 @@ function ReparkCard({ task, operators, onRepark }) {
             </option>
           ))}
         </select>
+        {/* Disabled until a DIFFERENT operator is picked.
+            It used to be `!operatorId` alone, which left a live purple button
+            sitting under "Sent to Vikash" — inviting the same dispatch twice,
+            and reading as though the first one had not worked.
+
+            Re-sending is still allowed, deliberately: the first operator may
+            simply not answer, and the admin has to be able to hand it to
+            somebody else. It just cannot be the person who already has it. */}
         <Button
           variant="primary"
           icon="arrow-right"
-          disabled={!operatorId}
+          disabled={!operatorId || operatorId === task.assigned_operator_id}
           onClick={() => onRepark(task.id, operatorId)}
         >
-          {t('queue.sendToRepark')}
+          {t(sentTo ? 'queue.sendToSomeoneElse' : 'queue.sendToRepark')}
         </Button>
       </div>
     </Card>
