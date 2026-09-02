@@ -91,6 +91,33 @@ const TEMPLATE_ENV = {
 }
 
 /**
+ * Which component of the template the parameters belong to.
+ *
+ * Meta counts parameters PER COMPONENT, not per message. A template whose
+ * variable sits in the header wants a `header` component with one parameter
+ * and a `body` component with none; sending the same parameter as `body`
+ * fails with #132000 on both counts at once — one too many in the body, one
+ * missing from the header. The error names neither, which is what makes it
+ * expensive to read.
+ *
+ * So the slot is recorded here, beside the template name, rather than assumed
+ * at the send site. It is a property of the approved template, and the only
+ * place it can be known is next to the thing that names it.
+ *
+ * car_delivered is a header template: its variable is the token, in the bold
+ * line at the top. car_returned takes the same single token but keeps it in
+ * the body, which is why the two cannot share an entry however alike their
+ * parameters look.
+ *
+ * Anything absent here is a body template — that is every other one, and the
+ * safer default of the two, since a body variable is what the ordinary
+ * template editor produces unless somebody deliberately adds a header.
+ */
+const TEMPLATE_SLOT: Record<string, 'body' | 'header'> = {
+  car_delivered: 'header',
+}
+
+/**
  * A guest name Meta will accept as a template parameter.
  *
  * Two things it has to survive:
@@ -301,7 +328,14 @@ Deno.serve(async (req) => {
             name: templateName,
             language: { code: lang },
             components: params.length
-              ? [{ type: 'body', parameters: params.map((text) => ({ type: 'text', text })) }]
+              ? [
+                  {
+                    // See TEMPLATE_SLOT. Header text accepts exactly one
+                    // variable, which is all a header template here sends.
+                    type: TEMPLATE_SLOT[row.message_type] ?? 'body',
+                    parameters: params.map((text) => ({ type: 'text', text })),
+                  },
+                ]
               : [],
           },
         }
