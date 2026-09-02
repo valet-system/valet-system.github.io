@@ -530,7 +530,7 @@ export default function StaffManager() {
                   value={roleFilter}
                   onChange={(e) => setRoleFilter(e.target.value)}
                   aria-label={t('staff.filterRole')}
-                  className="h-11 appearance-none rounded-xl border border-line-strong bg-surface pl-8 pr-8 text-sm font-medium text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
+                  className="h-11 appearance-none rounded-xl border border-line-strong bg-surface pl-8 pr-10 text-sm font-medium text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
                 >
                   <option value="all">{t('staff.allRoles')}</option>
                   <option value={ROLES.OPERATOR}>{t('staff.operators')}</option>
@@ -540,7 +540,7 @@ export default function StaffManager() {
                 <Icon
                   name="chevron-down"
                   size={14}
-                  className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-subtle"
+                  className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-ink-subtle"
                 />
               </div>
 
@@ -554,7 +554,7 @@ export default function StaffManager() {
                   value={propertyFilter}
                   onChange={(e) => setPropertyFilter(e.target.value)}
                   aria-label={t('staff.filterProperty')}
-                  className="h-11 appearance-none rounded-xl border border-line-strong bg-surface pl-8 pr-8 text-sm font-medium text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
+                  className="h-11 appearance-none rounded-xl border border-line-strong bg-surface pl-8 pr-10 text-sm font-medium text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
                 >
                   <option value="all">{t('staff.allProperties')}</option>
                   {properties.map((p) => (
@@ -566,7 +566,7 @@ export default function StaffManager() {
                 <Icon
                   name="chevron-down"
                   size={14}
-                  className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-subtle"
+                  className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-ink-subtle"
                 />
               </div>
             </>
