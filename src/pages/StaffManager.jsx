@@ -78,6 +78,7 @@ import HindiInput from '@/components/ui/HindiInput'
 import {
   createStaff,
   changeStaffPhone,
+  deleteStaff,
   getStaffPin,
   renameStaff,
   setStaffActive,
@@ -141,6 +142,9 @@ export default function StaffManager() {
   const [addOpen, setAddOpen] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
   const [deactivateTarget, setDeactivateTarget] = useState(null)
+  // Holds the LIST being deleted, not one person: the button acts on the
+  // ticked rows, and the confirmation has to state the count.
+  const [deleteTarget, setDeleteTarget] = useState(null)
 
   /**
    * The PIN of a just-created account — { name, phone, pin, isReset }.
@@ -166,8 +170,16 @@ export default function StaffManager() {
     // admin would open to work out what is wrong. See selectOptional.
     const COLUMNS = 'id, user_id, name, phone, role, property_id, is_active, created_at, properties(id, name)'
 
-    const staffQuery = (columns) => {
+    const staffQuery = (columns, { hideDeleted = false } = {}) => {
       let query = supabase.from('user_roles').select(columns).order('name')
+
+      // A deleted user keeps their user_roles row — Records reads "who parked
+      // this car" through a live join on it, so removing the row would blank
+      // the operator's name across their whole history. See migration 0063.
+      // The row is therefore filtered out here rather than gone, and only in
+      // the optimistic query: on a database without the column selectOptional
+      // falls back to the query that does not mention it.
+      if (hideDeleted) query = query.is('deleted_at', null)
 
       // RLS already limits a valet_admin to their own property, but being
       // explicit keeps the payload small and means the UI does not depend on a
@@ -180,9 +192,13 @@ export default function StaffManager() {
 
     const [{ data: rows, error }, propsResult] = await Promise.all([
       selectOptional(
-        () => staffQuery(`id, user_id, name, name_hi, phone, role, property_id, is_active, created_at, properties(id, name)`),
+        () =>
+          staffQuery(
+            `id, user_id, name, name_hi, phone, role, property_id, is_active, created_at, deleted_at, properties(id, name)`,
+            { hideDeleted: true },
+          ),
         () => staffQuery(COLUMNS),
-        'user_roles.name_hi',
+        'user_roles.name_hi or deleted_at',
       ),
       // Only the system admin picks a property; everyone else has exactly one.
       isSystemAdmin
@@ -386,6 +402,48 @@ export default function StaffManager() {
       toast.success(t(next ? 'staff.bulkActivated' : 'staff.bulkDeactivated', { n: done }))
     }
     // Named, not counted. "2 failed" tells an admin nothing they can act on.
+    for (const f of failed) toast.error(`${f.name}: ${f.error}`)
+  }
+
+  /**
+   * Destroys the ticked users' logins. System admin only, inactive rows only —
+   * both enforced in the database as well, because this button is not the only
+   * way to reach the RPC.
+   *
+   * One at a time and sequentially, like handleBulkActive: each call is its own
+   * transaction, and a failure halfway through must leave the successful ones
+   * done rather than rolling everybody back. The failures are then named.
+   *
+   * cars_kept is summed and reported. An admin who has just deleted somebody
+   * needs to know their records survived, and saying so is cheaper than
+   * letting them discover it by opening Records and finding a name they
+   * expected to be gone.
+   */
+  async function handleBulkDelete() {
+    const targets = deleteTarget ?? []
+    if (!targets.length || bulkBusy) return
+    setBulkBusy(true)
+
+    const failed = []
+    let carsKept = 0
+    for (const person of targets) {
+      const result = await deleteStaff(person.id)
+      if (result.ok) carsKept += Number(result.cars_kept ?? 0)
+      else failed.push({ name: person.name, error: result.error })
+    }
+
+    setBulkBusy(false)
+    setDeleteTarget(null)
+    setSelected(new Set())
+    await load()
+
+    const done = targets.length - failed.length
+    if (done > 0) {
+      toast.success(t('staff.bulkDeleted', { n: done }))
+      // Only when there is something to reassure them about. "0 cars kept" is
+      // noise on a test account that never parked anything.
+      if (carsKept > 0) toast.info(t('staff.deletedRecordsKept', { n: carsKept }))
+    }
     for (const f of failed) toast.error(`${f.name}: ${f.error}`)
   }
 
@@ -685,6 +743,25 @@ export default function StaffManager() {
                 >
                   {t(showInactive ? 'staff.activateSelected' : 'staff.deactivateSelected')}
                 </Button>
+                {/* DELETE — inactive list only, and system admin only.
+                    Not offered on the active list, because deactivation is the
+                    step that says somebody is finished and it belongs to
+                    whoever manages the shift; destroying the login is a
+                    separate decision one level up.
+
+                    A valet admin never sees this. The database refuses them
+                    too — the button is the convenience, not the guard. */}
+                {showInactive && isSystemAdmin && (
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    icon="trash"
+                    loading={bulkBusy}
+                    onClick={() => setDeleteTarget(chosen)}
+                  >
+                    {t('staff.deleteSelected')}
+                  </Button>
+                )}
                 <button
                   type="button"
                   onClick={() => setSelected(new Set())}
@@ -764,6 +841,20 @@ export default function StaffManager() {
             : t('staff.reactivateBody')
         }
         confirmLabel={t(deactivateTarget?.is_active ? 'staff.deactivate' : 'staff.reactivate')}
+      />
+
+      {/* The one irreversible action on this page, so the confirmation says
+          what goes AND what stays. An admin who reads "delete permanently" and
+          nothing else will reasonably assume the operator's name disappears
+          from every car they parked — and refuse to press it. */}
+      <ConfirmModal
+        open={Boolean(deleteTarget?.length)}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleBulkDelete}
+        tone="danger"
+        title={t('staff.deleteQ', { n: deleteTarget?.length ?? 0 })}
+        description={t('staff.deleteBody')}
+        confirmLabel={t('staff.deleteConfirm')}
       />
 
       {/* A CONFIRMATION, even though "seedha" was asked for.

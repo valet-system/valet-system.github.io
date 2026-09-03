@@ -8,6 +8,7 @@
  * │     getStaffPin(userRoleId)  — read back ONE person's current PIN     │
  * │     setStaffPin(userRoleId, pin)                                     │
  * │     setStaffActive(userRoleId, isActive)                             │
+ * │     deleteStaff(userRoleId)  — system admin only, inactive only       │
  * │     renameStaff(userRoleId, name)                                    │
  * │     changeStaffPhone(userRoleId, phone)                              │
  * │                                                                     │
@@ -273,6 +274,33 @@ export function getStaffPin(userRoleId) {
  */
 export function setStaffActive(userRoleId, isActive) {
   return call('admin_set_staff_active', { p_user_role_id: userRoleId, p_is_active: isActive })
+}
+
+/**
+ * Destroys somebody's LOGIN, permanently. System admin only, and only for
+ * someone already deactivated.
+ *
+ * What actually goes: the auth account, their PIN, their push subscriptions,
+ * and their phone number's claim on the system — so the next hire can be given
+ * that number. They can never sign in again and they leave the staff list.
+ *
+ * What STAYS is the user_roles row itself, and that is the whole design rather
+ * than a compromise. Records reads "who parked this car" through a live join
+ * on that row, so deleting it would blank the operator's name on every car
+ * they ever handled, across the entire history. Migration 0063's header has
+ * the reasoning and the five foreign keys that make a real delete impossible
+ * anyway.
+ *
+ * Resolves with { code: 'deleted', name, role, cars_kept } — cars_kept is how
+ * many tasks stay attributed to them, so the screen can say what was preserved
+ * instead of leaving the admin to guess. A second call returns
+ * code: 'already_deleted' rather than failing.
+ *
+ * NOT REVERSIBLE. Re-adding the person creates a new account with a new PIN;
+ * their old cars stay with the old row.
+ */
+export function deleteStaff(userRoleId) {
+  return call('admin_delete_staff', { p_user_role_id: userRoleId })
 }
 
 /**

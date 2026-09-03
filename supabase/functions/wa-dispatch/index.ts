@@ -104,18 +104,19 @@ const TEMPLATE_ENV = {
  * at the send site. It is a property of the approved template, and the only
  * place it can be known is next to the thing that names it.
  *
- * car_delivered is a header template: its variable is the token, in the bold
- * line at the top. car_returned takes the same single token but keeps it in
- * the body, which is why the two cannot share an entry however alike their
- * parameters look.
+ * EMPTY TODAY, AND KEPT ANYWAY. car_delivered was the one header template —
+ * its token sat in the bold line at the top — until the token was moved down
+ * into the body, at which point routing its parameter to the header started
+ * failing exactly the way routing it to the body had failed before. The entry
+ * came out; the map stays, because the templates are edited on Meta's
+ * dashboard by hand and the next header variable will arrive the same way this
+ * one did, with #132000 and nothing naming the component.
  *
- * Anything absent here is a body template — that is every other one, and the
- * safer default of the two, since a body variable is what the ordinary
+ * Anything absent here is a body template — that is all of them at the moment,
+ * and the safer default in any case, since a body variable is what the
  * template editor produces unless somebody deliberately adds a header.
  */
-const TEMPLATE_SLOT: Record<string, 'body' | 'header'> = {
-  car_delivered: 'header',
-}
+const TEMPLATE_SLOT: Record<string, 'body' | 'header'> = {}
 
 /**
  * A guest name Meta will accept as a template parameter.
@@ -213,8 +214,21 @@ function templateParams(type: string, row: Record<string, unknown>) {
     case 'car_at_pickup':
       return [token, name]
 
-    // car_deliver: … Token {{1}} … — one variable, no name.
+    // car_deliver: NO VARIABLES AT ALL. The token was taken out of this
+    // template on Meta's dashboard — header and body are both static text now
+    // — so the send must carry no parameters. An empty list makes the send omit
+    // the components array entirely, which is what a parameterless template
+    // requires; one parameter too many fails it as surely as one too few.
+    //
+    // The guest is not left guessing which car: guest_record_review matches
+    // their reply by PHONE, and the message arrives seconds after they took the
+    // keys. Nothing downstream reads a token out of this message.
     case 'car_delivered':
+      return []
+
+    // car_return: … Token {{1}} … — still one variable, in the body. It shared
+    // a case with car_delivered until the token left that template; the two
+    // look alike and are no longer the same shape.
     case 'car_returned':
       return [token]
 
