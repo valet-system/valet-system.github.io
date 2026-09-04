@@ -467,12 +467,21 @@ export default function Properties() {
 /**
  * One tab per site, plus "All sites".
  *
- * ── WHY IT SCROLLS ────────────────────────────────────────────────────
- * There are four sites today and the Add button has no limit on it. Tabs that
- * wrap to a second line push the numbers below the fold on a phone, and tabs
- * that squeeze truncate the one thing that tells sites apart — their name. So
- * the row scrolls sideways instead, and the scrollbar is hidden because a
- * touch device does not need one to know it can swipe.
+ * ── WHY IT WRAPS RATHER THAN SCROLLS ──────────────────────────────────
+ * It used to scroll sideways, reasoning that a second line pushes the numbers
+ * below the fold on a phone. That was the wrong trade, on request and on
+ * reflection: a tab off the right-hand edge is INVISIBLE. Nothing on screen
+ * says Manaktala has a tab at all, so a site can go unlooked-at for weeks
+ * because nobody knew to swipe. A second line costs forty pixels once; a hidden
+ * tab costs the site.
+ *
+ * Squeezing is still refused — `shrink-0` stays — because the name is the one
+ * thing that tells sites apart and a truncated one tells nobody anything.
+ *
+ * ── AND WHY THE NAMES ARE TRIMMED ─────────────────────────────────────
+ * See trimHouseWord. "Ambria" on five tabs distinguishes none of them and takes
+ * half the width of each; it comes off, with guards that give the full names
+ * back rather than ever labelling two sites the same.
  *
  * ── WHY IT IS A TABLIST AND NOT FOUR BUTTONS ──────────────────────────
  * role="tab" with aria-selected is what tells a screen reader that these
@@ -480,22 +489,85 @@ export default function Properties() {
  * actions. Arrow-key movement between tabs comes free from that in most
  * readers; plain buttons announce as an unrelated list.
  */
+/**
+ * Site names with the house word taken off the front.
+ *
+ * "Ambria" appears on nearly every site, so it distinguishes nothing while
+ * taking about half of each tab. Dropping it is what gets six tabs onto one or
+ * two rows instead of three.
+ *
+ * ── WHY NOT "THE PREFIX THEY ALL SHARE" ───────────────────────────────
+ * That was the first version and it was too strict to be useful: one site
+ * called "test" was enough to make nothing shared, so every tab kept the word
+ * and the row went back to three lines. The common case is four Ambria sites
+ * and one oddity, and that is exactly the case it refused to help with.
+ *
+ * So the word is trimmed from the names that HAVE it and the others are left
+ * alone — "test" stays "test".
+ *
+ * ── THE TWO GUARDS THAT MAKE IT SAFE ──────────────────────────────────
+ * UNIQUENESS. If "Ambria Restro" and "Restro" both existed, trimming would
+ * label two different sites "Restro" and clicking either would look like a bug
+ * in the filter. Checked after trimming, and the whole thing is abandoned if it
+ * collapses two names into one.
+ *
+ * NON-EMPTY, as belt and braces. A site called exactly "Ambria" is already
+ * safe by construction — a one-word name is never counted towards the house
+ * word and never matches "Ambria " with its trailing space, so it keeps its
+ * name while the others trim. The guard is there for the next edit, not for a
+ * case that reaches it today.
+ *
+ * Either way the fallback is the full names, which are never wrong — only long.
+ * The complete name also stays on each tab's title attribute.
+ */
+function trimHouseWord(names) {
+  if (names.length < 2) return names
+
+  // The first word that starts more than one name. Counting rather than taking
+  // names[0]'s word means the odd site out cannot decide it for everybody.
+  const counts = new Map()
+  for (const n of names) {
+    const [word, ...rest] = n.split(' ')
+    if (word && rest.length) counts.set(word, (counts.get(word) ?? 0) + 1)
+  }
+  let house = ''
+  let best = 1
+  for (const [word, count] of counts) {
+    if (count > best) {
+      house = word
+      best = count
+    }
+  }
+  if (!house) return names
+
+  const trimmed = names.map((n) => (n.startsWith(`${house} `) ? n.slice(house.length + 1) : n))
+  if (trimmed.some((n) => !n.trim())) return names
+  if (new Set(trimmed).size !== new Set(names).size) return names
+  return trimmed
+}
+
 function PropertyTabs({ properties, value, onChange }) {
   const t = useT()
 
+  const labels = trimHouseWord(properties.map((p) => p.name ?? ''))
+
   const tabs = [
     { id: 'all', label: t('props.allSites') },
-    ...properties.map((p) => ({ id: p.id, label: p.name, closed: !p.is_active })),
+    ...properties.map((p, i) => ({
+      id: p.id,
+      label: labels[i],
+      // The full name, so the trim never hides which site this is from
+      // somebody who wants to check.
+      title: p.name,
+      closed: !p.is_active,
+    })),
   ]
 
   return (
     <div
       role="tablist"
       aria-label={t('props.sites')}
-      // -mx-1 px-1: the focus ring on the first and last tab is drawn outside
-      // the element, and would be clipped by the scroll container without a
-      // little bleed either side.
-      className="scrollbar-none -mx-1 mb-4 flex gap-2 overflow-x-auto px-1 pb-1"
+      className="mb-4 flex flex-wrap gap-2"
     >
       {tabs.map((tab) => {
         const active = tab.id === value
@@ -506,10 +578,12 @@ function PropertyTabs({ properties, value, onChange }) {
             role="tab"
             aria-selected={active}
             onClick={() => onChange(tab.id)}
+            title={tab.title}
             className={cn(
-              // shrink-0 is what makes the row scroll rather than compress:
-              // without it flex shaves every tab until the names are unreadable.
-              'shrink-0 rounded-xl border px-3.5 py-2 text-sm font-semibold transition-colors',
+              // shrink-0 still: without it flex shaves every tab until the
+              // names are unreadable, which is the one outcome worse than a
+              // second line.
+              'shrink-0 rounded-xl border px-3 py-1.5 text-sm font-semibold transition-colors',
               active
                 // White on the violet, NOT gold. Gold on this violet measures
                 // 1.91:1 — below even the 3:1 WCAG allows for large text — and

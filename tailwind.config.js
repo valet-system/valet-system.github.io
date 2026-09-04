@@ -57,7 +57,24 @@ export default {
         },
       },
       fontFamily: {
-        sans: ['Inter var', 'Inter', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
+        // 'Inter Variable' FIRST, because that is the family name
+        // @fontsource-variable/inter actually declares. The two older names
+        // stay behind it: 'Inter var' was the old fontsource spelling and
+        // 'Inter' matches a copy installed on the machine, so a device that
+        // has either still gets Inter rather than dropping to system-ui.
+        //
+        // The tail is not decoration. Inter carries no Devanagari, so every
+        // Hindi string in the app resolves through it to the system font.
+        sans: [
+          'Inter Variable',
+          'Inter var',
+          'Inter',
+          'system-ui',
+          '-apple-system',
+          'Segoe UI',
+          'Roboto',
+          'sans-serif',
+        ],
         // Token numbers and countdowns: fixed-width digits so the layout
         // does not jitter every time a digit changes (e.g. 09:59 -> 09:58).
         mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],

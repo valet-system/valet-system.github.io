@@ -92,6 +92,7 @@ const TokenMgmt = lazy(() => import('@/pages/admin/TokenMgmt'))
 const Spaces = lazy(() => import('@/pages/admin/Spaces'))
 const Reviews = lazy(() => import('@/pages/admin/Reviews'))
 const Analytics = lazy(() => import('@/pages/admin/Analytics'))
+const ValetBookings = lazy(() => import('@/pages/admin/ValetBookings'))
 const Properties = lazy(() => import('@/pages/system/Properties'))
 const SystemAnalytics = lazy(() => import('@/pages/system/Analytics'))
 const Records = lazy(() => import('@/pages/system/Records'))
@@ -197,6 +198,18 @@ export default function App() {
                     </ProtectedRoute>
                   }
                 />
+                {/* Ambria Admin's bookings, read-only. Two routes for one
+                    component, the way /admin/spaces and /system/spaces already
+                    work: ProtectedRoute takes a single role list, and the two
+                    audiences reach it from different sides of the nav. */}
+                <Route
+                  path="admin/bookings"
+                  element={
+                    <ProtectedRoute allow={[ROLES.VALET_ADMIN]}>
+                      <ValetBookings />
+                    </ProtectedRoute>
+                  }
+                />
                 <Route
                   path="admin/tokens"
                   element={
@@ -265,6 +278,32 @@ export default function App() {
                   element={
                     <ProtectedRoute allow={[ROLES.SYSTEM_ADMIN]}>
                       <Records />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="system/bookings"
+                  element={
+                    <ProtectedRoute allow={[ROLES.SYSTEM_ADMIN]}>
+                      <ValetBookings />
+                    </ProtectedRoute>
+                  }
+                />
+
+                {/* ── VALET VENDOR ─────────────────────────────────────
+                    The whole of this role. A third path to the same component,
+                    for the same reason /admin/spaces and /system/spaces are
+                    two: ProtectedRoute takes one role list, and each audience
+                    reaches the screen from its own side of the nav.
+
+                    Every other route in this file names the roles it allows, so
+                    a vendor is redirected home from all of them without a
+                    single one being edited. */}
+                <Route
+                  path="vendor/bookings"
+                  element={
+                    <ProtectedRoute allow={[ROLES.VALET_VENDOR]}>
+                      <ValetBookings />
                     </ProtectedRoute>
                   }
                 />

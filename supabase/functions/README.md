@@ -33,6 +33,47 @@ way for the two to disagree about what was sent.
 `wa-webhook` genuinely **must** be an Edge Function — Meta calls it over HTTPS and
 Postgres cannot receive an inbound request.
 
+`ambria-bookings/` is the one door to Ambria Admin's valet bookings feed. It is
+also the first function in this project the **browser** actually calls, so it is
+the only one that needs the CORS helpers in `_shared/http.ts` to be right.
+
+It exists for one reason: Ambria's feed is gated by an `x-feed-key` header, and a
+key in a Vite bundle is not a key — `view-source` is the whole attack. The key
+lives here as a secret and never leaves the server.
+
+Two secrets, both on **this** project:
+
+```
+AMBRIA_FEED_URL   https://<ambria-ref>.supabase.co
+AMBRIA_FEED_KEY   the same string Ambria set as VALET_FEED_KEY
+```
+
+JWT verification stays **on** — unlike the WhatsApp pair. The caller must be a
+signed-in valet admin or system admin, and the role is read from the database
+rather than the request body.
+
+It is **deployed from the dashboard**, which is why it is the one function here
+that imports nothing from `_shared/`: the dashboard bundles only the function's
+own folder, so a `../_shared/http.ts` import fails at deploy time with a
+module-not-found. The CORS helpers and the caller check are copied into the file
+instead.
+
+That copy is a standing cost, and worth knowing about before editing either
+side: a change to the "never trust a role from the request body" rule in
+`_shared/caller.ts` does **not** reach this file. Moving it to the CLI would let
+it import the shared version and remove the trap.
+
+```bash
+# either — dashboard: Edge Functions → Deploy a new function → paste index.ts,
+#                     name it exactly `ambria-bookings`, JWT verification ON
+# or     — CLI:
+supabase functions deploy ambria-bookings --project-ref <valet-ref>
+```
+
+The response is passed through verbatim. Ambria owns the staffing snapshot, the
+event matching and `events_error`; re-deriving any of it here would put a second
+opinion in the middle of the wire. See `AMBRIA_VALET_BOOKINGS_FEED.md`.
+
 ### Deploying the two WhatsApp functions
 
 Both need `--no-verify-jwt`, for different reasons. Meta cannot attach a Supabase

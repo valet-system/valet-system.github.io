@@ -114,6 +114,10 @@ const CODE_MESSAGES = {
   LAST_SYSTEM_ADMIN: 'That is the only system admin. Promote somebody else first.',
   PROPERTY_REQUIRED: 'Choose a property for this role.',
   PIN_KEY_MISSING: 'PIN storage is not set up. Run migration 0007 in the SQL Editor.',
+  // admin_delete_staff. Each of these arrives with a detail naming the person,
+  // which the branch above prefers; these are the bare fallbacks.
+  STILL_ACTIVE: 'Deactivate them first.',
+  ALREADY_DELETED: 'That user has already been deleted.',
 }
 
 /**
@@ -138,6 +142,8 @@ const MISSING_MIGRATION = {
     'User management is not set up in the database yet. Run migration 0005 (staff_management_rpc) in the Supabase SQL Editor.',
   admin_set_staff_name_hi:
     'Hindi names are not set up in the database yet. Run migration 0022 (staff_name_hi) in the Supabase SQL Editor.',
+  admin_delete_staff:
+    'Deleting a user is not set up in the database yet. Run migration 0063 (delete_inactive_staff) in the Supabase SQL Editor.',
   default:
     'That feature is not set up in the database yet. Run the pending migrations in supabase/migrations in the Supabase SQL Editor.',
 }
@@ -149,11 +155,21 @@ function describeRpcError(fn, error) {
   const match = raw.match(/\b([A-Z][A-Z_]{2,})\s*:\s*(.+)/)
   if (match) {
     const [, code, detail] = match
-    if (CODE_MESSAGES[code]) {
-      // Prefer the SQL's own detail — it interpolates real values, e.g. the
-      // name a number is already registered to, or how many tasks are open.
-      return { code, error: capitalise(detail.trim()) }
-    }
+    // ALWAYS PREFER THE SQL'S OWN DETAIL, whether or not the code is one this
+    // file happens to know. It interpolates real values — the name a number is
+    // registered to, how many tasks are open, whose account to deactivate.
+    //
+    // This used to require CODE_MESSAGES[code] to exist first, which was a trap
+    // rather than a safeguard: every raise added to a migration after that list
+    // was written fell all the way through to "Something went wrong. Please try
+    // again.", throwing away a sentence that named the person and said exactly
+    // what to do. STILL_ACTIVE was the one that exposed it; the next new code
+    // would have done the same.
+    //
+    // The shape is the proof. Nothing but our own `raise exception 'CODE: …'`
+    // produces it, and everything right of that colon was written to be read by
+    // an admin. CODE_MESSAGES is now the fallback for a raise with no detail.
+    return { code, error: capitalise(detail.trim()) || CODE_MESSAGES[code] || raw }
   }
 
   // ── the function does not exist ────────────────────────────────────

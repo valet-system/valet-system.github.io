@@ -72,6 +72,7 @@ const NAV_ITEMS = {
   [ROLES.VALET_ADMIN]: [
     { to: '/admin/dashboard', key: 'dashboard', icon: 'grid' },
     { to: '/admin/car-status', key: 'carStatus', icon: 'car' },
+    { to: '/admin/bookings', key: 'bookings', icon: 'calendar' },
     { to: '/admin/staff', key: 'staff', icon: 'users' },
     { to: '/admin/tokens', key: 'tokens', icon: 'ticket' },
     { to: '/admin/spaces', key: 'spaces', icon: 'parking' },
@@ -84,12 +85,17 @@ const NAV_ITEMS = {
     // shift in progress and nothing older — which is the intent. The history
     // lives on the system admin's Records screen, where the range picker is.
   ],
+  // ONE ENTRY. A vendor's whole account is the bookings calendar, and every
+  // other route refuses them at ProtectedRoute — so a second nav item would be
+  // a link to a redirect.
+  [ROLES.VALET_VENDOR]: [{ to: '/vendor/bookings', key: 'bookings', icon: 'calendar' }],
   [ROLES.SYSTEM_ADMIN]: [
     { to: '/system/properties', key: 'properties', icon: 'building' },
     { to: '/system/users', key: 'users', icon: 'users' },
     // Same screen as the valet admin's, with a property picker on it.
     { to: '/system/spaces', key: 'spaces', icon: 'parking' },
     { to: '/system/records', key: 'records', icon: 'list' },
+    { to: '/system/bookings', key: 'bookings', icon: 'calendar' },
     { to: '/system/analytics', key: 'analytics', icon: 'chart' },
   ],
 }

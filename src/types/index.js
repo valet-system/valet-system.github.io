@@ -48,12 +48,27 @@ export const ROLES = {
   SYSTEM_ADMIN: 'system_admin',
   VALET_ADMIN: 'valet_admin',
   OPERATOR: 'operator',
+  /**
+   * An outside staffing supplier. Sees the Valet Bookings screen and nothing
+   * else — no dashboard, no check-in, no staff, no records.
+   *
+   * Added by migration 0065, which also explains why the database needed only
+   * three lines to accommodate it: every role gate in the schema is an
+   * allow-list, so a role in none of them is refused by all of them.
+   */
+  VALET_VENDOR: 'valet_vendor',
 }
 
 export const ROLE_META = {
   [ROLES.SYSTEM_ADMIN]: { label: 'System Admin', icon: 'shield', home: '/system/properties' },
   [ROLES.VALET_ADMIN]: { label: 'Valet Admin', icon: 'users', home: '/admin/dashboard' },
   [ROLES.OPERATOR]: { label: 'Operator', icon: 'key', home: '/operator/checkin' },
+  [ROLES.VALET_VENDOR]: {
+    label: 'Valet Vendor',
+    // The calendar, because that one screen is the whole of their account.
+    icon: 'calendar',
+    home: '/vendor/bookings',
+  },
 }
 
 // ═══════════════════════════════════════════════════════════════════

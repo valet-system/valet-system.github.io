@@ -1,3 +1,30 @@
+/* ══════════════════════════════════════════════════════════════════
+   THE TYPEFACE
+
+   tailwind.config.js has asked for Inter since the project started, and
+   until now nothing ever loaded it — so every device silently fell through
+   to the next name in the stack and rendered Segoe UI, Roboto or San
+   Francisco depending on who was holding it. The design was specified and
+   never delivered.
+
+   SELF-HOSTED, not Google Fonts. This is an installable PWA that has to
+   work on a porch with no signal: a <link> to fonts.googleapis.com is a
+   third-party request that fails exactly then, and the text reflows into a
+   fallback at the worst moment. Bundled through Vite it lands in /assets/
+   with a content hash, which sw.js already caches first for .woff2 — so it
+   is available offline from the first visit onwards.
+
+   The variable build is one file for every weight from 100 to 900, which
+   is why it costs less than the two or three static cuts this UI uses.
+
+   DEVANAGARI IS NOT COVERED. Inter has no Devanagari glyphs, so Hindi keeps
+   falling through to the system font exactly as it does today — unchanged,
+   not broken. Matching the two would mean a second family (Noto Sans
+   Devanagari) and roughly double the bytes; worth doing deliberately, not
+   as a side effect of this.
+   ══════════════════════════════════════════════════════════════════ */
+@import '@fontsource-variable/inter';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

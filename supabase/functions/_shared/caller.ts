@@ -55,6 +55,14 @@ export const ROLES = {
   SYSTEM_ADMIN: 'system_admin',
   VALET_ADMIN: 'valet_admin',
   OPERATOR: 'operator',
+  /**
+   * An outside staffing supplier, added by migration 0065. Reaches the valet
+   * bookings feed and nothing else.
+   *
+   * Every function here gates on an explicit allow-list, so adding a name to
+   * this object grants nothing on its own — which is the point.
+   */
+  VALET_VENDOR: 'valet_vendor',
 } as const
 
 export type CallerRole = (typeof ROLES)[keyof typeof ROLES]

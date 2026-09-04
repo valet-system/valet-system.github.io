@@ -270,7 +270,12 @@ export default function StaffManager() {
      * mixed-case, and a byte comparison puts every capital before every
      * lowercase, so "kanishk" would sort after "Zoya".
      */
-    const rank = { [ROLES.SYSTEM_ADMIN]: 0, [ROLES.VALET_ADMIN]: 1, [ROLES.OPERATOR]: 2 }
+    const rank = {
+      [ROLES.SYSTEM_ADMIN]: 0,
+      [ROLES.VALET_ADMIN]: 1,
+      [ROLES.VALET_VENDOR]: 2,
+      [ROLES.OPERATOR]: 3,
+    }
     return rows.sort((a, b) => {
       const byRole = (rank[a.role] ?? 9) - (rank[b.role] ?? 9)
       if (byRole !== 0) return byRole
@@ -479,6 +484,11 @@ export default function StaffManager() {
         // like the whole thing failed.
         if (p.id === operatorId) return false
         if (p.role === ROLES.SYSTEM_ADMIN) return false
+        // NOR A VENDOR. This button ends the porch's shift — it exists so
+        // nobody is left signed in overnight. A vendor is an outside company
+        // reading a calendar; they have no shift to end, and switching them off
+        // every night would mean switching them back on every morning.
+        if (p.role === ROLES.VALET_VENDOR) return false
         // A valet_admin can only reach operators; anything else is a guaranteed
         // refusal, so it is not offered.
         if (!isSystemAdmin && p.role !== ROLES.OPERATOR) return false
@@ -592,6 +602,7 @@ export default function StaffManager() {
                 >
                   <option value="all">{t('staff.allRoles')}</option>
                   <option value={ROLES.OPERATOR}>{t('staff.operators')}</option>
+                  <option value={ROLES.VALET_VENDOR}>{t('staff.valetVendors')}</option>
                   <option value={ROLES.VALET_ADMIN}>{t('staff.valetAdmins')}</option>
                   <option value={ROLES.SYSTEM_ADMIN}>{t('staff.systemAdmins')}</option>
                 </select>
@@ -904,14 +915,21 @@ function StaffRow({
       ? 'bg-vip-soft text-vip'
       : person.role === ROLES.VALET_ADMIN
         ? 'bg-info-soft text-info'
-        : 'bg-brand-soft text-ink-muted'
+        : person.role === ROLES.VALET_VENDOR
+          ? 'bg-warning-soft text-warning'
+          : 'bg-brand-soft text-ink-muted'
 
+  // A tone of its own. Left on `neutral` a vendor was indistinguishable from an
+  // operator in the list, and they are the two roles least alike — one parks
+  // cars, the other is an outside company that can only read a calendar.
   const roleTone =
     person.role === ROLES.SYSTEM_ADMIN
       ? 'vip'
       : person.role === ROLES.VALET_ADMIN
         ? 'info'
-        : 'neutral'
+        : person.role === ROLES.VALET_VENDOR
+          ? 'warning'
+          : 'neutral'
 
   return (
     <div
@@ -992,10 +1010,25 @@ function StaffRow({
           <Badge tone={roleTone} size="sm" icon={meta?.icon}>
             {t(`role.${person.role}`)}
           </Badge>
+          {/* ── WHAT THIS CHIP IS ASKING ──────────────────────────
+              "Which property does this person work at". For an operator or a
+              valet admin the column answers it directly.
+
+              For a VENDOR it does not. They hold a property only because
+              user_roles_property_scope_chk requires every non-system-admin to
+              have one; nothing reads it, and the bookings screen they are
+              limited to shows every venue. Printing "Ambria Pushpanjali" beside
+              a location pin would tell an admin this vendor is scoped to one
+              venue, which is the opposite of true — and it is the kind of wrong
+              belief somebody acts on when deciding who to give an account to.
+
+              So the chip answers the question rather than echoing the column. */}
           {showProperty && person.properties?.name && (
             <span className="flex items-center gap-1 rounded-md bg-surface-sunken px-2 py-0.5 text-[0.6875rem] font-medium text-ink-subtle ring-1 ring-inset ring-line-strong">
               <Icon name="location" size={10} />
-              {person.properties.name}
+              {person.role === ROLES.VALET_VENDOR
+                ? t('staff.everyVenue')
+                : person.properties.name}
             </span>
           )}
         </div>
@@ -1090,7 +1123,19 @@ function AddStaffModal({
     setFormError(null)
   }, [open, defaultPropertyId])
 
-  const needsProperty = role !== ROLES.SYSTEM_ADMIN
+  // ── THE PROPERTY FIELD HAS THREE SHAPES ─────────────────────────────
+  //   operator / valet_admin   pick one of the venues — it scopes everything
+  //   valet_vendor             a select reading "All properties", on request
+  //   system_admin             a note; they belong to all of them by definition
+  //
+  // A vendor submits NULL either way: migration 0066 made property_id null for
+  // this role and the RPC now REFUSES a value, so the select is a label for
+  // that fact rather than a choice with alternatives. It is shown as a select
+  // because that is what was asked for, and because it keeps the form's shape
+  // identical whichever role is picked — the field does not appear and vanish
+  // as the role changes above it.
+  const needsProperty = role !== ROLES.SYSTEM_ADMIN && role !== ROLES.VALET_VENDOR
+  const isVendor = role === ROLES.VALET_VENDOR
 
   async function handleSubmit(event) {
     event.preventDefault()
@@ -1276,6 +1321,7 @@ function AddStaffModal({
             onChange={(e) => setRole(e.target.value)}
             options={[
               { value: ROLES.OPERATOR, label: t('staff.roleOperator') },
+              { value: ROLES.VALET_VENDOR, label: t('staff.roleValetVendor') },
               { value: ROLES.VALET_ADMIN, label: t('staff.roleValetAdmin') },
               { value: ROLES.SYSTEM_ADMIN, label: t('staff.roleSystemAdmin') },
             ]}
@@ -1294,7 +1340,21 @@ function AddStaffModal({
           />
         )}
 
-        {canCreateAdmins && !needsProperty && (
+        {/* ONE OPTION, and it is the whole answer. The five venues are not
+            offered beside it: picking one would be refused by the RPC, which is
+            a worse way to learn a vendor is not venue-scoped than simply not
+            being asked. The hint says why. */}
+        {canCreateAdmins && isVendor && (
+          <Select
+            label={t('staff.property')}
+            value=""
+            onChange={() => {}}
+            options={[{ value: '', label: t('staff.allProperties') }]}
+            hint={t('staff.vendorPropertyNote')}
+          />
+        )}
+
+        {canCreateAdmins && !needsProperty && !isVendor && (
           <p className="flex items-start gap-2 rounded-lg bg-info-soft px-3.5 py-3 text-xs leading-relaxed text-info">
             <Icon name="info" size={15} className="mt-0.5" />
             <span>{t('staff.systemAdminNote')}</span>
@@ -1493,7 +1553,19 @@ function EditStaffModal({
 
   // A system_admin has no property, so the picker is irrelevant for that role
   // and the server nulls it regardless.
-  const needsProperty = role !== ROLES.SYSTEM_ADMIN
+  // ── THE PROPERTY FIELD HAS THREE SHAPES ─────────────────────────────
+  //   operator / valet_admin   pick one of the venues — it scopes everything
+  //   valet_vendor             a select reading "All properties", on request
+  //   system_admin             a note; they belong to all of them by definition
+  //
+  // A vendor submits NULL either way: migration 0066 made property_id null for
+  // this role and the RPC now REFUSES a value, so the select is a label for
+  // that fact rather than a choice with alternatives. It is shown as a select
+  // because that is what was asked for, and because it keeps the form's shape
+  // identical whichever role is picked — the field does not appear and vanish
+  // as the role changes above it.
+  const needsProperty = role !== ROLES.SYSTEM_ADMIN && role !== ROLES.VALET_VENDOR
+  const isVendor = role === ROLES.VALET_VENDOR
   const roleChanged =
     canChangeRole &&
     (role !== target.role ||
@@ -1705,6 +1777,7 @@ function EditStaffModal({
               }}
               options={[
                 { value: ROLES.OPERATOR, label: t('staff.roleOperator') },
+                { value: ROLES.VALET_VENDOR, label: t('staff.roleValetVendor') },
                 { value: ROLES.VALET_ADMIN, label: t('staff.roleValetAdmin') },
                 { value: ROLES.SYSTEM_ADMIN, label: t('staff.roleSystemAdmin') },
               ]}
@@ -1726,6 +1799,14 @@ function EditStaffModal({
                   ...properties.map((p) => ({ value: p.id, label: p.name })),
                 ]}
                 required
+              />
+            ) : isVendor ? (
+              <Select
+                label={t('staff.property')}
+                value=""
+                onChange={() => {}}
+                options={[{ value: '', label: t('staff.allProperties') }]}
+                hint={t('staff.vendorPropertyNote')}
               />
             ) : (
               <p className="flex items-start gap-2 text-xs leading-relaxed text-ink-subtle">

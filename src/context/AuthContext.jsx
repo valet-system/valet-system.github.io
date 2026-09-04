@@ -64,6 +64,7 @@ const ROLE_HOME = {
   [ROLES.OPERATOR]: '/operator/checkin',
   [ROLES.VALET_ADMIN]: '/admin/dashboard',
   [ROLES.SYSTEM_ADMIN]: '/system/properties',
+  [ROLES.VALET_VENDOR]: '/vendor/bookings',
 }
 
 export function AuthProvider({ children }) {
@@ -203,11 +204,28 @@ export function AuthProvider({ children }) {
         return
       }
 
-      // Constraint user_roles_property_scope_chk (migration 0002) should make
-      // this impossible, but check anyway: a non-system_admin with a NULL
-      // property_id would see an entirely empty app, because every RLS policy
-      // compares against my_property_id() and NULL never matches.
-      if (data.role !== ROLES.SYSTEM_ADMIN && !data.property_id) {
+      // ── WHO IS ALLOWED NO PROPERTY ──────────────────────────────────
+      // A property is what every RLS policy compares against through
+      // my_property_id(), and NULL never matches — so an OPERATOR or a VALET
+      // ADMIN without one opens a completely empty app, which is why this is
+      // treated as a broken account rather than a quiet nothing.
+      //
+      // Two roles are exempt, and the second one is why this list exists at
+      // all rather than a `!== SYSTEM_ADMIN`:
+      //
+      //   system_admin   belongs to every property by definition
+      //   valet_vendor   added by 0065; migration 0066 makes property_id NULL
+      //                  for them deliberately. Their one screen reads Ambria's
+      //                  bookings feed through an edge function and touches no
+      //                  RLS-scoped table, so there is nothing for a property
+      //                  to scope.
+      //
+      // Missing that second entry is what met the first vendor with "Account
+      // not ready. No property is linked to your account" — an account that
+      // was in exactly the state it was designed to be in.
+      const NEEDS_PROPERTY = data.role !== ROLES.SYSTEM_ADMIN && data.role !== ROLES.VALET_VENDOR
+
+      if (NEEDS_PROPERTY && !data.property_id) {
         setProfileStatus('error')
         setProfileError(
           pickLang(
@@ -469,9 +487,14 @@ export function AuthProvider({ children }) {
       // goes through pickLang — and `lang` is in this memo's dependency list
       // below, which is what makes it follow the EN/हिं toggle rather than
       // freezing at whatever was active when the profile loaded.
+      // A vendor sees every venue's bookings, so the header says so rather
+      // than sitting blank under their name — the same words a system admin
+      // gets, because it is the same fact.
       propertyName:
         property?.name ??
-        (role === ROLES.SYSTEM_ADMIN ? pickLang('All properties', 'सभी प्रॉपर्टी') : ''),
+        (role === ROLES.SYSTEM_ADMIN || role === ROLES.VALET_VENDOR
+          ? pickLang('All properties', 'सभी प्रॉपर्टी')
+          : ''),
 
       // role predicates — clearer at a call site than role === '...'
       isOperator: role === ROLES.OPERATOR,

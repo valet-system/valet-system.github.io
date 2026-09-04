@@ -59,6 +59,7 @@ const PATHS = {
   location:    <><path d="M20 10.3c0 5.7-8 11.7-8 11.7s-8-6-8-11.7a8 8 0 0 1 16 0Z" /><circle cx="12" cy="10.2" r="2.8" /></>,
   ticket:      <><path d="M3 9.2V7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2.2a2.8 2.8 0 0 0 0 5.6V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2.2a2.8 2.8 0 0 0 0-5.6Z" /><path d="M13.5 5v14" /></>,
   clock:       <><circle cx="12" cy="12" r="9" /><path d="M12 7v5.3l3.4 2" /></>,
+  calendar:    <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18M8 3v4M16 3v4" /></>,
   timer:       <><path d="M10 2h4M12 6v3" /><circle cx="12" cy="14" r="8" /><path d="M12 14v-2.5" /></>,
   building:    <><path d="M4 21V5.5A2.5 2.5 0 0 1 6.5 3h6A2.5 2.5 0 0 1 15 5.5V21" /><path d="M15 10h2.5A2.5 2.5 0 0 1 20 12.5V21" /><path d="M2.5 21h19" /><path d="M7.5 7.5h4M7.5 11.5h4M7.5 15.5h4" /></>,
   sun:         <><circle cx="12" cy="12" r="4" /><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8" /></>,
