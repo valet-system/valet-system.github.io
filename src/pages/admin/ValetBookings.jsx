@@ -302,9 +302,12 @@ export default function ValetBookings() {
    * date arithmetic, where a junk value would produce an Invalid Date and a
    * calendar of NaNs.
    *
-   * READ ONCE, at mount. It seeds the initial month and selection and is not
-   * watched afterwards, so stepping months from here behaves normally instead
-   * of being dragged back by a stale query string.
+   * SEEDED HERE, AND ALSO WATCHED — see the effect below. These initialisers
+   * only run on the first mount, and the commonest way this screen is opened
+   * is a notification tapped while it is ALREADY on screen: a vendor's home
+   * page is this route, so the navigation changes only the query string and
+   * React Router keeps the component mounted. The initialisers never re-run,
+   * and without the effect the date is simply ignored.
    */
   const [params] = useSearchParams()
   const asked = params.get('date') ?? ''
@@ -569,24 +572,45 @@ export default function ValetBookings() {
   }, [rangeKey, venue, load])
 
   /**
-   * Arriving from a notification, bring the day into view once — but not until
-   * its data has landed.
+   * FOLLOW THE ?date= WHENEVER IT CHANGES, not only at mount.
    *
-   * Scrolling at mount would find nothing: the panel is not rendered while the
-   * month is still loading, so detailRef is null and the scroll is a no-op that
-   * never repeats. Waiting for the range on screen to match the range asked for
-   * is what makes it fire at the moment there is something to look at.
+   * This is the effect that makes tapping a notification work. The vendor's
+   * home page is this very route, so the tap is a same-route navigation: the
+   * query string changes, the component stays mounted, and every useState
+   * initialiser above is long since spent. Opening the URL in a fresh tab
+   * worked for exactly that reason and hid the bug.
    *
-   * The ref guard is what keeps it to once. Without it every poll that lands
-   * would drag the page back down while somebody is reading further up.
+   * Only when it CHANGES. Setting the month unconditionally would fight the
+   * arrows — step to March and this would drag you back to February on the
+   * next render.
    */
-  const arrivedRef = useRef(false)
   useEffect(() => {
-    if (!wanted || arrivedRef.current) return
-    if (shownRange !== rangeKey) return
-    arrivedRef.current = true
+    if (!wanted) return
+    setYear(Number(wanted.slice(0, 4)))
+    setMonth(Number(wanted.slice(5, 7)) - 1)
+    setSelected(wanted)
+  }, [wanted])
+
+  /**
+   * And bring that day into view, once its data is actually there.
+   *
+   * Scrolling the moment the date arrives finds nothing: the panel is not
+   * rendered while the month is still loading, so detailRef is null and the
+   * scroll is a no-op that never repeats. Three conditions have to line up —
+   * the range on screen matches the one asked for, the selection has caught up,
+   * and this date has not already been scrolled to.
+   *
+   * Keyed on the DATE rather than a boolean, so a second notification for a
+   * different day scrolls too, while a poll landing mid-read does not drag the
+   * page back down.
+   */
+  const scrolledFor = useRef(null)
+  useEffect(() => {
+    if (!wanted || scrolledFor.current === wanted) return
+    if (shownRange !== rangeKey || selected !== wanted) return
+    scrolledFor.current = wanted
     setJump((n) => n + 1)
-  }, [wanted, shownRange, rangeKey])
+  }, [wanted, shownRange, rangeKey, selected])
 
   // Runs after the render that created the detail, which is the only time the
   // element is there to scroll to.
