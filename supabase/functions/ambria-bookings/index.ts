@@ -146,7 +146,7 @@ async function identifyCaller(req: Request) {
 
   const { data: roleRow, error: roleError } = await admin
     .from('user_roles')
-    .select('id, role, property_id, name, is_active')
+    .select('id, role, property_id, name, phone, is_active')
     .eq('user_id', userData.user.id)
     .maybeSingle()
 
@@ -171,12 +171,72 @@ async function identifyCaller(req: Request) {
     return { ok: false, code: 'INACTIVE', error: 'Your account has been deactivated.', status: 403 }
   }
 
-  return { ok: true, caller: { role: roleRow.role, propertyId: roleRow.property_id } }
+  return {
+    ok: true,
+    caller: { role: roleRow.role, propertyId: roleRow.property_id, phone: roleRow.phone },
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
 // THE FEED
 // ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * A phone number as its last ten digits.
+ *
+ * The feed says `valet_phone` arrives "already normalised — bare digits, and
+ * the last 10 of them", and tells you to do the same to your own side before
+ * comparing. Worth doing rather than trusting: the numbers on file were typed
+ * by hand as `9818971578`, `+91 88604 58280` and `86849 50936`, and a compare
+ * on raw strings fails on most of those while looking perfectly correct in the
+ * code.
+ */
+function digits10(value: unknown): string {
+  return String(value ?? '').replace(/\D/g, '').slice(-10)
+}
+
+/**
+ * A vendor's own bookings, and nothing else.
+ *
+ * ── WHY THIS IS HERE AND NOT IN THE BROWSER ───────────────────────────
+ * Because filtering in the page would still SEND every vendor every other
+ * vendor's bookings — customer names, guest counts, staffing, and each rival
+ * firm's contact number — and leave them one DevTools tab away. The rows have
+ * to be gone before the response leaves the server.
+ *
+ * ── MATCHED ON PHONE, PER THE FEED'S OWN INSTRUCTION ──────────────────
+ * Not on valet_vendor_id: the two systems keep separate logins, so an Ambria
+ * vendor id means nothing on this side. The phone is the one identifier the
+ * same person carries into both, and it is the number their account here was
+ * created with.
+ *
+ * ── AN UNASSIGNED BOOKING IS NOT ANYBODY'S ────────────────────────────
+ * All four valet_* fields are null both when nobody is assigned and when the
+ * assigned firm has been deleted in Ambria. Either way there is no vendor it
+ * belongs to, so it is not shown to any vendor — an admin sees it and puts
+ * somebody on it, which is what those rows are for.
+ *
+ * `count` is recomputed. Left alone it would still say 24 beside three rows,
+ * and the tiles on the screen read it.
+ */
+function onlyMine(payload: any, phone: string) {
+  const mine = digits10(phone)
+  const bookings = Array.isArray(payload?.bookings)
+    ? payload.bookings.filter((b: any) => mine && digits10(b?.valet_phone) === mine)
+    : []
+
+  return {
+    ...payload,
+    bookings,
+    count: bookings.length,
+    // A vendor has no business in the "needs a booking" queue either: those are
+    // Ambria's to hand out. Emptied rather than passed through — this function
+    // does not request the CRM leg today, and if that changes the answer for a
+    // vendor should not silently change with it.
+    events: [],
+    events_count: 0,
+  }
+}
 
 /** Ambria's own path. Spelled exactly, or the gateway answers NOT_FOUND. */
 const FEED_PATH = '/functions/v1/valet-bookings-feed'
@@ -335,6 +395,12 @@ Deno.serve(async (req) => {
     return json({ ok: false, code, error }, upstream.status)
   }
 
-  // Verbatim on success, events_error and all. See the header.
+  // ── A VENDOR GETS ONLY THEIR OWN ────────────────────────────────────
+  // The last thing before the reply leaves, so there is no path around it.
+  if (who.caller.role === ROLES.VALET_VENDOR) {
+    return json(onlyMine(parsed, who.caller.phone), 200)
+  }
+
+  // Verbatim for everybody else, events_error and all. See the header.
   return json(parsed, 200)
 })

@@ -197,6 +197,27 @@ export function describeDbError(error, fallback = null) {
     )
   }
 
+  // ── ANY OTHER RAISE OF OURS, IN ITS OWN WORDS ────────────────────────
+  //
+  // The three above are hardcoded because they are TRANSLATED — a raise is
+  // written in English in a migration and those three are common enough to be
+  // worth saying in Hindi. Every other one used to fall past here to
+  // "Something went wrong", which threw away a sentence written for exactly
+  // this moment: `IN_USE: Ambria Restro has 12 cars parked there. Close it
+  // instead …` became four words that name nothing.
+  //
+  // Anchored at the START of the message, and requiring the ALL-CAPS code to be
+  // followed by a colon. That is the shape `raise exception 'CODE: sentence'`
+  // produces and nothing else here does — a foreign-key or duplicate-key
+  // message from Postgres has no such prefix, so those still reach their own
+  // branches below with their own translated text.
+  //
+  // English, unavoidably: the sentence comes from a migration and interpolates
+  // live values. A generic Hindi string would be a downgrade — it would drop
+  // the count, which is the only part telling the admin what to do next.
+  const ours = /^([A-Z][A-Z_]{2,}):\s*(.+)/.exec(raw)
+  if (ours) return ours[2].trim()
+
   // ── the function is not in the database yet ───────────────────────────
   //
   // PostgREST answers PGRST202 both when a function is missing and when it

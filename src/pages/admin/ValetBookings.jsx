@@ -47,9 +47,11 @@ import Icon from '@/components/ui/Icon'
 import Badge from '@/components/ui/Badge'
 import { PageSpinner } from '@/components/ui/Spinner'
 import StatTile, { StatRow } from '@/components/ui/StatTile'
+import { useAuth } from '@/context/AuthContext'
 import { useI18n } from '@/i18n'
 import { ambriaFeed, AmbriaFeedError } from '@/lib/ambriaFeed'
 import { formatTime, istToday } from '@/utils/format'
+import { ROLES } from '@/types'
 
 /**
  * The last good answer for each range, so coming back to a month already seen
@@ -278,6 +280,12 @@ function prettyEventTime(raw) {
 
 export default function ValetBookings() {
   const { t, lang } = useI18n()
+  const { role } = useAuth()
+  // A vendor is only ever sent their OWN bookings — the proxy strips the rest
+  // before the reply leaves the server — so naming the firm on every row would
+  // be their own name five times over. Admins need it: it is the difference
+  // between a booking somebody is running and one nobody is.
+  const showValet = role !== ROLES.VALET_VENDOR
 
   const today = istToday()
   const [year, setYear] = useState(() => Number(today.slice(0, 4)))
@@ -1115,6 +1123,7 @@ export default function ValetBookings() {
               lang={lang}
               bookings={byDay.bookings.get(selected) ?? []}
               venueOf={venueOf}
+              showValet={showValet}
             />
           ) : (
             <EmptyState icon="calendar" title={t('bookings.pickADay')} compact />
@@ -1382,7 +1391,7 @@ function MonthPicker({ t, lang, year, month, monthLabel, onPick }) {
 // replaces — time, venue, customer, guests and badges across one line — cannot
 // survive 22rem, and shrinking it to fit is how a name ends up as "Vikram B…".
 // ═══════════════════════════════════════════════════════════════════════
-function DayPanel({ t, date, lang, bookings, venueOf }) {
+function DayPanel({ t, date, lang, bookings, venueOf, showValet }) {
   const heading = useMemo(
     () =>
       new Intl.DateTimeFormat(lang === 'hi' ? 'hi-IN' : 'en-GB', {
@@ -1463,7 +1472,13 @@ function DayPanel({ t, date, lang, bookings, venueOf }) {
                 centimetre apart. */}
             <div className="space-y-2">
               {bookings.map((b) => (
-                <BookingRow key={b.id} t={t} booking={b} venue={venueOf.get(b.property)} />
+                <BookingRow
+                  key={b.id}
+                  t={t}
+                  booking={b}
+                  venue={venueOf.get(b.property)}
+                  showValet={showValet}
+                />
               ))}
             </div>
           </>
@@ -1497,7 +1512,7 @@ function DayStat({ icon, value, label }) {
 }
 
 /** One booking, stacked for a narrow column. */
-function BookingRow({ t, booking, venue }) {
+function BookingRow({ t, booking, venue, showValet }) {
   // FILTERED TO count > 0. Roles a venue does not use come through as zero, and
   // "Guard: 0, Rider: 0" looks like a mistake rather than an absence.
   // staff_breakdown is also null on older bookings — then the total is still
@@ -1539,6 +1554,34 @@ function BookingRow({ t, booking, venue }) {
       <p className="mt-0.5 truncate text-sm font-bold tracking-tight text-ink">
         {booking.customer_name}
       </p>
+
+      {/* ── WHO IS RUNNING IT ──────────────────────────────────────────
+          All four valet_* fields are null both when nobody has been put on the
+          booking and when the firm that was has since been deleted in Ambria.
+          Those read the same on purpose — either way there is nobody to show —
+          and they must NOT be hidden: they are precisely the bookings that need
+          somebody assigned, which is why this says so in a warning tone rather
+          than leaving the line off.
+
+          The company as well as the name: every firm on file is called
+          "something valet", so "Sikandar valet" and "Abhilash tiwari valet" are
+          told apart by "K.K valet" and "Arya valet" rather than by the names. */}
+      {showValet &&
+        (booking.valet_name ? (
+          <p className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-ink-muted">
+            <Icon name="user" size={12} className="shrink-0 text-ink-subtle" />
+            <span className="truncate">
+              <span className="font-semibold text-ink">{booking.valet_name}</span>
+              {booking.valet_company ? ` · ${booking.valet_company}` : ''}
+            </span>
+          </p>
+        ) : (
+          <p className="mt-1">
+            <Badge tone="warning" size="sm" icon="alert">
+              {t('bookings.unassigned')}
+            </Badge>
+          </p>
+        ))}
 
       {/* ── THE STAFFING, AS ONE LINE ─────────────────────────────────
           There were three badges here and one of them was the sum of the other

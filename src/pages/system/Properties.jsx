@@ -7,12 +7,20 @@
  * │   service. system_admin only — the RLS policy on `properties`        │
  * │   allows writes to nobody else.                                      │
  * │                                                                     │
- * │ A PROPERTY IS NEVER DELETED                                          │
- * │   is_active = false, always. Every parked_vehicles row, every task   │
- * │   and every review points at a property; deleting one would either   │
- * │   be refused by the foreign keys or orphan months of history that    │
- * │   is the record of cars real people handed over. There is also no    │
- * │   DELETE grant on any table in this project, by design.              │
+ * │ A PROPERTY IN USE IS NEVER DELETED                                   │
+ * │   is_active = false for anything that has been used. Seven tables    │
+ * │   point at a property — cars, jobs, reviews, token ranges, bays,     │
+ * │   staff, messages — and between them they are the record of cars     │
+ * │   real people handed over. Deleting one would either be refused by   │
+ * │   the foreign keys or orphan months of that history.                  │
+ * │                                                                     │
+ * │   Migration 0068 added a delete for the one case that is not that:   │
+ * │   a site added by mistake, with nothing pointing at it at all. The   │
+ * │   RPC counts all seven tables and refuses if any is non-empty,       │
+ * │   naming what is in the way. The refusal is the feature.              │
+ * │                                                                     │
+ * │   There is still no DELETE grant on any table, by design — the RPC   │
+ * │   is security definer precisely so that stays true.                   │
  * │                                                                     │
  * │ WHAT DEACTIVATING ACTUALLY DOES — and what it does not               │
  * │   It stops reset_daily_tokens() creating a token range each night,   │
@@ -89,6 +97,7 @@ export default function Properties() {
   const [editTarget, setEditTarget] = useState(null)
   const [addOpen, setAddOpen] = useState(false)
   const [toggleTarget, setToggleTarget] = useState(null)
+  const [deleteTarget, setDeleteTarget] = useState(null)
 
   /**
    * Which tab is open: 'all', or a property id.
@@ -244,6 +253,32 @@ export default function Properties() {
     setAddOpen(false)
     await load()
     return null
+  }
+
+  /**
+   * Removes a site that was never used — a typo, a duplicate, a "test".
+   *
+   * The guard is in the database, not here: admin_delete_property counts all
+   * seven tables that carry a property_id and refuses with an IN_USE message
+   * naming the first thing in the way. This deliberately does not pre-check
+   * from the browser, because a check here and a check there is two rules that
+   * can disagree, and only one of them is the one that runs.
+   */
+  async function deleteProperty() {
+    const { data, error: err } = await supabase.rpc('admin_delete_property', {
+      p_property_id: deleteTarget.id,
+    })
+
+    if (err) {
+      // describeDbError surfaces our own `CODE: sentence` raises, so the
+      // IN_USE message — which names the count — reaches the admin intact
+      // rather than as "something went wrong".
+      toast.error(describeDbError(err, t('props.couldNotDelete')))
+    } else {
+      toast.success(t('props.deleted', { name: data?.name ?? deleteTarget.name }))
+      await load()
+    }
+    setDeleteTarget(null)
   }
 
   async function toggleActive() {
@@ -425,6 +460,7 @@ export default function Properties() {
                 operators={Number(stats[property.id]?.operators ?? 0)}
                 onEdit={() => setEditTarget(property)}
                 onToggle={() => setToggleTarget(property)}
+                onDelete={() => setDeleteTarget(property)}
               />
             ))}
           </div>
@@ -457,6 +493,20 @@ export default function Properties() {
             : t('props.reopenBody')
         }
         confirmLabel={t(toggleTarget?.is_active ? 'props.closeSite' : 'props.reopen')}
+      />
+
+      {/* The description says what will happen if the site HAS been used,
+          because that is the likely outcome and the admin should not have to
+          press the button to find out. The database decides; this only sets
+          the expectation. */}
+      <ConfirmModal
+        open={Boolean(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={deleteProperty}
+        tone="danger"
+        title={t('props.deleteQ', { name: deleteTarget?.name })}
+        description={t('props.deleteBody')}
+        confirmLabel={t('props.deleteSite')}
       />
     </>
   )
@@ -708,7 +758,7 @@ function DetailPanel({ kind, rows, loading, error, onClose }) {
   )
 }
 
-function PropertyRow({ property, cars, operators, onEdit, onToggle }) {
+function PropertyRow({ property, cars, operators, onEdit, onToggle, onDelete }) {
   const t = useT()
 
   return (
@@ -769,6 +819,20 @@ function PropertyRow({ property, cars, operators, onEdit, onToggle }) {
                 ? 'hover:bg-danger-soft hover:text-danger'
                 : 'hover:bg-success-soft hover:text-success'
             }
+          />
+          {/* OFFERED ON EVERY SITE, not only on ones that look empty.
+              Whether a property can go is decided by seven tables, and this
+              card knows two of those numbers. Hiding the button on a guess
+              would hide it from sites that CAN be deleted; the database gives
+              the real answer, with the count. */}
+          <Button
+            variant="ghost"
+            size="icon-md"
+            icon="trash"
+            onClick={onDelete}
+            aria-label={t('props.deleteNamed', { name: property.name })}
+            title={t('props.deleteThis')}
+            className="hover:bg-danger-soft hover:text-danger"
           />
         </div>
       </div>

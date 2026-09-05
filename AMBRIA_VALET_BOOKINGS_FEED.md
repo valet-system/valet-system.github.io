@@ -114,6 +114,10 @@ truncated list — a silently short answer is worse than an error.
       ],
       "heavy_date": false,
       "notes": null,
+      "valet_vendor_id": 8,
+      "valet_name": "Sikandar valet",
+      "valet_company": "K.K valet",
+      "valet_phone": "7011519879",
       "created_at": "2026-08-30T11:04:22.418Z"
     }
   ],
@@ -207,6 +211,49 @@ stable, so it is a good React `key`.
 
 **At most one booking per venue per day.** Ambria enforces
 `UNIQUE (property, event_date)`, so one day holds at most five bookings.
+
+### Who is running the booking — and how "my bookings" works
+
+Ambria's booking form has a **Valet in charge** picker listing the valet firms on
+file — vendors whose category contains "valet". One per booking, and optional: a
+booking is often made before anybody is put on it.
+
+Four fields come through:
+
+| Field | Use |
+|---|---|
+| `valet_vendor_id` | Ambria's vendor id, an integer. Opaque here; stable. |
+| `valet_name` | The person, e.g. `"Sikandar valet"`. Resolved at read time, so a rename in Ambria reaches you. |
+| `valet_company` | The firm, e.g. `"K.K valet"`. Both names on file end in the word "valet", so the firm is what tells them apart on screen. |
+| `valet_phone` | **The join key.** See below. |
+
+**Match on `valet_phone`, not on `valet_vendor_id`.** The two systems keep
+separate logins, so an Ambria vendor id means nothing on your side. The phone
+number is the one identifier the same person carries into both — it is the number
+their credentials on your side are created with. So "my bookings" is:
+
+```
+bookings.filter(b => b.valet_phone === digitsOf(currentUser.phone))
+```
+
+**`valet_phone` arrives already normalised** — bare digits, and the last 10 of
+them, so a `+91` or `091` prefix is gone. Normalise your own side the same way
+before comparing. Numbers on file were typed by hand as `9818971578`,
+`+91 88604 58280` and `86849 50936`; a compare on raw strings fails on most of
+those while looking perfectly correct in the code.
+
+If you would rather not depend on two phone fields agreeing, store an
+`ambria_vendor_id` on your own users and match `valet_vendor_id` instead — an
+explicit mapping somebody maintains, in exchange for not depending on the phones.
+
+**All four are `null` when nobody is assigned** — and also when the assigned
+vendor no longer exists in Ambria, which reads the same on purpose: there is
+nobody to show either way. Show these bookings as unassigned rather than hiding
+them; they are exactly the ones that need somebody put on them.
+
+**This is supplier contact data, not guest data.** The rule that keeps guest
+phones out of this feed is about the people being served, not the people doing
+the serving.
 
 ### Events
 
@@ -317,6 +364,10 @@ that day's bookings (several bookings split the tile). A month picker drives
    says `"All 3 events booked"` instead of "no events", because those are
    different facts.
 
+**A "my bookings" view is worth having beside the calendar** — the same cards,
+filtered to the logged-in person by the phone match above. That is the thing a
+supervisor opens the app for; the month view is what an admin opens it for.
+
 **Empty and error states must differ.** "No bookings in this range", "the request
 failed", and "the CRM leg failed but bookings are fine" need three different
 messages. Whoever is looking reacts differently to each.
@@ -378,16 +429,25 @@ was deployed with JWT verification **on**; also section 8.
 
 ### SQL migrations to run
 
-**On the Ambria project, one file:**
+**On the Ambria project, two files:**
 
 ```
 SUPABASE-MIGRATION-LMS-FEED-CACHE.sql
+SUPABASE-MIGRATION-VALET-BOOKING-VENDOR.sql
 ```
 
-It creates `lms_feed_cache`, a one-row table holding the CRM sweep so that
-repeated calls do not each pay 15 seconds for it. Ambria's developer runs this in
-the Supabase SQL Editor; it is safe to run more than once, and it prints PASS
-rows to confirm.
+The first creates `lms_feed_cache`, a one-row table holding the CRM sweep so that
+repeated calls do not each pay 15 seconds for it. The second adds
+`valet_bookings.valet_vendor_id`, which is what the **Valet in charge** picker
+writes and what the `valet_*` fields are resolved from.
+
+(There is also a `...-VALET-BOOKING-ASSIGNEE.sql` in that folder. It is
+superseded — it pointed the assignee at users instead of vendors — and the file
+above renames what it created. Do not run it on a fresh database.)
+
+Ambria's developer runs both in the Supabase SQL Editor; each is safe to run more
+than once, and each prints PASS rows to confirm. Without the second one, the
+three `valet_*` fields simply never appear.
 
 The feed still works without it — `readCache` treats a missing table as a cache
 miss — it is just slow on every single call. If every request takes ~15s, this
@@ -404,6 +464,7 @@ file has not been run.
 | The feed function | `supabase/functions/valet-bookings-feed/index.ts` |
 | The CRM proxy it calls | `supabase/functions/lms-proxy/index.ts` |
 | The sweep cache table | `supabase/db/migrations/SUPABASE-MIGRATION-LMS-FEED-CACHE.sql` |
+| The assignee column | `supabase/db/migrations/SUPABASE-MIGRATION-VALET-BOOKING-VENDOR.sql` |
 | `valet_bookings` schema | `supabase/db/migrations/SUPABASE-MIGRATION-VALET-BOOKINGS.sql` |
 | `heavy_date` column | `supabase/db/migrations/SUPABASE-MIGRATION-VALET-HEAVY-DATE.sql` |
 | Staffing matrix + override | `supabase/db/migrations/SUPABASE-MIGRATION-VALET-STAFF-EDIT.sql` |
