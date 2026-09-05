@@ -152,29 +152,70 @@ Deno.serve(async () => {
 
   const bookings: any[] = Array.isArray(feed.bookings) ? feed.bookings : []
 
-  // ── 2. WHAT WE HAVE ALREADY ANNOUNCED ───────────────────────────────
-  const { data: seenRows, error: seenErr } = await db
+  // ── 2. THE FIRST RUN ANNOUNCES NOTHING ──────────────────────────────
+  // Every booking already in Ambria is "new to us" the first time this runs.
+  // Without this the first tick would push one notification per existing
+  // booking — a year of them at once, to whoever happened to be assigned. The
+  // table is seeded silently instead and the next run notifies real work.
+  const { count: seenCount, error: countErr } = await db
     .from('ambria_booking_seen')
-    .select('booking_id, valet_phone')
+    .select('booking_id', { count: 'exact', head: true })
 
-  if (seenErr) {
-    console.error('[bookings-sync] seen table unreadable:', seenErr.message)
+  if (countErr) {
+    console.error('[bookings-sync] seen table unreadable:', countErr.message)
     return new Response(JSON.stringify({ ok: false, code: 'NOT_MIGRATED' }), {
       status: 503,
       headers: { 'Content-Type': 'application/json' },
     })
   }
+  const seeding = (seenCount ?? 0) === 0
 
-  const seen = new Map<string, string>()
-  for (const r of seenRows ?? []) seen.set(String(r.booking_id), digits10(r.valet_phone))
+  // ── 3. CLAIM WHAT IS NEW — ATOMICALLY ───────────────────────────────
+  // The database decides, not this function. claim_ambria_bookings upserts
+  // every booking and RETURNS only the ones that were actually new or actually
+  // reassigned; a row already recorded against the same vendor comes back not
+  // at all.
+  //
+  // This replaced a read of the whole table, a comparison here, and a write
+  // back. That had a gap between the read and the write, and at a ten-second
+  // schedule two runs can sit inside it and both announce the same booking.
+  // The claim IS the check now, in one statement, so whoever wins the row is
+  // the only one who announces. See migration 0069.
+  const { data: claimed, error: claimErr } = await db.rpc('claim_ambria_bookings', {
+    p_rows: bookings.map((b: any) => ({
+      booking_id: String(b?.id ?? ''),
+      valet_phone: digits10(b?.valet_phone),
+      event_date: b?.event_date ?? null,
+    })),
+  })
 
-  // ── 3. THE FIRST RUN ANNOUNCES NOTHING ──────────────────────────────
-  // Every booking already in Ambria is "new to us" the first time this runs.
-  // Without this the first tick would push one notification per existing
-  // booking — a year of them, all at once, to whoever happened to be assigned.
-  // The table is seeded silently instead, and the next run notifies genuinely
-  // new work.
-  const seeding = (seenRows ?? []).length === 0
+  if (claimErr) {
+    console.error('[bookings-sync] claim failed:', claimErr.message)
+    return new Response(JSON.stringify({ ok: false, code: 'CLAIM_FAILED' }), {
+      status: 503,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
+  // Recorded, and that is the whole of the first run's work.
+  // id -> was it brand new (as opposed to moved off another firm). The vendor
+  // is told the same thing either way; this is for the log.
+  const changed = new Map<string, boolean>()
+  for (const r of claimed ?? []) changed.set(String(r.booking_id), r.is_new === true)
+  if (seeding || changed.size === 0) {
+    const summary = {
+      ok: true,
+      seeded: seeding ? changed.size : 0,
+      announced: 0,
+      reassigned: 0,
+      scanned: bookings.length,
+    }
+    console.log('[bookings-sync]', JSON.stringify(summary))
+    return new Response(JSON.stringify(summary), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
 
   // ── 4. WHO EACH ONE BELONGS TO ──────────────────────────────────────
   // Matched on PHONE, per the feed's instruction: the two systems keep separate
@@ -202,33 +243,21 @@ Deno.serve(async () => {
     if (key) vendorByPhone.set(key, v.id)
   }
 
-  // ── 5. WHAT CHANGED ─────────────────────────────────────────────────
+  // ── 5. TELL WHOEVER IT LANDED ON ────────────────────────────────────
+  // Only the claimed ones. Everything else was already recorded against the
+  // same vendor and has been announced before.
   const notifications: Record<string, unknown>[] = []
-  const toRecord: Record<string, unknown>[] = []
   let reassigned = 0
 
   for (const b of bookings) {
     const id = String(b?.id ?? '')
-    if (!id) continue
+    if (!id || !changed.has(id)) continue
 
     const phone = digits10(b?.valet_phone)
-    const known = seen.get(id)
 
-    // Unchanged since the last look.
-    if (known !== undefined && known === phone) continue
-
-    toRecord.push({
-      booking_id: id,
-      valet_phone: phone || null,
-      event_date: b?.event_date ?? null,
-    })
-
-    if (seeding) continue
-
-    // An unassigned booking has nobody to tell. It is not dropped from the
-    // record — recording it is what stops it counting as new for ever — but
-    // there is no vendor to notify until Ambria puts somebody on it, and that
-    // change comes back through here as a reassignment.
+    // An unassigned booking has nobody to tell. It has still been recorded by
+    // the claim — that is what stops it counting as new for ever — and the day
+    // Ambria puts somebody on it, that comes back through here as a change.
     if (!phone) continue
 
     const userRoleId = vendorByPhone.get(phone)
@@ -240,11 +269,7 @@ Deno.serve(async () => {
       continue
     }
 
-    // Still counted: the summary and the log are where somebody debugging wants
-    // to know whether a booking was created or moved, even though the vendor
-    // is told the same thing either way.
-    const isReassignment = known !== undefined
-    if (isReassignment) reassigned += 1
+    if (changed.get(id) === false) reassigned += 1
 
     const venue = b?.property_name ?? b?.property ?? ''
     const staff = Number(b?.staff_total ?? 0)
@@ -266,7 +291,18 @@ Deno.serve(async () => {
         `${b?.event_date ?? ''} · ${venue}` +
         (pretty12h(b?.event_time) ? ` · ${pretty12h(b.event_time)}` : '') +
         (staff ? ` · ${staff} staff` : ''),
-      url: '/vendor/bookings',
+      // ── THE DATE TRAVELS WITH IT ──────────────────────────────────
+      // Tapping the notification should land on the booking it names, not on
+      // today. These are dated months ahead, so arriving on the current month
+      // means hunting through the calendar for the thing you were just told
+      // about.
+      //
+      // ValetBookings reads ?date= once at mount, validates the shape, and
+      // seeds the month and the selected day from it.
+      //
+      // The vendor path specifically: this notification only ever goes to a
+      // valet_vendor, and /admin/bookings would bounce them off it.
+      url: b?.event_date ? `/vendor/bookings?date=${b.event_date}` : '/vendor/bookings',
       // UNIQUE PER ANNOUNCEMENT, not per booking. Chrome REPLACES a
       // notification that reuses a tag, and does it silently — a silent
       // replacement is not an alert. Migration 0025 in this project has the
@@ -278,25 +314,12 @@ Deno.serve(async () => {
     })
   }
 
-  // ── 6. RECORD FIRST, THEN NOTIFY ────────────────────────────────────
-  // This order matters. If the insert into push_outbox succeeded and then the
-  // record failed, the next run would find the booking new again and announce
-  // it a second time — every two minutes, for ever. Recorded first, the worst
-  // case is a notification that never arrives, which is far better than an
-  // alarm nobody can stop.
-  if (toRecord.length) {
-    const { error } = await db
-      .from('ambria_booking_seen')
-      .upsert(toRecord, { onConflict: 'booking_id' })
-    if (error) {
-      console.error('[bookings-sync] could not record:', error.message)
-      return new Response(JSON.stringify({ ok: false, code: 'RECORD_FAILED' }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      })
-    }
-  }
-
+  // ── 6. NOTIFY ───────────────────────────────────────────────────────
+  // The recording already happened, in the claim above — deliberately before
+  // this point. If a notification were queued and the record then failed, the
+  // next run would find the booking new again and announce it every ten
+  // seconds for ever. This way the worst case is a notification that never
+  // arrives, which beats an alarm nobody can stop.
   if (notifications.length) {
     const { error } = await db.from('push_outbox').insert(notifications)
     if (error) console.error('[bookings-sync] could not queue notifications:', error.message)
@@ -304,7 +327,9 @@ Deno.serve(async () => {
 
   const summary = {
     ok: true,
-    seeded: seeding ? toRecord.length : 0,
+    // Zero by construction: the seeding path returns above, so reaching here
+    // means the table already had rows.
+    seeded: 0,
     announced: notifications.length,
     reassigned,
     scanned: bookings.length,

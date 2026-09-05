@@ -47,6 +47,7 @@ import Icon from '@/components/ui/Icon'
 import Badge from '@/components/ui/Badge'
 import { PageSpinner } from '@/components/ui/Spinner'
 import StatTile, { StatRow } from '@/components/ui/StatTile'
+import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { useI18n } from '@/i18n'
 import { ambriaFeed, AmbriaFeedError } from '@/lib/ambriaFeed'
@@ -288,10 +289,32 @@ export default function ValetBookings() {
   const showValet = role !== ROLES.VALET_VENDOR
 
   const today = istToday()
-  const [year, setYear] = useState(() => Number(today.slice(0, 4)))
-  const [month, setMonth] = useState(() => Number(today.slice(5, 7)) - 1)
+
+  /**
+   * A day handed over by a notification: /vendor/bookings?date=2026-10-24
+   *
+   * Tapping "New booking" should land on the booking it is about, not on today
+   * — the notification names a date months out and arriving on the current
+   * month means hunting for it.
+   *
+   * VALIDATED, because this arrives from a URL and anybody can type one.
+   * Anything that is not a plain YYYY-MM-DD is ignored rather than fed into the
+   * date arithmetic, where a junk value would produce an Invalid Date and a
+   * calendar of NaNs.
+   *
+   * READ ONCE, at mount. It seeds the initial month and selection and is not
+   * watched afterwards, so stepping months from here behaves normally instead
+   * of being dragged back by a stale query string.
+   */
+  const [params] = useSearchParams()
+  const asked = params.get('date') ?? ''
+  const wanted = /^\d{4}-\d{2}-\d{2}$/.test(asked) ? asked : null
+  const openOn = wanted ?? today
+
+  const [year, setYear] = useState(() => Number(openOn.slice(0, 4)))
+  const [month, setMonth] = useState(() => Number(openOn.slice(5, 7)) - 1)
   const [venue, setVenue] = useState('')
-  const [selected, setSelected] = useState(() => today)
+  const [selected, setSelected] = useState(() => openOn)
 
   const [feed, setFeed] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -544,6 +567,26 @@ export default function ValetBookings() {
       window.removeEventListener('focus', onVisible)
     }
   }, [rangeKey, venue, load])
+
+  /**
+   * Arriving from a notification, bring the day into view once — but not until
+   * its data has landed.
+   *
+   * Scrolling at mount would find nothing: the panel is not rendered while the
+   * month is still loading, so detailRef is null and the scroll is a no-op that
+   * never repeats. Waiting for the range on screen to match the range asked for
+   * is what makes it fire at the moment there is something to look at.
+   *
+   * The ref guard is what keeps it to once. Without it every poll that lands
+   * would drag the page back down while somebody is reading further up.
+   */
+  const arrivedRef = useRef(false)
+  useEffect(() => {
+    if (!wanted || arrivedRef.current) return
+    if (shownRange !== rangeKey) return
+    arrivedRef.current = true
+    setJump((n) => n + 1)
+  }, [wanted, shownRange, rangeKey])
 
   // Runs after the render that created the detail, which is the only time the
   // element is there to scroll to.
