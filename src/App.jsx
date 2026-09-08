@@ -198,18 +198,6 @@ export default function App() {
                     </ProtectedRoute>
                   }
                 />
-                {/* Ambria Admin's bookings, read-only. Two routes for one
-                    component, the way /admin/spaces and /system/spaces already
-                    work: ProtectedRoute takes a single role list, and the two
-                    audiences reach it from different sides of the nav. */}
-                <Route
-                  path="admin/bookings"
-                  element={
-                    <ProtectedRoute allow={[ROLES.VALET_ADMIN]}>
-                      <ValetBookings />
-                    </ProtectedRoute>
-                  }
-                />
                 <Route
                   path="admin/tokens"
                   element={
@@ -281,6 +269,15 @@ export default function App() {
                     </ProtectedRoute>
                   }
                 />
+                {/* Ambria Admin's bookings, read-only. Two routes for one
+                    component, the way /system/spaces and /admin/spaces already
+                    work: ProtectedRoute takes a single role list, and the two
+                    audiences reach it from different sides of the nav.
+
+                    There WAS a third, /admin/bookings for the valet admin. It
+                    was removed with its nav entry, on request — so that role now
+                    lands back on its dashboard rather than reaching a screen it
+                    is no longer meant to have. */}
                 <Route
                   path="system/bookings"
                   element={

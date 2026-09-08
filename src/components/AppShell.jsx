@@ -72,13 +72,18 @@ const NAV_ITEMS = {
   [ROLES.VALET_ADMIN]: [
     { to: '/admin/dashboard', key: 'dashboard', icon: 'grid' },
     { to: '/admin/car-status', key: 'carStatus', icon: 'car' },
-    { to: '/admin/bookings', key: 'bookings', icon: 'calendar' },
     { to: '/admin/staff', key: 'staff', icon: 'users' },
     { to: '/admin/tokens', key: 'tokens', icon: 'ticket' },
     { to: '/admin/spaces', key: 'spaces', icon: 'parking' },
     // Reviews and Analytics stay OFF this nav, on request. Their routes exist
     // and still guard on the role, so a bookmarked URL keeps working — this
     // hides them, it does not revoke them.
+    //
+    // VALET BOOKINGS IS NOT IN THAT CATEGORY. It was removed from this role
+    // outright, on request: the nav entry AND the /admin/bookings route are
+    // gone, so a bookmark returns a valet admin to their dashboard rather than
+    // to a screen they are no longer meant to have. The calendar lives on for
+    // the system admin (/system/bookings) and the vendor (/vendor/bookings).
     //
     // The valet admin does see a rating: it is a badge on the Car Status card,
     // beside the status. That screen is scoped to ist_today(), so it shows the
