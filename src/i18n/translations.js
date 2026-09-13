@@ -81,6 +81,7 @@ export const en = {
   'nav.records': 'Records',
   'nav.recordsShort': 'Records',
 
+
   // ── things that appear on many screens ───────────────────────────────
   'common.save': 'Save',
   'chart.period': 'Period',
@@ -482,6 +483,7 @@ export const en = {
   'records.noneInPeriod': 'No records in this period',
   'records.nothingMatchesBody': 'Try a different name, number or token — or widen the date range.',
   'records.noneInPeriodBody': 'Pick a longer range, or check some cars in.',
+  'records.colNo': 'No.',
   'records.colDate': 'Date',
   'records.colProperty': 'Property',
   'records.colGuest': 'Guest',
@@ -519,6 +521,9 @@ export const en = {
   'props.noneYet': 'No properties yet',
   'props.noneYetBody': 'Add the first site to get started.',
   'props.sites': 'Sites',
+  'props.eyebrow': 'Dashboard',
+  'props.openThis': 'Open this site',
+  'props.openNamed': 'Open {name}',
   'props.allSites': 'All sites',
   'props.closedTag': '· closed',
   'props.seeDetails': 'See details',
@@ -1324,6 +1329,7 @@ export const hi = {
   'records.noneInPeriod': 'इस अवधि में कोई रिकॉर्ड नहीं',
   'records.nothingMatchesBody': 'दूसरा नाम, नंबर या टोकन आज़माइए — या तारीख़ की सीमा बढ़ाइए।',
   'records.noneInPeriodBody': 'लंबी अवधि चुनिए, या कुछ गाड़ियाँ दर्ज कीजिए।',
+  'records.colNo': 'क्र.',
   'records.colDate': 'तारीख़',
   'records.colProperty': 'प्रॉपर्टी',
   'records.colGuest': 'गेस्ट',
@@ -1361,6 +1367,9 @@ export const hi = {
   'props.noneYet': 'अभी कोई प्रॉपर्टी नहीं',
   'props.noneYetBody': 'शुरू करने के लिए पहली साइट जोड़िए।',
   'props.sites': 'साइटें',
+  'props.eyebrow': '\u0921\u0948\u0936\u092c\u094b\u0930\u094d\u0921',
+  'props.openThis': '\u092f\u0939 \u0938\u093e\u0907\u091f \u0916\u094b\u0932\u0947\u0902',
+  'props.openNamed': '{name} \u0916\u094b\u0932\u0947\u0902',
   'props.allSites': 'सभी साइटें',
   'props.closedTag': '· बंद',
   'props.seeDetails': 'विवरण देखें',

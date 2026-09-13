@@ -69,6 +69,7 @@ import ThemeToggle from '@/components/ThemeToggle'
 import { useT } from '@/i18n'
 import { PIN_INPUT_MAX, PIN_LENGTH } from '@/types'
 import { cn } from '@/utils/cn'
+import AppBackdrop from '@/theme/AppBackdrop'
 
 export default function Login() {
   const t = useT()
@@ -223,7 +224,16 @@ export default function Login() {
   }
 
   return (
-    <div className="flex min-h-app flex-col bg-surface-sunken">
+    // relative + a z-10 wrapper for the same reason as AppShell: the
+    // backdrop's layers are `fixed`, and a fixed element paints above
+    // ordinary in-flow content whatever the DOM order.
+    //
+    // NO leftInset here. This page has no navigation rail, and insetting the
+    // backdrop would leave a 240px unpainted strip down the left of the
+    // sign-in screen.
+    <div className="relative flex min-h-app flex-col bg-surface-sunken">
+      <AppBackdrop />
+      <div className="relative z-10 flex min-h-app flex-col">
       {/* The toggle is ABOVE the form and before any of the words it changes.
           Somebody who cannot read this page has to be able to fix that
           without first reading it — see components/LanguageToggle. */}
@@ -278,7 +288,11 @@ export default function Login() {
             // noValidate: we render our own messages. Native browser bubbles
             // cannot be styled and are poor for screen readers.
             noValidate
-            className="space-y-4 rounded-card border border-line bg-surface p-5 shadow-card sm:p-6"
+            // `glass`, like every card in the app. This was the last opaque panel
+            // left — the front door looked like a different product from the
+            // screen behind it. glass carries its own shadow, so shadow-card
+            // is gone with the fill.
+            className="space-y-4 rounded-card border p-5 glass sm:p-6"
           >
             {formError && (
               <div
@@ -465,6 +479,7 @@ export default function Login() {
           </p>
         </div>
       </main>
+      </div>
     </div>
   )
 }

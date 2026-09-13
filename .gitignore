@@ -30,3 +30,8 @@ yarn-debug.log*
 yarn-error.log*
 logs/
 *.log
+
+# Throwaway visual-comparison harness: renders the real AppShell + a page
+# with stubbed auth and data, so a screenshot can be diffed against a
+# reference design without a login. Never shipped.
+probe/

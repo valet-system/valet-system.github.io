@@ -69,7 +69,14 @@
 // v4: + "Car delivered" (migration 0023).
 // v5: + "by <operator>" on the parked/delivered bodies (migration 0024).
 // v6: + "Car re-parked" (migration 0025).
-const VERSION = 'v7'
+// v7: (no note recorded).
+// v8: the gold theme and the photographic backdrop. The shell cache holds
+//     index.html, which names a HASHED stylesheet -- so without a bump an
+//     installed client keeps serving the old index.html and therefore the old
+//     CSS, and a whole redesign lands in the bundle without reaching the
+//     screen. That is exactly how the previous attempt at this kept rendering
+//     with a washed-out navigation rail.
+const VERSION = 'v8'
 
 const SHELL_CACHE = `valet-shell-${VERSION}`
 const ASSET_CACHE = `valet-assets-${VERSION}`

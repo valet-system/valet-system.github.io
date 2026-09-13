@@ -62,6 +62,19 @@ export default function StatTile({
   value,
   icon,
   tone = 'neutral',
+  /**
+   * The ICON's tint, when it should differ from the number's colour.
+   *
+   * `tone` colours both, which is right for a number that means something —
+   * a red count of overdue cars. It is wrong for a row of tiles that are
+   * merely different subjects: the reference gives each tile its own pastel
+   * icon (amber sites, blue cars, green operators, rose admins) while every
+   * NUMBER stays near-black, because colouring four numbers four ways
+   * implies four different kinds of alarm and there is no alarm at all.
+   *
+   * Defaults to `tone`, so nothing that already sets `tone` changes.
+   */
+  iconTone,
   hint,
   loading = false,
   className = '',
@@ -80,43 +93,84 @@ export default function StatTile({
       to={to}
       type={!to && onClick ? 'button' : undefined}
       onClick={onClick}
+      // `group` so the round affordance at the bottom-right can respond to a
+      // hover anywhere on the tile — the whole card is the target, and a
+      // button that only lights up when you are exactly on it reads as the
+      // rest of the card being dead.
       className={cn(
-        'rounded-card border border-line bg-surface p-4 text-left shadow-card',
+        // `glass`, the same utility Card uses. This tile builds its own
+        // container rather than wrapping <Card>, which is exactly why it was
+        // left behind when the cards were first made translucent — the stat row
+        // stayed opaque white and read as an older component. Sharing the rule
+        // in index.css is what stops that happening again.
+        'group flex flex-col rounded-2xl border p-5 text-left glass',
+        // Matches Card: every tile lifts, a clickable one also zooms.
+        // glass-hover/-lift rather than hover:shadow-raised, because the tile
+        // already carries a shadow and a lit rim from `glass` — a slightly
+        // larger shadow was a change almost nobody could see, least of all on
+        // a cheap Android screen in daylight, which is where half this app is
+        // used. The pane brightening against the photograph reads instantly.
+        !interactive && 'glass-lift',
         interactive &&
-          // The border change matters more than the shadow on a cheap Android
-          // screen in daylight, where a soft shadow is close to invisible.
-          'cursor-pointer transition-all duration-150 hover:border-line-strong hover:shadow-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30',
+          'glass-hover cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30',
         className,
       )}
     >
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-[0.8125rem] font-medium leading-tight text-ink-subtle">{label}</p>
+      {/* ICON ON THE LEFT, not floated opposite the label. With the icon in
+          the top-right corner the eye reads label, then jumps right to the
+          icon, then back left and down to the number. Leading with the icon
+          makes each tile one left-to-right unit, which is what lets a row of
+          four be scanned rather than read. */}
+      <div className="flex items-start gap-3.5">
         {icon && (
           <span
             className={cn(
-              'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
-              TONE_ICON[tone] ?? TONE_ICON.neutral,
+              'flex h-11 w-11 shrink-0 items-center justify-center rounded-xl',
+              TONE_ICON[iconTone ?? tone] ?? TONE_ICON.neutral,
             )}
           >
-            <Icon name={icon} size={16} />
+            <Icon name={icon} size={20} />
           </span>
         )}
+        <div className="min-w-0 flex-1">
+          <p className="text-[0.8125rem] font-medium leading-tight text-ink-muted">{label}</p>
+          {loading ? (
+            <Skeleton className="mt-2 h-8 w-16" />
+          ) : (
+            <p
+              className={cn(
+                'tnum mt-1 text-3xl font-bold leading-none tracking-tight',
+                TONE_TEXT[tone] ?? TONE_TEXT.neutral,
+              )}
+            >
+              {value ?? '—'}
+            </p>
+          )}
+        </div>
       </div>
 
-      {loading ? (
-        <Skeleton className="mt-2 h-8 w-16" />
-      ) : (
-        <p
-          className={cn(
-            'tnum mt-1.5 text-3xl font-bold leading-none tracking-tight',
-            TONE_TEXT[tone] ?? TONE_TEXT.neutral,
+      {/* mt-auto so the footer sits on the floor of the tile. A row of four
+          whose numbers are 4, 0, 6 and 7 is all one height, but the moment a
+          label wraps on a narrow window the hints would otherwise sit at four
+          different heights. */}
+      {hint && (
+        <div className="mt-auto flex items-center justify-between gap-2 pt-3.5">
+          <span className="inline-flex min-w-0 items-center gap-1 text-xs text-ink-subtle">
+            <span className="truncate">{hint}</span>
+            <Icon name="arrow-right" size={12} className="shrink-0" />
+          </span>
+          {/* Only when there is somewhere to go. A round arrow on a tile that
+              does nothing is a button that does not work. */}
+          {interactive && (
+            <span
+              aria-hidden="true"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-line text-ink-subtle transition-colors group-hover:border-brand group-hover:bg-brand group-hover:text-on-brand"
+            >
+              <Icon name="arrow-right" size={14} />
+            </span>
           )}
-        >
-          {value ?? '—'}
-        </p>
+        </div>
       )}
-
-      {hint && <p className="mt-1.5 text-xs text-ink-subtle">{hint}</p>}
     </Tag>
   )
 }

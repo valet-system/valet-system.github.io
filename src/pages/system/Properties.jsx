@@ -313,8 +313,26 @@ export default function Properties() {
   // since been deleted simply reads as 'all' until something else changes it,
   // rather than showing an empty list with no way to tell why.
   const activeTab = properties.some((p) => p.id === tab) ? tab : 'all'
-  const visible =
+  const filtered =
     activeTab === 'all' ? properties : properties.filter((p) => p.id === activeTab)
+
+  // Sorted with a COPY (slice), not in place. `properties` is state, and
+  // Array.prototype.sort mutates — sorting it directly would reorder the array
+  // React is holding without a re-render, so the tab strip above and this list
+  // could disagree about which site is which until something else happened to
+  // re-render.
+  //
+  // localeCompare, not `<`: these are proper names, and with the app in Hindi
+  // they can be Devanagari, where a codepoint comparison is not alphabetical
+  // in any language anybody reads.
+  //
+  // ALWAYS BY NAME. The sort picker was removed on request, and with it the
+  // four orderings behind it — a control the user did not want is not worth a
+  // branch here. Four sites in a fixed alphabetical order is a list somebody
+  // learns the shape of, which is worth more than being able to reorder it.
+  const visible = filtered
+    .slice()
+    .sort((a, b) => String(a.name ?? '').localeCompare(String(b.name ?? '')))
 
   const targetStats = toggleTarget ? stats[toggleTarget.id] : null
   const staffAtTarget = targetStats
@@ -322,20 +340,47 @@ export default function Properties() {
     : 0
 
   return (
-    <>
+    // h-full + flex-col, not a fragment. main is the shell's scroll
+    // container; by filling it exactly there is nothing for main to
+    // scroll, and the one region marked overflow-y-auto below becomes the
+    // only thing on the page that moves. The title, the tabs and the stat
+    // tiles stay put where they can be read at a glance.
+    <div className="flex h-full flex-col">
       <PageHeader
+        // "Overview", not the reference's "DASHBOARD". This screen is not the
+        // dashboard — /admin/dashboard is — and an eyebrow that names the
+        // wrong screen is worse than no eyebrow.
+        eyebrow={t('props.eyebrow')}
         title={t('props.title')}
         subtitle={t('props.subtitle')}
-        actions={
-          <Button icon="plus" size="md" onClick={() => setAddOpen(true)}>
-            {t('props.add')}
-          </Button>
-        }
       />
 
-      {properties.length > 0 && (
-        <PropertyTabs properties={properties} value={activeTab} onChange={setTab} />
-      )}
+      {/* ── THE TAB STRIP AND THE PRIMARY ACTION SHARE A LINE ────────────
+          Add property used to sit in the page header's action cluster. It is
+          here instead, on request, level with the site tabs.
+
+          justify-between with the tabs allowed to wrap: on a narrow window the
+          tab strip takes several lines and the button stays pinned to the
+          right of the first one, which is where the eye looks for it. ml-auto
+          on the button is what holds that when the tabs wrap short.
+
+          items-start, not items-center — with a wrapped multi-line tab strip,
+          centring would float the button down into the middle of the block. */}
+      <div className="mb-4 flex shrink-0 items-start justify-between gap-3">
+        {properties.length > 0 ? (
+          <PropertyTabs properties={properties} value={activeTab} onChange={setTab} />
+        ) : (
+          <span />
+        )}
+        <Button
+          icon="plus"
+          size="md"
+          onClick={() => setAddOpen(true)}
+          className="ml-auto shrink-0"
+        >
+          {t('props.add')}
+        </Button>
+      </div>
 
       {/* The tiles answer a different question depending on the tab: across the
           group, or about the one site being looked at. "Open sites: 4" inside a
@@ -346,10 +391,13 @@ export default function Properties() {
            unfiltered staff page makes the reader redo the counting the tile
            already did. */
         <StatRow className="mb-5">
+          {/* iconTone, not tone: the icons are four colours and the numbers
+              are all near-black. See the prop's note in StatTile. */}
           <StatTile
             label={t('props.openSites')}
             value={totals.active}
             icon="building"
+            iconTone="warning"
             hint={totals.active > 0 ? t('props.seeList') : undefined}
             onClick={totals.active > 0 ? () => scrollToSites() : undefined}
           />
@@ -357,7 +405,7 @@ export default function Properties() {
             label={t('props.carsToday')}
             value={totals.cars}
             icon="car"
-            tone="info"
+            iconTone="info"
             to="/system/records?days=1"
             hint={t('props.openRecords')}
           />
@@ -365,6 +413,7 @@ export default function Properties() {
             label={t('props.operators')}
             value={totals.operators}
             icon="key"
+            iconTone="success"
             to={`/system/users?role=${ROLES.OPERATOR}`}
             hint={t('props.manageOperators')}
           />
@@ -372,6 +421,7 @@ export default function Properties() {
             label={t('props.valetAdmins')}
             value={totals.admins}
             icon="users"
+            iconTone="danger"
             to={`/system/users?role=${ROLES.VALET_ADMIN}`}
             hint={t('props.manageAdmins')}
           />
@@ -449,15 +499,29 @@ export default function Properties() {
             count={visible.length}
             icon="building"
             id="sites-list"
-            className="scroll-mt-24"
+            className="shrink-0 scroll-mt-24"
           />
-          <div className="space-y-2.5">
+          {/* THE ONLY THING ON THIS PAGE THAT SCROLLS.
+              min-h-0 is what makes it work: a flex child refuses to shrink
+              below its content without it, so the list would push the page
+              taller and hand the scrolling back to main.
+
+              NO scroll-fade-b. It was tried and removed: the rows are glass,
+              so fading one out does not reveal the page beneath it — it
+              reveals the BLURRED backdrop the card was frosting, and the
+              bottom of the list turned into a smear. A clean cut at the
+              scroller's edge is honest and reads better. */}
+          <div className="scrollbar-slim min-h-0 flex-1 space-y-2.5 overflow-y-auto pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
             {visible.map((property) => (
               <PropertyRow
                 key={property.id}
                 property={property}
                 cars={Number(stats[property.id]?.cars_today ?? 0)}
                 operators={Number(stats[property.id]?.operators ?? 0)}
+                onOpen={() => {
+                  setTab(property.id)
+                  scrollToSites()
+                }}
                 onEdit={() => setEditTarget(property)}
                 onToggle={() => setToggleTarget(property)}
                 onDelete={() => setDeleteTarget(property)}
@@ -508,7 +572,7 @@ export default function Properties() {
         description={t('props.deleteBody')}
         confirmLabel={t('props.deleteSite')}
       />
-    </>
+    </div>
   )
 }
 
@@ -596,6 +660,7 @@ function trimHouseWord(names) {
   return trimmed
 }
 
+
 function PropertyTabs({ properties, value, onChange }) {
   const t = useT()
 
@@ -617,7 +682,9 @@ function PropertyTabs({ properties, value, onChange }) {
     <div
       role="tablist"
       aria-label={t('props.sites')}
-      className="mb-4 flex flex-wrap gap-2"
+      // No mb-4: the row this now sits in owns the spacing, and two margins
+      // would double the gap under the strip.
+      className="flex flex-wrap gap-2"
     >
       {tabs.map((tab) => {
         const active = tab.id === value
@@ -633,14 +700,41 @@ function PropertyTabs({ properties, value, onChange }) {
               // shrink-0 still: without it flex shaves every tab until the
               // names are unreadable, which is the one outcome worse than a
               // second line.
-              'shrink-0 rounded-xl border px-3 py-1.5 text-sm font-semibold transition-colors',
+              // shrink-0 still: without it flex shaves every tab until the
+              // names are unreadable, which is the one outcome worse than a
+              // second line.
+              // font-BOLD and translucent, on request, so the chips sit on the
+              // photograph the way the cards do instead of reading as solid
+              // white cut-outs. The extra weight is what pays for the lost
+              // opacity: 600 on a 70% ground over a busy image starts to look
+              // washed, 700 does not.
+              'shrink-0 rounded-full border px-4 py-2 text-sm font-bold backdrop-blur-md transition-colors',
               active
-                // White on the violet, NOT gold. Gold on this violet measures
-                // 1.91:1 — below even the 3:1 WCAG allows for large text — and
-                // it was legible in the mock only because the pill used to be
-                // near-black. White on the brand is 5.70:1.
-                ? 'border-brand bg-brand text-ink-inverse'
-                : 'border-line-strong bg-surface text-ink-muted hover:border-line-strong hover:text-ink',
+                // NEAR-BLACK, not the gold brand, and that is a contrast
+                // decision as much as a stylistic one. The active chip is the
+                // one control on the row that must be unmistakable, and the
+                // rail's near-black against four white pills is the strongest
+                // possible difference. Gold pills would also collide with the
+                // gold Add-property button two rows up, which is the actual
+                // primary action here.
+                //
+                // INVERTED IN DARK. bg-rail is a fixed near-black, and the
+                // dark page ground is near-black too — so on a dark theme the
+                // active chip had no fill anyone could see and the row read as
+                // having nothing selected at all. The same two values the
+                // other way round give an equally unmistakable chip without
+                // introducing a third colour.
+                //
+                // The ACTIVE chip stays near-opaque at 92%. It is the one
+                // control on the row that has to be unmistakable, and letting
+                // the photograph through it is exactly what would blur the
+                // line between selected and not.
+                ? 'border-rail bg-rail/90 text-rail-ink dark:border-rail-ink dark:bg-rail-ink/90 dark:text-rail'
+                // glass-hover, not brightness-105. A filter brightens the LABEL
+                // as well as the pane, so the text washed out at the moment the
+                // pointer landed on it — the chip got lighter and harder to
+                // read at once. glass-hover moves only the pane and the rim.
+                : 'glass glass-hover text-ink',
             )}
           >
             {tab.label}
@@ -758,14 +852,31 @@ function DetailPanel({ kind, rows, loading, error, onClose }) {
   )
 }
 
-function PropertyRow({ property, cars, operators, onEdit, onToggle, onDelete }) {
+function PropertyRow({ property, cars, operators, onEdit, onToggle, onDelete, onOpen }) {
   const t = useT()
 
   return (
-    <Card padded={false} className={property.is_active ? 'p-4' : 'p-4 opacity-60'}>
+    <Card
+      padded={false}
+      // No glass-lift here any more — Card does it for every card by default
+      // now. Naming it again would be a second copy of a decision that moved
+      // into the component, and those are what drift.
+      className={cn('rounded-2xl p-4', !property.is_active && 'opacity-60')}
+    >
       <div className="flex items-start gap-3.5">
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-ink-muted">
-          <Icon name="building" size={20} />
+        {/* ── A THUMBNAIL-SHAPED TILE, NOT A PHOTOGRAPH ────────────────
+            The reference shows a photo of each building here. There is no
+            photo to show: `properties` has name, address, phone and
+            is_active, and nothing else. Real photographs would need a column,
+            an upload path and storage rules — a feature, not a restyle, and
+            not something to add to the schema without asking.
+
+            So this keeps the reference's SHAPE — a 56px rounded tile in the
+            same position, so the row's rhythm and alignment are the finished
+            ones — and fills it with the site mark on a tinted ground. Drop a
+            photo in later and the layout does not move. */}
+        <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand">
+          <Icon name="building" size={24} />
         </span>
 
         <div className="min-w-0 flex-1">
@@ -833,6 +944,26 @@ function PropertyRow({ property, cars, operators, onEdit, onToggle, onDelete }) 
             aria-label={t('props.deleteNamed', { name: property.name })}
             title={t('props.deleteThis')}
             className="hover:bg-danger-soft hover:text-danger"
+          />
+
+          {/* ── THE DRILL-IN ─────────────────────────────────────────────
+              The reference ends each row with a chevron. It has to actually
+              go somewhere: a chevron that does nothing is worse than no
+              chevron, because it is the one control on the row that looks
+              like the main way in.
+
+              It selects this site's tab and scrolls back to the tiles, which
+              is the only real "open this site" this app has — Records and
+              Users cannot yet be filtered to one property from a URL, so a
+              link to either would open a list covering all four and quietly
+              contradict the row it was reached from. */}
+          <Button
+            variant="ghost"
+            size="icon-md"
+            icon="chevron-right"
+            onClick={onOpen}
+            aria-label={t('props.openNamed', { name: property.name })}
+            title={t('props.openThis')}
           />
         </div>
       </div>

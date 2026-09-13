@@ -1,6 +1,19 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{js,jsx}'],
+
+  // Points Tailwind's `dark:` variant at the SAME attribute theme.js already
+  // stamps on <html>, so the two systems can never disagree about which theme
+  // is on. Not 'media' — this app has an explicit three-state toggle (light /
+  // dark / system) and prefers-color-scheme would ignore the user's choice.
+  //
+  // Almost everything here should still theme through the TOKENS in index.css
+  // rather than through this variant; that is what keeps a colour decision in
+  // one file. `dark:` is for the handful of cases where a token cannot express
+  // it — where light and dark need the colours the other way round, not merely
+  // different. The active site chip is one: near-black on cream in light, and
+  // the exact inverse in dark, from the same two values.
+  darkMode: ['selector', '[data-theme="dark"]'],
   theme: {
     extend: {
       // Every colour resolves to a CSS variable defined in src/index.css.
@@ -27,8 +40,21 @@ export default {
           hover: 'rgb(var(--c-brand-hover) / <alpha-value>)',
           soft: 'rgb(var(--c-brand-soft) / <alpha-value>)',
         },
+        // Text and icons ON a brand fill. A separate token, not ink-inverse,
+        // because the brand is gold: near-white on it measures 3.2:1 and
+        // fails WCAG AA. See --c-on-brand in index.css.
+        'on-brand': 'rgb(var(--c-on-brand) / <alpha-value>)',
         // The logo artwork's own background — deliberately theme-independent.
         'logo-plate': 'rgb(var(--c-logo-plate) / <alpha-value>)',
+        // The navigation rail: near-black and gold in BOTH themes, because
+        // the rail is chrome, not page. See index.css.
+        rail: {
+          DEFAULT: 'rgb(var(--c-rail) / <alpha-value>)',
+          line: 'rgb(var(--c-rail-line) / <alpha-value>)',
+          gold: 'rgb(var(--c-rail-gold) / <alpha-value>)',
+          ink: 'rgb(var(--c-rail-ink) / <alpha-value>)',
+          muted: 'rgb(var(--c-rail-muted) / <alpha-value>)',
+        },
         accent: {
           DEFAULT: 'rgb(var(--c-accent) / <alpha-value>)',
           soft: 'rgb(var(--c-accent-soft) / <alpha-value>)',

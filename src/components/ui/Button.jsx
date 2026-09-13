@@ -38,11 +38,16 @@ import Spinner from './Spinner'
 import { cn } from '@/utils/cn'
 
 const VARIANTS = {
-  // Primary — one per screen. Near-black reads as premium, and unlike a
-  // saturated blue it never competes with the status colours on the cards.
+  // Primary — one per screen. Gold, and unlike a saturated blue it never
+  // competes with the status colours on the cards.
+  //
+  // text-ON-BRAND, not text-ink-inverse. The brand is gold now: near-white on
+  // it measures 3.2:1, which fails WCAG AA for a 15px semibold label, and this
+  // app is read outdoors in daylight. on-brand is near-black — 6.7:1 — and it
+  // is a token so it travels with the brand if the brand changes again.
   primary:
-    'bg-brand text-ink-inverse shadow-sm hover:bg-brand-hover active:bg-brand ' +
-    'disabled:bg-ink-subtle disabled:shadow-none',
+    'bg-brand text-on-brand shadow-sm hover:bg-brand-hover active:bg-brand ' +
+    'disabled:bg-ink-subtle disabled:text-ink-inverse disabled:shadow-none',
   // Success — the confirm actions an operator taps all shift: Car Parked,
   // Guest Arrived. Green is the "this went right" channel throughout.
   success:
@@ -96,6 +101,18 @@ const Button = forwardRef(function Button(
     loadingText,
     disabled,
     fullWidth = false,
+    /**
+     * How the icon and label sit inside the button: 'center' (default) or
+     * 'start'.
+     *
+     * THIS HAS TO BE A PROP. Passing `className="justify-start"` does not
+     * work and fails SILENTLY: utils/cn is a plain join, not tailwind-merge,
+     * so the element ends up carrying justify-start AND the base
+     * justify-center, and the winner is whichever Tailwind emits later in
+     * the stylesheet — which is justify-center. Three menu items were
+     * centred for exactly this reason while their source said otherwise.
+     */
+    align = 'center',
     className = '',
     onClick,
     type = 'button',
@@ -143,7 +160,8 @@ const Button = forwardRef(function Button(
       onClick={handleClick}
       aria-busy={isLoading || undefined}
       className={cn(
-        'inline-flex select-none items-center justify-center whitespace-nowrap',
+        'inline-flex select-none items-center whitespace-nowrap',
+        align === 'start' ? 'justify-start' : 'justify-center',
         'transition-colors duration-150',
         'disabled:cursor-not-allowed',
         // Presses feel physical without the layout shifting.

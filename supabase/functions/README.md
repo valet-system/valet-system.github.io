@@ -91,7 +91,9 @@ anything if that secret is unset rather than falling back to trusting the
 payload — an endpoint that dispatches a real operator to a real car on the say-so
 of a phone number in the body must not be open.
 
-Secrets, all set in the dashboard and never in the repo:
+Secrets, all set in the dashboard and never in the repo. **Where each one
+comes from is in [WHATSAPP_SETUP.md](./WHATSAPP_SETUP.md)** — including the
+three variable names that generic Cloud API guides get wrong for this project.
 
 | secret | used by | what it is |
 |---|---|---|
@@ -101,9 +103,11 @@ Secrets, all set in the dashboard and never in the repo:
 | `WA_VERIFY_TOKEN` | webhook | any string; must match what Meta is given |
 | `WA_TEMPLATE_LANG` | dispatch | must match the approved template's language |
 | `WA_TEMPLATE_CAR_PARKED` | dispatch | approved template name |
+| `WA_TEMPLATE_CAR_AT_PICKUP` | dispatch | approved template name |
 | `WA_TEMPLATE_CAR_DELIVERED` | dispatch | approved template name |
 | `WA_TEMPLATE_NOT_AVAILABLE` | dispatch | approved template name |
 | `WA_TEMPLATE_CAR_RETURNED` | dispatch | approved template name |
+| `WA_TEMPLATE_REQUEST_RECEIVED` | webhook | optional; the acknowledgement, if approved |
 | `WA_BTN_*` | webhook | optional; exact button texts, if the keyword match is wrong |
 
 ---

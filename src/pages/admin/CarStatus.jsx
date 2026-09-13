@@ -320,7 +320,7 @@ function Pill({ active, count, onClick, children }) {
       aria-pressed={active}
       className={
         active
-          ? 'flex shrink-0 items-center gap-2 rounded-full bg-brand px-3.5 py-2 text-sm font-semibold text-ink-inverse'
+          ? 'flex shrink-0 items-center gap-2 rounded-full bg-brand px-3.5 py-2 text-sm font-semibold text-on-brand'
           : 'flex shrink-0 items-center gap-2 rounded-full border border-line-strong bg-surface px-3.5 py-2 text-sm font-medium text-ink-muted transition-colors hover:bg-surface-sunken'
       }
     >

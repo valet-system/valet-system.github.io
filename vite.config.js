@@ -4,6 +4,13 @@ import path from 'node:path'
 
 export default defineConfig({
   plugins: [react()],
+
+  // .jfif and .jpe are JPEGs, but Vite does not treat them as assets by
+  // default — and Windows saves JPEGs as .jfif, so a background photo dropped
+  // into src/theme/ routinely arrives with that extension. Without this the
+  // import resolves to nothing, no file is emitted, and the page renders with
+  // no background and no error to say why. See src/theme/background.js.
+  assetsInclude: ['**/*.jfif', '**/*.jpe'],
   resolve: {
     // `@/components/...` instead of `../../../components/...`
     // Keeps imports stable when files move between folders.

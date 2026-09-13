@@ -71,6 +71,7 @@ import Button from '@/components/ui/Button'
 import Icon from '@/components/ui/Icon'
 import Badge from '@/components/ui/Badge'
 import Modal, { ConfirmModal } from '@/components/ui/Modal'
+import Dropdown from '@/components/ui/Dropdown'
 import EmptyState from '@/components/ui/EmptyState'
 import { Skeleton } from '@/components/ui/Spinner'
 import { Field, Input, SearchInput, Select } from '@/components/ui/Field'
@@ -523,7 +524,13 @@ export default function StaffManager() {
   const canCreateAdmins = isSystemAdmin
 
   return (
-    <>
+    // h-full + flex-col, matching Properties. main is the shell's scroll
+    // container; filling it exactly leaves main nothing to scroll, so the
+    // one region marked overflow-y-auto below is the only thing that
+    // moves. The title, the counts and the whole filter row stay put —
+    // which is the point on this screen, because the search box and the
+    // role filters are what you use WHILE reading the list.
+    <div className="flex h-full flex-col">
       <PageHeader
         title={t(isSystemAdmin ? 'staff.usersTitle' : 'staff.valetTitle')}
         subtitle={
@@ -531,16 +538,15 @@ export default function StaffManager() {
             ? t('staff.usersSubtitle')
             : t('staff.valetSubtitle', { property: propertyName })
         }
-        actions={
-          <Button icon="plus" size="md" onClick={() => setAddOpen(true)}>
-            {t(isSystemAdmin ? 'staff.addUser' : 'staff.addValet')}
-          </Button>
-        }
       />
 
       {/* ── summary ─────────────────────────────────────────────────── */}
-      <div className="mb-5 grid grid-cols-2 gap-3 sm:flex sm:flex-wrap">
-        <div className="flex items-center gap-3 rounded-xl border border-line bg-surface px-4 py-3 shadow-card">
+      {/* The count tiles and the primary action share a line, on request.
+          sm:items-center so the button sits level with the tiles rather than
+          stretching to their height; on a phone the row is a 2-up grid and the
+          button drops below it full width, which is the right shape there. */}
+      <div className="mb-5 grid shrink-0 grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:items-center">
+        <div className="flex items-center gap-3 rounded-xl border px-4 py-3 glass glass-lift">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-success-soft text-success">
             <Icon name="users" size={18} />
           </span>
@@ -551,7 +557,7 @@ export default function StaffManager() {
         </div>
 
         {isSystemAdmin && (
-          <div className="flex items-center gap-3 rounded-xl border border-line bg-surface px-4 py-3 shadow-card">
+          <div className="flex items-center gap-3 rounded-xl border px-4 py-3 glass glass-lift">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-info-soft text-info">
               <Icon name="key" size={18} />
             </span>
@@ -563,7 +569,7 @@ export default function StaffManager() {
         )}
 
         {counts.inactive > 0 && (
-          <div className="flex items-center gap-3 rounded-xl border border-line bg-surface px-4 py-3 shadow-card">
+          <div className="flex items-center gap-3 rounded-xl border px-4 py-3 glass glass-lift">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-warning-soft text-warning">
               <Icon name="bell-off" size={18} />
             </span>
@@ -573,6 +579,14 @@ export default function StaffManager() {
             </div>
           </div>
         )}
+        <Button
+          icon="plus"
+          size="md"
+          onClick={() => setAddOpen(true)}
+          className="col-span-2 sm:ml-auto"
+        >
+          {t(isSystemAdmin ? 'staff.addUser' : 'staff.addValet')}
+        </Button>
       </div>
 
       {/* ── filters ─────────────────────────────────────────────────── */}
@@ -588,56 +602,39 @@ export default function StaffManager() {
         <div className="flex flex-wrap items-center gap-2">
           {isSystemAdmin && (
             <>
-              <div className="relative">
-                <Icon
-                  name="shield"
-                  size={15}
-                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle"
-                />
-                <select
-                  value={roleFilter}
-                  onChange={(e) => setRoleFilter(e.target.value)}
-                  aria-label={t('staff.filterRole')}
-                  className="h-11 appearance-none rounded-xl border border-line-strong bg-surface pl-8 pr-10 text-sm font-medium text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
-                >
-                  <option value="all">{t('staff.allRoles')}</option>
-                  <option value={ROLES.OPERATOR}>{t('staff.operators')}</option>
-                  <option value={ROLES.VALET_VENDOR}>{t('staff.valetVendors')}</option>
-                  <option value={ROLES.VALET_ADMIN}>{t('staff.valetAdmins')}</option>
-                  <option value={ROLES.SYSTEM_ADMIN}>{t('staff.systemAdmins')}</option>
-                </select>
-                <Icon
-                  name="chevron-down"
-                  size={14}
-                  className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-ink-subtle"
-                />
-              </div>
+              {/* Select, not <select>: a native popup is drawn by the OS and
+                  no CSS reaches it, so the open list was a white Windows menu
+                  with a blue highlight in the middle of a glass page. See
+                  ui/Dropdown for what had to be rebuilt to replace it. */}
+              <Dropdown
+                value={roleFilter}
+                onChange={setRoleFilter}
+                label={t('staff.filterRole')}
+                icon="shield"
+                className="w-44"
+                options={[
+                  { value: 'all', label: t('staff.allRoles') },
+                  { value: ROLES.OPERATOR, label: t('staff.operators') },
+                  { value: ROLES.VALET_VENDOR, label: t('staff.valetVendors') },
+                  { value: ROLES.VALET_ADMIN, label: t('staff.valetAdmins') },
+                  { value: ROLES.SYSTEM_ADMIN, label: t('staff.systemAdmins') },
+                ]}
+              />
 
-              <div className="relative">
-                <Icon
-                  name="location"
-                  size={15}
-                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle"
-                />
-                <select
-                  value={propertyFilter}
-                  onChange={(e) => setPropertyFilter(e.target.value)}
-                  aria-label={t('staff.filterProperty')}
-                  className="h-11 appearance-none rounded-xl border border-line-strong bg-surface pl-8 pr-10 text-sm font-medium text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
-                >
-                  <option value="all">{t('staff.allProperties')}</option>
-                  {properties.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-                <Icon
-                  name="chevron-down"
-                  size={14}
-                  className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-ink-subtle"
-                />
-              </div>
+              <Dropdown
+                value={propertyFilter}
+                onChange={setPropertyFilter}
+                label={t('staff.filterProperty')}
+                icon="location"
+                className="w-52"
+                options={[
+                  { value: 'all', label: t('staff.allProperties') },
+                  ...properties.map((property) => ({
+                    value: property.id,
+                    label: property.name,
+                  })),
+                ]}
+              />
             </>
           )}
 
@@ -710,7 +707,7 @@ export default function StaffManager() {
       ) : (
         <>
           {/* ── table header ──────────────────────────────────────── */}
-          <div className="mb-1 flex items-center gap-3 px-4 text-[0.6875rem] font-semibold uppercase tracking-widest text-ink-subtle">
+          <div className="mb-1 flex shrink-0 items-center gap-3 px-4 text-[0.6875rem] font-semibold uppercase tracking-widest text-ink-subtle">
             {/* Only when there is something to tick. On a list of one — you —
                 a select-all box is a control that cannot do anything. */}
             {selectable.length > 0 && (
@@ -784,7 +781,22 @@ export default function StaffManager() {
             </div>
           )}
 
-          <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
+          {/* THE ONLY THING ON THIS PAGE THAT SCROLLS.
+              min-h-0: a flex child will not shrink below its content
+              without it, so the list would push the page taller and hand
+              the scrolling back to main.
+              overflow-y-auto replaces overflow-hidden — the rounded corners
+              still clip, because a computed overflow-y of auto forces x to
+              auto as well.
+              NO scroll-fade-b here, unlike the Properties list, and the
+              difference is what the scroller IS. There the scroller is a bare
+              container and the rows are separate cards, so masking its bottom
+              only fades the ROWS. Here the scroller is itself the glass card —
+              a mask fades the element's whole rendered output, so it ate the
+              card's own frosted background and left a blurred, half-transparent
+              band across the bottom of the list. The card's own bottom edge
+              already cuts cleanly, so it needs no fade and no padding for one. */}
+          <div className="scrollbar-slim min-h-0 flex-1 overflow-y-auto rounded-2xl border glass pb-[env(safe-area-inset-bottom)]">
             {visible.map((person, i) => (
               <StaffRow
                 key={person.id}
@@ -885,7 +897,7 @@ export default function StaffManager() {
         description={t('staff.closeAllBody')}
         confirmLabel={t('staff.closeAllConfirm')}
       />
-    </>
+    </div>
   )
 }
 

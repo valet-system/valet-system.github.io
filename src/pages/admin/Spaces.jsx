@@ -357,8 +357,20 @@ export default function Spaces() {
 
        Capping HERE rather than per-block is what keeps the edges honest: the
        tiles, the two columns and the facts box all inherit it, so they cannot
-       drift apart again when one of them changes. */
-    <div className="max-w-[73rem]">
+       drift apart again when one of them changes.
+
+       h-full + flex-col alongside it, matching Properties, Users and Records:
+       main is the shell's scroll container, and filling it exactly leaves main
+       nothing to scroll — so the title and the site tabs stay put and only the
+       region below them moves. Without this the page was as tall as its
+       content and the rest of the window was bare backdrop.
+
+       THE CAP IS NOT ON THIS ELEMENT — see the wrapper below the header.
+       On the root it pulled the PAGE HEADER in with everything else, so this
+       screen's bell and account menu stopped 73rem from the left while every
+       other screen's sat against the window edge. The header is chrome and
+       belongs in the same place on every page. */
+    <div className="flex h-full flex-col">
       <PageHeader
         title={t('spaces.title')}
         // A valet_admin has one site and the subtitle names it. A system_admin
@@ -366,6 +378,13 @@ export default function Spaces() {
         // the control that sets it is one label too many.
         subtitle={isSystemAdmin ? undefined : propertyName}
       />
+
+      {/* ── THE MEASURE, moved off the root ─────────────────────────────
+          Everything the original note argued about — the tiles, the two
+          columns, the facts box — is inside here, so they still share one
+          right-hand edge and cannot drift apart. Only the page header is
+          outside it, which is the point. */}
+      <div className="flex min-h-0 w-full flex-1 flex-col">
 
       {/* ── CHIPS, not a dropdown ─────────────────────────────────────────
           A select costs two taps and hides the options until the first one.
@@ -383,7 +402,7 @@ export default function Spaces() {
           // it, and a second row of chips would push the list below the fold on
           // a phone. -mx-1 px-1 gives the focus ring on the first and last chip
           // room to draw outside the scroll container.
-          className="scrollbar-none -mx-1 mb-4 flex gap-2 overflow-x-auto px-1 pb-1"
+          className="shrink-0 scrollbar-none -mx-1 mb-4 flex gap-2 overflow-x-auto px-1 pb-1"
         >
           {properties.map((prop) => {
             const active = prop.id === chosen
@@ -399,7 +418,7 @@ export default function Spaces() {
                   // the names until they are unreadable.
                   'shrink-0 rounded-xl border px-3.5 py-2 text-sm font-semibold transition-colors',
                   active
-                    ? 'border-brand bg-brand text-ink-inverse'
+                    ? 'border-brand bg-brand text-on-brand'
                     : 'border-line-strong bg-surface text-ink-muted hover:text-ink',
                 )}
               >
@@ -413,16 +432,28 @@ export default function Spaces() {
       {/* A system_admin who has not chosen yet. Everything below needs a
           property, and rendering empty tiles and an add form that would fail
           would look broken rather than unanswered. */}
+      {/* Top of the content region, NOT centred in it — the same place every
+          other screen puts its empty state. Centring was tried and it read as a
+          different kind of page: on Properties, Users and Records the content
+          begins directly under the filters, and a prompt floating in the middle
+          of the window broke that rhythm. */}
       {isSystemAdmin && !chosen && (
-        <EmptyState
-          icon="building"
-          title={t('spaces.pickASite')}
-          description={t('spaces.pickASiteBody')}
-        />
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <EmptyState
+            icon="building"
+            title={t('spaces.pickASite')}
+            description={t('spaces.pickASiteBody')}
+          />
+        </div>
       )}
 
+      {/* Everything below the tabs scrolls; the tabs and the title do not. */}
       {target && (
-        <>
+        <div className="scrollbar-slim min-h-0 flex-1 overflow-y-auto pb-[calc(1rem+env(safe-area-inset-bottom))]">
+      {/* No cap. The tiles span the content width like every other block on
+          the page — on request, and it is the same right-hand edge as the two
+          columns below them, so the old objection (two different edges on one
+          screen) does not apply any more. */}
       <StatRow className="mb-5">
         {/* Three tiles, not five. "Total spaces" and "Free" both counted
             against a per-place limit, and those limits went in migration 0035 —
@@ -454,9 +485,11 @@ export default function Spaces() {
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,24rem)_minmax(0,1fr)] xl:items-start">
         {/* Sticky on wide screens so a long list can be scrolled while the box
-            you type into stays put. top-20 clears the h-16 app header — the
-            desktop sidebar pins itself at top-16 for the same reason. */}
-        <div className="xl:sticky xl:top-20">
+            you type into stays put. top-0, not top-20: it sticks inside the
+            page's own scroll region now, whose top edge IS the top of the
+            scrollable area — the 80px used to clear an app header that spanned
+            the content and no longer exists. */}
+        <div className="xl:sticky xl:top-0">
           <SectionHeading title={t('spaces.addPlaces')} icon="plus" />
           <AddSpaces propertyId={target} onAdded={handleAdded} />
         </div>
@@ -539,8 +572,10 @@ export default function Spaces() {
           )}
         </div>
       </div>
-        </>
+        </div>
       )}
+
+      </div>
 
       {/* The guard that replaced "take it out of service first".
           It names the place, because a mis-tapped row and the right row look

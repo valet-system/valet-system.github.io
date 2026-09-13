@@ -36,7 +36,13 @@ import { cn } from '@/utils/cn'
  * @param tone 'dark' for the app's brand-coloured top bar, 'light' for the
  *             login card, which sits on a pale background.
  */
-export default function LanguageToggle({ tone = 'dark', className = '' }) {
+/**
+ * @param bare render just the two pills, with no container of their own —
+ *             for when the CALLER supplies the group, so the language switch
+ *             and the theme toggle can live in one segmented control instead
+ *             of sitting in two separate boxes of different weights.
+ */
+export default function LanguageToggle({ tone = 'dark', bare = false, className = '' }) {
   const { lang, setLang, t } = useI18n()
 
   return (
@@ -44,8 +50,10 @@ export default function LanguageToggle({ tone = 'dark', className = '' }) {
       role="group"
       aria-label={t('lang.switch')}
       className={cn(
-        'flex shrink-0 items-center gap-0.5 rounded-lg p-0.5',
-        tone === 'dark' ? 'bg-white/10' : 'bg-surface-sunken',
+        'flex shrink-0 items-center gap-0.5',
+        // The group's own box, unless the caller is providing one.
+        !bare && 'rounded-lg p-0.5',
+        !bare && (tone === 'dark' ? 'bg-rail-ink/10' : 'bg-surface-sunken'),
         className,
       )}
     >
@@ -63,9 +71,11 @@ export default function LanguageToggle({ tone = 'dark', className = '' }) {
             aria-label={option.label}
             title={option.label}
             className={cn(
-              // h-8 and px-2.5 keep the whole control inside the 40px bar while
-              // staying a real tap target on a phone.
-              'flex h-8 min-w-9 items-center justify-center rounded-md px-2.5 text-xs font-bold transition-colors',
+              // h-9 inside the group's p-0.5 makes the whole control exactly
+              // 40px — the same height as every icon button in the app, so it
+              // lines up with the theme toggle beside it instead of sitting 4px
+              // short of it. Still a real tap target on a phone.
+              'flex h-9 min-w-9 items-center justify-center rounded-md px-2.5 text-xs font-bold transition-colors',
               // The selected pill is BRAND in both tones.
               //
               // On the dark chrome this was `bg-white text-ink`, the only
@@ -75,8 +85,8 @@ export default function LanguageToggle({ tone = 'dark', className = '' }) {
               // is the whole point of the tokens; this one line was opting out.
               active
                 ? tone === 'dark'
-                  ? 'bg-brand text-ink-inverse'
-                  : 'bg-brand text-ink-inverse'
+                  ? 'bg-brand text-on-brand'
+                  : 'bg-brand text-on-brand'
                 : tone === 'dark'
                   ? 'text-ink-inverse/70 hover:text-ink-inverse'
                   : 'text-ink-subtle hover:text-ink',

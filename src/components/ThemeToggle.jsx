@@ -30,7 +30,14 @@ import { useT } from '@/i18n'
 import { cn } from '@/utils/cn'
 import { getResolved, subscribe, toggleTheme } from '@/utils/theme'
 
-export default function ThemeToggle({ tone = 'dark', className = '' }) {
+/**
+ * @param dense sizes this to sit INSIDE a segmented group alongside the
+ *              language pills — 36px and a matching radius, instead of the
+ *              standalone 40px button. It also drops its own hover fill,
+ *              because inside a group the container already supplies one and
+ *              two stacked tints read as a different, brighter control.
+ */
+export default function ThemeToggle({ tone = 'dark', dense = false, className = '' }) {
   const t = useT()
   const [resolved, setResolved] = useState(getResolved)
 
@@ -47,10 +54,18 @@ export default function ThemeToggle({ tone = 'dark', className = '' }) {
       aria-label={t(resolved === 'dark' ? 'theme.switchToLight' : 'theme.switchToDark')}
       title={t(`theme.${resolved}`)}
       className={cn(
-        'relative flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors',
+        'relative flex shrink-0 items-center justify-center transition-colors',
+        // The two sizes are written out rather than overridden via className:
+        // cn() is a plain join, not tailwind-merge, so `h-9` passed in beside a
+        // base `h-10` would leave BOTH classes on the element and let stylesheet
+        // order decide the winner.
+        dense ? 'h-9 w-9 rounded-md' : 'h-10 w-10 rounded-lg',
         tone === 'dark'
-          ? 'text-ink-inverse/70 hover:bg-white/10 hover:text-ink-inverse'
-          : 'text-ink-subtle hover:bg-surface-sunken hover:text-ink',
+          ? cn('text-ink-inverse/70 hover:text-ink-inverse', !dense && 'hover:bg-white/10')
+          : cn('text-ink-subtle hover:text-ink', !dense && 'hover:bg-surface-sunken'),
+        // The dense hover has to follow the tone too: a white wash is
+        // invisible on the light glass group the page header uses.
+        dense && (tone === 'dark' ? 'hover:bg-white/10' : 'hover:bg-ink/5'),
         className,
       )}
     >

@@ -250,7 +250,7 @@ export default function TodaysCars() {
                 className={cn(
                   'flex shrink-0 items-center gap-2 rounded-full px-3.5 py-2 text-sm transition-colors',
                   active
-                    ? 'bg-brand font-semibold text-ink-inverse'
+                    ? 'bg-brand font-semibold text-on-brand'
                     : 'border border-line-strong bg-surface font-medium text-ink-muted hover:bg-surface-sunken',
                 )}
               >

@@ -899,7 +899,7 @@ export default function ValetBookings() {
               className={[
                 'rounded-lg px-3 py-1.5 text-xs font-bold transition-colors',
                 period === value
-                  ? 'bg-brand text-ink-inverse'
+                  ? 'bg-brand text-on-brand'
                   : 'text-ink-muted hover:bg-brand-soft hover:text-ink',
               ].join(' ')}
             >
@@ -1118,7 +1118,7 @@ export default function ValetBookings() {
                         today's number sat somewhere no other number did — on the
                         one tile a reader looks for first. */}
                     {isToday && (
-                      <span className="absolute right-1.5 top-1.5 z-10 rounded-full bg-brand px-1.5 py-0.5 text-[0.55rem] font-bold uppercase tracking-wider text-white">
+                      <span className="absolute right-1.5 top-1.5 z-10 rounded-full bg-brand px-1.5 py-0.5 text-[0.55rem] font-bold uppercase tracking-wider text-on-brand">
                         {t('bookings.todayPill')}
                       </span>
                     )}
@@ -1307,7 +1307,7 @@ function Header({
           <button
             type="button"
             onClick={onToday}
-            className="h-10 shrink-0 rounded-xl bg-brand px-4 text-sm font-bold text-ink-inverse hover:opacity-90"
+            className="h-10 shrink-0 rounded-xl bg-brand px-4 text-sm font-bold text-on-brand hover:opacity-90"
           >
             {t('bookings.today')}
           </button>
@@ -1436,7 +1436,7 @@ function MonthPicker({ t, lang, year, month, monthLabel, onPick }) {
                   className={[
                     'rounded-lg px-1 py-2 text-xs font-bold transition-colors',
                     isCurrent
-                      ? 'bg-brand text-ink-inverse'
+                      ? 'bg-brand text-on-brand'
                       : 'text-ink-muted hover:bg-brand-soft hover:text-ink',
                   ].join(' ')}
                 >

@@ -54,7 +54,7 @@ const TONES = {
   info: 'bg-info-soft text-info ring-info/25',
   vip: 'bg-vip-soft text-vip ring-vip/35',
   /** Solid — for the one badge on screen that must win, e.g. a live countdown. */
-  solid: 'bg-brand text-ink-inverse ring-transparent',
+  solid: 'bg-brand text-on-brand ring-transparent',
 }
 
 const SIZES = {

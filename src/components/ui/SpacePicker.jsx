@@ -189,7 +189,7 @@ export default function SpacePicker({
                     // car. Migration 0035 removed the limits, so the honest
                     // answer is now always available.
                     selected
-                      ? 'bg-brand text-ink-inverse'
+                      ? 'bg-brand text-on-brand'
                       : 'border border-line-strong bg-surface text-ink hover:bg-surface-sunken',
                   )}
                 >

@@ -82,28 +82,62 @@
      cannot be `brand`: brand is the violet primary buttons are painted
      with, and a violet sidebar is not what a violet button sits next to. */
   --c-surface:        255 255 255;
-  --c-surface-sunken: 248 246 242;
-  --c-surface-raised:  11  11  12;
+  /* A degree warmer than the old 248 246 242. The reference ground is a
+     warm cream rather than a cool grey, and against a gold accent a cool
+     grey reads as dirty. */
+  --c-surface-sunken: 250 247 241;
+  --c-surface-raised:  16  17  19;
 
   /* Text. 4 steps is enough; more than that and hierarchy turns to mush.
      ink-inverse means "on a FILLED surface" — the violet of a button, or
      the near-black chrome — so it is near-white in both themes. */
   --c-ink:          15  23  42;
   --c-ink-muted:    71  85 105;
-  --c-ink-subtle:  130 141 158;
+  /* 94 102 116, darkened from 130 141 158. MEASURED, not taste: on a glass
+     card (about 236,235,231) the old value came out at 2.82:1 against
+     WCAG AA's 4.5:1 minimum for normal text — every address, phone number
+     and caption in the app was under the line. It was borderline on the
+     old opaque white cards and went properly wrong once the cards became
+     translucent over a photograph. This measures 4.85:1. */
+  --c-ink-subtle:   94 102 116;
   --c-ink-inverse: 248 250 252;
 
   --c-line:        226 232 240;
   --c-line-strong: 203 213 225;
 
-  /* Brand — primary actions and the current-page highlight.
-     #7C3AED, not the #8B5CF6 this started as. Measured: white on 8B5CF6 is
-     4.23:1, which fails WCAG AA for normal text (4.5:1) — and every primary
-     button in the app is white on this colour. One step darker takes it to
-     5.70:1 and costs nothing anyone can see. */
-  --c-brand:       124  58 237;
-  --c-brand-hover: 109  40 217;
-  --c-brand-soft:  243 239 254;
+  /* ── BRAND: GOLD, NOT VIOLET ─────────────────────────────────────
+     Primary actions and the current-page highlight. Gold #BE944E, on
+     request, to match the reference design — the violet is gone from the
+     whole app, not just the chrome, because a violet button next to a gold
+     rail was the one colour in the reference that did not belong.
+
+     --c-on-brand IS THE POINT OF THIS BLOCK, and it is why the swap is not
+     a one-line find-and-replace. Every primary button used to be
+     `bg-brand text-ink-inverse` — near-WHITE text. Measured on this gold:
+
+         white on #BE944E ................ 3.2:1   FAILS WCAG AA (needs 4.5)
+         near-black #1A140A on #BE944E ... 6.7:1   passes
+
+     A gold button with white text is a real legibility failure, not a taste
+     one, and this app is read outdoors in daylight. So the button's text
+     colour became a token that travels WITH the brand: swap the brand again
+     and set this alongside it, and nothing downstream has to change.
+
+     Hover goes DARKER in light, which is the direction that reads as a
+     press on a mid-tone fill. */
+  --c-brand:       192 154  91;
+  --c-brand-hover: 172 133  69;
+  --c-brand-soft:  250 243 229;
+  /* NEAR-WHITE, matching the reference, and it is a KNOWN CONTRAST
+     COMPROMISE — the one place in this file where the reference wins over
+     the measurement. Cream on this gold is 3.3:1, under WCAG AA's 4.5:1
+     for a 15px label. The alternative was near-black text (6.7:1), which
+     passes and looks nothing like the reference button.
+
+     This is a token precisely so the choice stays reversible: set it to
+     `26 20 10` and every primary button in the app flips to the accessible
+     pairing, with no other edit anywhere. */
+  --c-on-brand:    255 252 246;
 
   /* Gold — VIP, and the accent the chrome uses. Gold rather than the
      reference's cyan for one reason: the Ambria logo is gold, and a cyan
@@ -136,6 +170,74 @@
      letterhead. Fixed by something outside the app, so it is declared
      once and never overridden below. */
   --c-logo-plate:   11  11  12;
+
+  /* ── THE NAVIGATION RAIL — LIGHT ───────────────────────────────────
+     IT FOLLOWS THE THEME. It used to be deliberately theme-INdependent:
+     near-black in both, so the app kept one silhouette whatever the
+     lights were doing. That was changed on request — a near-black rail
+     beside a cream page read as a leftover from a different design once
+     everything else went light.
+
+     So these are a white panel against the page's warm cream. The two are
+     close, which is the point: the rail is a surface, not a slab. What
+     separates them is the border and the shadow, not a change of tone.
+
+     THE GOLD IS MUCH DARKER HERE, and that is not a style choice. The dark
+     rail's 206 165 90 measures 2.29:1 on white — it fails WCAG AA by a
+     wide margin, and this gold is the ACTIVE nav label and the property
+     name, the two things on the rail that must be readable. 150 98 8 is
+     5.19:1. The dark theme keeps the bright value, where it is correct. */
+  --c-rail:        255 255 255;
+  --c-rail-line:   226 232 240;
+  /* 140 92 10, a shade deeper than the 150 98 8 it was. On the thin glass
+     rail the brand label measured 4.50:1 — level with the WCAG AA minimum,
+     which is not the same as clearing it. Nothing that sits exactly on a
+     threshold survives a change to the photograph behind it. */
+  --c-rail-gold:   140  92  10;
+  --c-rail-ink:     15  23  42;
+  --c-rail-muted:   94 102 116;
+
+  /* ── THE BACKDROP VEIL ─────────────────────────────────────────────
+     Two ends of one gradient, not a single opacity. See .app-veil below
+     and src/theme/README.md.
+
+     near = bottom-left, behind the rail and the content: nearly solid.
+     far  = top-right, where the photograph is allowed to show. */
+  /* ── GLASS ─────────────────────────────────────────────────────────
+     Cards, stat tiles and the filter chips are frosted panes over the
+     backdrop photograph rather than opaque boxes on it. See .glass below.
+
+     alpha  how much of the surface colour the pane carries. Lower = more
+            photograph, and less ground under small text.
+     edge   the lit rim. On a light theme a near-white edge is what reads as
+            "pane of glass" rather than "faded card"; on a dark one the same
+            white at a fraction of the alpha does the same job.
+     blur   the whole reason this is legible. It keeps the LIGHT of the photo
+            and throws away the DETAIL — busy texture under 13px type is
+            unreadable in a way a flat tint never is. */
+  --glass-alpha:      0.62;
+  /* THINNER, for the navigation rail. The card alpha exists to protect
+     small text on a busy photograph; the rail carries eight short labels
+     and can afford to be far more transparent, which is the whole point
+     of putting glass there — at 0.62 it reads as a white panel that
+     happens to blur, not as glass. */
+  /* 0.10 — the rail leans further toward the photograph than any other
+     surface in the app. It can afford to: its labels are full-strength ink
+     and its active item carries an opaque pill of its own, so the panel's
+     tint is not what is holding the text up. Every card on the page is at
+     --glass-alpha because a card DOES rely on its tint. */
+  --glass-alpha-thin: 0.10;
+  --glass-edge:      255 255 255;
+  --glass-edge-alpha: 0.75;
+  --glass-blur:       18px;
+
+  --veil-near: 0.78;
+  /* 0.14, down from 0.35. At 0.35 the photograph was technically present and
+     visually mush — the car and the entrance lighting that are the whole
+     reason for the image washed out to a pale blur. The reference keeps the
+     right-hand edge nearly uncovered and relies on the CARDS, which are
+     opaque, to protect anything that has to be read. */
+  --veil-far:  0.05;
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -144,26 +246,55 @@
    light value, which is exactly what should happen to --c-logo-plate.
    ══════════════════════════════════════════════════════════════════ */
 :root[data-theme='dark'] {
-  --c-surface:        22  20  38;
-  --c-surface-sunken: 13  11  24;
-  --c-surface-raised: 16  14  30;
+  /* ── BLACK, NOT BLUE ──────────────────────────────────────────────
+     These were 22 20 38 / 13 11 24 / 16 14 30 — heavily blue-violet,
+     because they were mixed to sit under a violet brand. The brand is gold
+     now, and a violet-blue page under gold buttons reads as two unrelated
+     designs: the dark theme looked navy rather than dark.
 
-  --c-ink:         237 235 245;
-  --c-ink-muted:   169 163 196;
-  --c-ink-subtle:  124 117 154;
+     Now neutral and very slightly WARM (red a touch above blue), which is
+     what keeps them from looking like dead grey next to the gold and
+     matches --c-rail's 20 18 16. The rail and the page are finally the same
+     family in dark instead of two different blacks. */
+  --c-surface:        23  22  20;
+  --c-surface-sunken: 15  14  13;
+  --c-surface-raised: 20  19  18;
+
+  /* Warm off-white rather than the old lilac-tinted 237 235 245. */
+  --c-ink:         237 234 228;
+  --c-ink-muted:   175 170 161;
+  /* Same problem in dark, same fix in the other direction: 132 127 119 was
+     3.80:1 on a dark glass card. 150 145 136 is 4.82:1. */
+  --c-ink-subtle:  150 145 136;
   --c-ink-inverse: 255 255 255;
 
   /* Borders carry the layout in dark. On white a card is defined by its
      shadow; on a dark page a shadow is invisible and the edge is all
      there is, so these sit a step stronger against their surface. */
-  --c-line:         42  38  68;
-  --c-line-strong:  62  56  96;
+  --c-line:         48  45  41;
+  --c-line-strong:  72  68  61;
 
-  /* Same reasoning as light, one step darker; hover goes lighter here because
-     on a dark surface that is the only direction that reads as a hover. */
-  --c-brand:       124  58 237;
-  --c-brand-hover: 139  92 246;
-  --c-brand-soft:   38  30  66;
+  /* Gold, one step brighter than light, and hover goes LIGHTER here because
+     on a dark surface that is the only direction that reads as a hover.
+
+     ── --c-on-brand DELIBERATELY DIFFERS FROM LIGHT, AND THIS IS WHY ──
+     Light uses near-WHITE, matching the reference design at a measured
+     3.3:1 — under AA, accepted there as a deliberate call.
+
+     Dark cannot follow it. The fill is BRIGHTER here (206 165 90 against
+     light's 192 154 91), so near-white on it measures 2.6:1 — not
+     "below standard" but genuinely hard to read, which is a different
+     category of problem. Near-black is 8.4:1.
+
+     So the label colour flips with the theme. That is a real
+     inconsistency and it is the lesser one: the alternative is a primary
+     button whose text cannot be read at night. If the two must match,
+     match on near-black — set light's --c-on-brand to `26 20 10` and both
+     themes pass. */
+  --c-brand:       206 165  90;
+  --c-brand-hover: 220 182 114;
+  --c-brand-soft:   48  38  20;
+  --c-on-brand:     26  20  10;
 
   --c-accent:      224 163  58;
   --c-accent-soft:  47  36  16;
@@ -188,6 +319,38 @@
 
   --c-vip:         224 163  58;
   --c-vip-soft:     47  36  16;
+
+  /* ── THE NAVIGATION RAIL — DARK ────────────────────────────────────
+     The values the rail used to carry in BOTH themes. They were always
+     right for a dark page; they are simply no longer imposed on a light
+     one. The gold is brighter than --c-brand on purpose: brand gold is a
+     fill that dark text sits on, rail gold is text on near-black and has
+     to carry contrast in the other direction. Measured 8.1:1. */
+  --c-rail:         20  18  16;
+  --c-rail-line:    46  42  36;
+  --c-rail-gold:   201 164 100;
+  --c-rail-ink:    236 233 227;
+  --c-rail-muted:  169 165 158;
+
+  /* The far end opens LESS at night. A photograph shot at dusk still carries
+     bright windows and headlights, and at the light theme's 0.35 those punch
+     through a dark page as glare — which is the thing people actually
+     complain about on a night shift. */
+  --veil-far: 0.55;
+
+  /* Glass in dark. A touch MORE opaque than light, not less: the photograph
+     keeps its own highlights whatever the theme, and a bright window behind a
+     55% pane on a dark page is glare rather than depth. The edge is the same
+     white, at a sixth of the alpha — enough to draw the rim, not enough to
+     look like a light-theme card that failed to invert. */
+  --glass-alpha:      0.68;
+  /* Higher than light's 0.30: a dark pane over a photograph with lit
+     windows in it lets those highlights through as glare, and the rail is
+     the one surface with no card inside it to hide behind. */
+  /* Higher than light's 0.10: a thin DARK pane lets the photograph's lit
+     windows through as glare rather than as depth. */
+  --glass-alpha-thin: 0.16;
+  --glass-edge-alpha: 0.12;
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -260,6 +423,33 @@
     padding-bottom: env(safe-area-inset-bottom);
   }
 
+  /**
+   * CHROME'S AUTOFILL WASH.
+   *
+   * A filled field is painted pale BLUE by the browser — its own colour, not
+   * ours, and not overridable by `background-color` at any specificity. On a
+   * gold and cream sign-in screen it is the one lilac rectangle on the page,
+   * and it appears only for people whose browser remembers them, which is why
+   * it survives every design review.
+   *
+   * The inset box-shadow is the standard way through: it paints over the
+   * browser's fill without touching `background-color`, which autofill
+   * ignores. -webkit-text-fill-color does the same for the text, since
+   * `color` is overridden too.
+   *
+   * The absurd transition delay is deliberate and well known: Chrome animates
+   * its fill in shortly AFTER these rules apply, and a transition long enough
+   * never to finish is what stops the blue reappearing a frame later.
+   */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus {
+    -webkit-text-fill-color: rgb(var(--c-ink));
+    -webkit-box-shadow: 0 0 0 1000px rgb(var(--c-surface)) inset;
+    caret-color: rgb(var(--c-ink));
+    transition: background-color 9999s ease-in-out 0s;
+  }
+
   /* A visible, consistent focus ring. Keyboard users and screen readers
      depend on this; :focus-visible means mouse users never see it. */
   :focus-visible {
@@ -299,6 +489,256 @@
    SCROLLBAR — desktop admin views only; mobile has none anyway.
    ══════════════════════════════════════════════════════════════════ */
 @layer utilities {
+  /**
+   * GLASS — one frosted pane, used by Card, StatTile and the filter chips.
+   *
+   * It is a utility and not three copies of the same four classes because
+   * that is exactly how they drifted before: StatTile builds its own
+   * container instead of wrapping Card, so when the cards were made
+   * translucent the stat row silently stayed opaque and looked like an older
+   * component. One rule, one place to tune, no drift.
+   *
+   * ── THE BLUR IS LOAD-BEARING ──────────────────────────────────────
+   * Not an effect. At this alpha the photograph's actual detail — foliage,
+   * headlights, the lit doorway — sits directly behind 13px grey text, and
+   * busy texture under small type is unreadable in a way a flat tint never
+   * is. The blur keeps the photo's LIGHT and discards its DETAIL. Remove it
+   * and the panes stop being readable, not merely stop being pretty.
+   *
+   * saturate() goes with it: blurring alone greys the photo out, and the
+   * warmth of the entrance lighting is most of what makes this look like
+   * glass over a photograph rather than over a smear.
+   *
+   * ── THE INSET HIGHLIGHT ───────────────────────────────────────────
+   * One-pixel white line inside the top edge. It is the difference between
+   * "translucent rectangle" and "pane with a lit rim" — real glass catches
+   * light along its top edge, and the eye reads its absence as a card that
+   * has simply gone faint.
+   *
+   * ── -webkit- IS REQUIRED ──────────────────────────────────────────
+   * Safari still ships backdrop-filter prefixed. Without the second line
+   * every pane on every iPhone falls back to a flat tint over a sharp
+   * photograph — which is the unreadable case above, on the devices most
+   * likely to be standing outdoors.
+   */
+  .glass {
+    background-color: rgb(var(--c-surface) / var(--glass-alpha));
+    border-color: rgb(var(--glass-edge) / var(--glass-edge-alpha));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.5);
+    backdrop-filter: blur(var(--glass-blur)) saturate(1.5);
+    box-shadow:
+      inset 0 1px 0 rgb(var(--glass-edge) / calc(var(--glass-edge-alpha) * 0.8)),
+      0 1px 2px rgb(15 23 42 / 0.04),
+      0 8px 24px -8px rgb(15 23 42 / 0.12);
+  }
+
+  /**
+   * THIN GLASS — the navigation rail.
+   *
+   * Same recipe as .glass, two things changed:
+   *   - --glass-alpha-THIN, so the photograph genuinely reads through it
+   *     rather than being hinted at behind a near-white panel.
+   *   - a heavier blur, because the lower the tint, the more the image's own
+   *     detail has to be destroyed for text to sit on it. Transparency and
+   *     blur trade against each other; this pane spends its budget on
+   *     transparency and buys the legibility back with radius.
+   */
+  .glass-thin {
+    background-color: rgb(var(--c-surface) / var(--glass-alpha-thin));
+    -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 1.6)) saturate(1.5);
+    backdrop-filter: blur(calc(var(--glass-blur) * 1.6)) saturate(1.5);
+    /* NO inset highlight. On a card that lit top edge is what says "pane of
+       glass"; on a panel that is supposed to melt into the page it is just a
+       bright line ruled across the top. Only the soft drop remains, which
+       separates the panel without drawing an edge. */
+    box-shadow: 0 8px 28px -10px rgb(15 23 42 / 0.18);
+  }
+
+  /* No backdrop-filter means no blur to buy legibility with, so the pane has
+     to go nearly opaque instead. Degrading to LESS see-through is the safe
+     direction — the nav stays readable and the page merely looks flatter. */
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .glass-thin {
+      background-color: rgb(var(--c-surface) / 0.95);
+    }
+  }
+
+  /**
+   * HOVER, FOR GLASS.
+   *
+   * A shadow is the usual way to say "this is clickable", and on glass it is
+   * the wrong one: the pane is already carrying a shadow and a lit rim, so a
+   * slightly bigger shadow is a change almost nobody sees — least of all on a
+   * cheap Android screen in daylight, which is where half this app is used.
+   *
+   * Real glass does something else when light hits it: it gets brighter and
+   * its edge catches. So that is what this does — the pane gains 12 points of
+   * opacity and the rim comes up. It reads instantly because the CONTRAST
+   * against the photograph behind it changes, not merely the softness of an
+   * edge.
+   *
+   * ── ONLY ON THINGS THAT ACTUALLY DO SOMETHING ─────────────────────
+   * Never put this on a plain container. A pane that lights up under the
+   * pointer and then does nothing when clicked is the same lie as a chevron
+   * that goes nowhere, and it is worse here because the whole surface
+   * promises it rather than one small icon.
+   */
+  /* TWO STRENGTHS, and the difference is a promise about what a click does.
+     .glass-lift  brightens and lifts the rim. A list row saying "you are on
+                  this one" — an affordance, not an offer.
+     .glass-hover does that AND zooms. Reserved for things that are genuinely
+                  clickable, because a surface that comes toward you and then
+                  does nothing is a lie the whole card tells, not just an icon. */
+  .glass-lift,
+  .glass-hover {
+    transition:
+      background-color 150ms ease,
+      border-color 150ms ease,
+      box-shadow 150ms ease,
+      transform 150ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .glass-lift:hover,
+  .glass-hover:hover {
+    background-color: rgb(var(--c-surface) / calc(var(--glass-alpha) + 0.12));
+    border-color: rgb(var(--glass-edge) / calc(var(--glass-edge-alpha) + 0.15));
+    box-shadow:
+      inset 0 1px 0 rgb(var(--glass-edge) / var(--glass-edge-alpha)),
+      0 2px 4px rgb(15 23 42 / 0.05),
+      0 14px 32px -10px rgb(15 23 42 / 0.18);
+  }
+
+  .glass-hover:hover {
+    /* 1.02 — deliberately small. These are cards in a list, not a hero tile:
+       at 1.05 a 350px row grows 17px, shoves against its neighbours and reads
+       as the layout jumping rather than the card lifting. 2% is about 7px,
+       which the eye reads as "forward" without anything appearing to move. */
+    transform: scale(1.02);
+
+    /* A transform creates a stacking context, so a scaled card would paint
+       under the NEXT card in the list while overlapping the previous one —
+       lifting on one edge and sinking on the other. This puts the hovered one
+       above both. */
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ── THE ZOOM IS MOTION, AND SOME PEOPLE CANNOT HAVE IT ──────────────
+     Scaling under the pointer is exactly the movement that makes vestibular
+     disorders unpleasant, and this app puts a list of these on screen at once
+     — a sweep of the mouse would ripple the whole page.
+
+     The brightness and the rim stay. Those are what say "clickable"; the zoom
+     was only ever the flourish on top, so nothing is lost by dropping it. */
+  @media (prefers-reduced-motion: reduce) {
+    .glass-hover:hover {
+      transform: none;
+    }
+  }
+
+  /**
+   * The same idea for a ROW inside a glass panel — a notification, a menu
+   * item. Those are not panes of their own, so they cannot gain opacity; they
+   * brighten against the pane they sit in instead.
+   *
+   * surface, not a literal white: on the dark theme white would be a grey
+   * smear, and this token is already the colour the panel is tinted with.
+   */
+  .glass-row {
+    transition: background-color 150ms ease;
+  }
+
+  .glass-row:hover {
+    background-color: rgb(var(--c-surface) / 0.55);
+  }
+
+  /**
+   * GLASS THAT DISSOLVES DOWNWARD — for the sticky top bar.
+   *
+   * `.glass` gives a pane four hard edges: a border, a lit rim and a drop
+   * shadow. On a card that is the whole point. On a bar that spans the window
+   * it is a 1px near-white line ruled across the screen, and the bar reads as
+   * a separate strip laid over the photograph rather than the top of it.
+   *
+   * So: no border, no rim, no shadow. Instead the pane is MASKED, fading to
+   * nothing over its bottom third — the tint and the blur both ramp out
+   * together, so there is no edge anywhere for the eye to catch. The
+   * photograph simply sharpens as it leaves the bar.
+   *
+   * ── IT IS A LAYER, NOT THE HEADER ITSELF ──────────────────────────
+   * A mask applies to an element's whole rendered output, children included —
+   * masking the <header> would fade the avatar and the language toggle along
+   * with the glass. So this is an absolute layer BEHIND the controls, and the
+   * row above it stays at full opacity.
+   */
+  /* ── NO TINT OF ITS OWN. THIS IS THE WHOLE POINT. ──────────────────
+     It used to paint `--c-surface` at --glass-alpha: pure WHITE at 62%, flat
+     across the bar. The page underneath is veiled in --c-surface-SUNKEN, a
+     warm cream, on a diagonal that is near-solid at the left and nearly clear
+     at the right. So the bar came out cool and even while the page below it
+     was warm and graded, and the join read as a grey band laid over the
+     photograph — white on the left, brown on the right, changing at the bar's
+     edge.
+
+     Now it supplies only the blur and the fade, and is used together with
+     `.app-veil`, which paints the page's own gradient. Same tokens, same
+     stops, same colour at every x — by construction, not by two values being
+     kept in step by hand. The bar differs from the page in exactly one way,
+     which is the one that was wanted: it is frosted. */
+  .glass-fade {
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.5);
+    backdrop-filter: blur(var(--glass-blur)) saturate(1.5);
+    -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 64%, transparent 100%);
+    mask-image: linear-gradient(to bottom, #000 0%, #000 64%, transparent 100%);
+  }
+
+  /* A browser without backdrop-filter gets an opaque pane instead of a
+     transparent one over a sharp photo. Degrading to LESS see-through is the
+     safe direction: the text stays readable and the page merely looks flatter.
+     @supports not, so this never fires anywhere the real thing works. */
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .glass {
+      background-color: rgb(var(--c-surface) / 0.95);
+    }
+  }
+
+  /**
+   * THE BACKDROP VEIL — a diagonal gradient, not a flat wash.
+   *
+   * A flat veil has to be strong enough for the WORST spot on the
+   * photograph, which means the whole photograph ends up as veiled as its
+   * worst spot: you pay for the image and then hide it.
+   *
+   * It runs nearly solid where the content sits and opens toward the far
+   * corner, which on every screen in this app is either empty or the tail of
+   * a card row — so the photograph shows where nothing has to be read.
+   *
+   * 115deg, not 135: on the exact diagonal the transition lines up with the
+   * corner of the card grid and reads as banding rather than as light.
+   *
+   * Painted in --c-surface-sunken, the page's OWN ground, so it darkens with
+   * the dark theme instead of glowing. Both stops are tokens — see
+   * --veil-near and --veil-far in the :root block above.
+   */
+  .app-veil {
+    background-image: linear-gradient(
+      115deg,
+      rgb(var(--c-surface-sunken) / var(--veil-near)) 0%,
+      rgb(var(--c-surface-sunken) / var(--veil-near)) 38%,
+      rgb(var(--c-surface-sunken) / calc((var(--veil-near) + var(--veil-far)) / 2)) 68%,
+      rgb(var(--c-surface-sunken) / var(--veil-far)) 100%
+    );
+  }
+
+  /* The Records screen goes on paper and the bookings calendar gets printed
+     for the desk. A full-bleed photograph there costs a cartridge and makes
+     the table harder to read. */
+  @media print {
+    .app-backdrop {
+      display: none !important;
+    }
+  }
+
   /**
    * Full height that is actually full on a phone.
    *

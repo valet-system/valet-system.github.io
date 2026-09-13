@@ -312,7 +312,12 @@ export default function Records() {
   }
 
   return (
-    <>
+    // h-full + flex-col, matching Properties and Users. main is the shell's
+    // scroll container; filling it exactly leaves main nothing to scroll, so
+    // the one region marked overflow below is the only thing that moves. The
+    // search box and the period filters stay put — on this screen especially,
+    // since they are what you adjust WHILE reading the table.
+    <div className="flex h-full min-w-0 flex-col">
       <PageHeader
         title={t('records.title')}
         subtitle={t('records.subtitle')}
@@ -334,7 +339,7 @@ export default function Records() {
       />
 
       {/* Filters in one row above what they change. */}
-      <div className="mb-4 space-y-3">
+      <div className="mb-4 shrink-0 space-y-3">
         <SearchInput
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -376,6 +381,7 @@ export default function Records() {
       </div>
 
       <SectionHeading
+        className="shrink-0"
         title={t('records.title')}
         icon="list"
         action={
@@ -409,28 +415,54 @@ export default function Records() {
           description={t(term ? 'records.nothingMatchesBody' : 'records.noneInPeriodBody')}
         />
       ) : (
-        <>
-          <Card padded={false} className="overflow-x-auto">
+        // min-h-0 AND min-w-0. Both are the same flex rule in the two axes: a
+        // flex item's default minimum size is its CONTENT, so without them this
+        // column refuses to be smaller than the table inside it.
+        //
+        // min-h-0 was already here — without it the table pushed the page
+        // taller and handed the scrolling back to main.
+        //
+        // min-w-0 is the fix for the right edge. The table is min-w-[72rem];
+        // on any window narrower than that plus the rail, this column grew to
+        // match it, so the card ran straight past main's padding and out of the
+        // window instead of stopping at the margin and scrolling INSIDE its own
+        // card. It looked like the layout was overlapping the right edge.
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          {/* THE ONLY THING ON THIS PAGE THAT SCROLLS — in BOTH directions.
+              The table is min-w-[72rem], so it already scrolled sideways; now
+              it scrolls down inside its own card too, and the pagination below
+              stays on screen instead of being chased down a long page. */}
+          <Card padded={false} className="scrollbar-slim min-h-0 flex-1 overflow-auto">
             <table className="w-full min-w-[72rem] text-sm">
               <thead>
-                <tr className="border-b border-line-strong bg-surface text-left text-xs uppercase tracking-wide text-ink-subtle">
-                  <th scope="col" className="px-4 py-3 font-semibold">{t('records.colDate')}</th>
-                  <th scope="col" className="px-4 py-3 font-semibold">{t('records.colProperty')}</th>
-                  <th scope="col" className="px-3 py-3 text-right font-semibold">{t('common.token')}</th>
-                  <th scope="col" className="px-4 py-3 font-semibold">{t('records.colGuest')}</th>
-                  <th scope="col" className="px-4 py-3 font-semibold">{t('records.colPhone')}</th>
-                  <th scope="col" className="px-4 py-3 font-semibold">{t('records.colCar')}</th>
-                  <th scope="col" className="px-4 py-3 font-semibold">{t('records.colParkedAt')}</th>
-                  <th scope="col" className="px-4 py-3 font-semibold">{t('records.colHandledBy')}</th>
+                {/* text-INK and the cells below carry font-bold: these are the
+                    labels that tell you which of ten columns you are reading,
+                    and at 12px uppercase in the palette's quietest grey they
+                    were the faintest thing on a screen made of numbers. */}
+                <tr className="border-b border-line-strong bg-surface text-left text-xs uppercase tracking-wide text-ink">
+                  {/* The row number. Right-aligned and tnum like the token
+                      column, because a column of digits that do not line up is
+                      harder to scan than no column at all. */}
+                  <th scope="col" className="px-4 py-3 text-right font-bold">
+                    {t('records.colNo')}
+                  </th>
+                  <th scope="col" className="px-4 py-3 font-bold">{t('records.colDate')}</th>
+                  <th scope="col" className="px-4 py-3 font-bold">{t('records.colProperty')}</th>
+                  <th scope="col" className="px-3 py-3 text-right font-bold">{t('common.token')}</th>
+                  <th scope="col" className="px-4 py-3 font-bold">{t('records.colGuest')}</th>
+                  <th scope="col" className="px-4 py-3 font-bold">{t('records.colPhone')}</th>
+                  <th scope="col" className="px-4 py-3 font-bold">{t('records.colCar')}</th>
+                  <th scope="col" className="px-4 py-3 font-bold">{t('records.colParkedAt')}</th>
+                  <th scope="col" className="px-4 py-3 font-bold">{t('records.colHandledBy')}</th>
                   {/* Next to Handled by on purpose: the question this column
                       exists to answer is "how did THAT operator score", and two
                       adjacent cells answer it without anyone building a report. */}
-                  <th scope="col" className="px-4 py-3 font-semibold">{t('records.colRating')}</th>
-                  <th scope="col" className="px-4 py-3 font-semibold">{t('records.colStatus')}</th>
+                  <th scope="col" className="px-4 py-3 font-bold">{t('records.colRating')}</th>
+                  <th scope="col" className="px-4 py-3 font-bold">{t('records.colStatus')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
-                {rows.map((r) => (
+                {rows.map((r, i) => (
                   <tr
                     key={r.id}
                     // ZEBRA, and align-middle rather than align-top.
@@ -446,6 +478,14 @@ export default function Records() {
                     // one line of data.
                     className="align-middle even:bg-surface-sunken/60"
                   >
+                    {/* CONTINUOUS ACROSS PAGES, not 1..100 on every one.
+                        page * PAGE is what makes row 143 read as the 143rd
+                        record of the period rather than as "43, again". The
+                        count beside the heading says 1-100 of 250 for the same
+                        reason — the two now agree. */}
+                    <td className="tnum whitespace-nowrap px-4 py-3 text-right text-ink-subtle">
+                      {(page * PAGE + i + 1).toLocaleString()}
+                    </td>
                     <td className="whitespace-nowrap px-4 py-3 text-ink-muted">
                       {formatDate(`${r.service_date}T12:00:00+05:30`)}
                     </td>
@@ -565,7 +605,7 @@ export default function Records() {
           </Card>
 
           {pages > 1 && (
-            <div className="mt-4 flex items-center justify-between gap-3">
+            <div className="mt-4 flex shrink-0 items-center justify-between gap-3">
               <Button
                 variant="secondary"
                 size="md"
@@ -576,7 +616,13 @@ export default function Records() {
                 {t('records.previous')}
               </Button>
 
-              <span className="tnum text-sm text-ink-subtle">
+              {/* A glass chip, not bare text. This sits between the two
+                  buttons directly on the backdrop photograph — the one label on
+                  the screen with no card behind it — so at text-sm/ink-subtle it
+                  washed out completely against the brighter parts of the image.
+                  Its own ground fixes that; bigger and darker type alone would
+                  still be fighting whatever the photo is doing underneath. */}
+              <span className="tnum shrink-0 rounded-lg border px-3 py-1.5 text-base font-semibold text-ink glass">
                 {t('records.pageOf', { page: page + 1, total: pages.toLocaleString() })}
               </span>
 
@@ -594,7 +640,7 @@ export default function Records() {
           )}
 
           {total > EXPORT_MAX && (
-            <p className="mt-4 flex max-w-3xl items-start gap-2 rounded-lg bg-info-soft px-3.5 py-2.5 text-xs leading-relaxed text-info">
+            <p className="mt-4 flex max-w-3xl shrink-0 items-start gap-2 rounded-lg bg-info-soft px-3.5 py-2.5 text-xs leading-relaxed text-info">
               <Icon name="info" size={14} className="mt-0.5 shrink-0" />
               <span>
                 {t('records.exportCap', {
@@ -604,8 +650,8 @@ export default function Records() {
               </span>
             </p>
           )}
-        </>
+        </div>
       )}
-    </>
+    </div>
   )
 }

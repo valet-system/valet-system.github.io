@@ -193,7 +193,7 @@ export default function RangePicker({
               'rounded-full px-3.5 py-2 text-sm transition-colors',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40',
               !custom && activeKey === option.key
-                ? 'bg-brand font-semibold text-ink-inverse'
+                ? 'bg-brand font-semibold text-on-brand'
                 : 'border border-line-strong bg-surface font-medium text-ink-muted hover:bg-surface-sunken',
             )}
           >
@@ -210,7 +210,7 @@ export default function RangePicker({
             'inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm transition-colors',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40',
             custom
-              ? 'bg-brand font-semibold text-ink-inverse'
+              ? 'bg-brand font-semibold text-on-brand'
               : 'border border-line-strong bg-surface font-medium text-ink-muted hover:bg-surface-sunken',
           )}
         >
@@ -302,7 +302,7 @@ export default function RangePicker({
                 'h-11 rounded-xl px-4 text-sm font-semibold transition-colors',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40',
                 dirty
-                  ? 'bg-brand text-ink-inverse hover:opacity-90'
+                  ? 'bg-brand text-on-brand hover:opacity-90'
                   : 'cursor-not-allowed border border-line-strong bg-surface-sunken text-ink-subtle',
               )}
             >

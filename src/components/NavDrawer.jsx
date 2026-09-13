@@ -121,14 +121,20 @@ export default function NavDrawer({ open, onClose, items }) {
           // long enough nav pushed the footer below the fold, and the footer is
           // where the language switch lives.
           'absolute left-0 top-0 flex h-full w-[17rem] max-w-[85vw] flex-col overflow-hidden',
-          'animate-slide-in-left bg-surface shadow-pop outline-none',
+          // bg-rail, not bg-surface: this panel IS the desktop rail on a
+          // phone, and the two showing the same nav in different colours
+          // reads as two different apps.
+          'animate-slide-in-left bg-rail shadow-pop outline-none',
           // The notch and the home indicator both sit over this panel.
           'pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]',
         )}
       >
         {/* ── brand ─────────────────────────────────────────────────── */}
         <div className="flex shrink-0 items-center gap-3 px-4 py-5">
-          <span className="flex h-10 w-[4.5rem] shrink-0 items-center justify-center rounded-xl bg-logo-plate px-2">
+          {/* Same plate as the rail's: the drawer takes bg-rail, which is a
+              pale panel in the light theme now, and a keyed-out gold mark on
+              it is barely visible. See AppShell. */}
+          <span className="flex h-10 w-[4.5rem] shrink-0 items-center justify-center rounded-lg bg-logo-plate px-2 dark:bg-transparent">
             {/* The size public/logo-mark.png is actually emitted at, per
                 `npm run logo`. Update both when the artwork changes. */}
             <img
@@ -141,10 +147,16 @@ export default function NavDrawer({ open, onClose, items }) {
             />
           </span>
           <div className="min-w-0">
-            <p className="truncate font-semibold leading-tight text-ink">{t('login.brand')}</p>
-            {propertyName && (
-              <p className="truncate text-xs leading-tight text-ink-subtle">{propertyName}</p>
-            )}
+            {/* Gold and first, matching the rail on md and up. A phone has no
+                rail, so this is the ONLY place the site name appears — and an
+                admin covering two sites must never be uncertain which one
+                they are acting on. */}
+            <p className="truncate text-sm font-semibold leading-tight text-rail-gold">
+              {propertyName || t('login.brand')}
+            </p>
+            <p className="truncate text-[0.6875rem] leading-tight text-rail-muted">
+              {role ? t(`role.${role}`) : ''}
+            </p>
           </div>
         </div>
 
@@ -161,8 +173,8 @@ export default function NavDrawer({ open, onClose, items }) {
                   'mb-1 flex min-h-12 items-center gap-3 rounded-xl border-l-2 px-3 text-[0.9375rem]',
                   'font-medium transition-colors',
                   isActive
-                    ? 'border-accent bg-brand-soft font-semibold text-brand'
-                    : 'border-transparent text-ink-muted hover:bg-surface-sunken hover:text-ink',
+                    ? 'border-rail-gold bg-rail-gold/[0.12] font-semibold text-rail-gold'
+                    : 'border-transparent text-rail-muted hover:border-rail-gold/40 hover:bg-rail-ink/[0.07] hover:text-rail-ink',
                 )
               }
             >
@@ -181,7 +193,7 @@ export default function NavDrawer({ open, onClose, items }) {
         {/* ── language, then who you are ──────────────────────────────
             shrink-0: this block is the reason the drawer exists at this size.
             It must never be the thing that gets squeezed off the bottom. */}
-        <div className="shrink-0 border-t border-line">
+        <div className="shrink-0 border-t border-rail-line">
           {/* ONE ROW, ONE TAP, and the label is written in the language it
               switches TO — somebody who cannot read English has to be able to
               find the Hindi option, which means seeing Devanagari. This replaced
@@ -190,7 +202,7 @@ export default function NavDrawer({ open, onClose, items }) {
           <button
             type="button"
             onClick={() => setLang(isHindi ? 'en' : 'hi')}
-            className="flex min-h-12 w-full items-center gap-3 px-4 text-[0.9375rem] font-medium text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink"
+            className="flex min-h-12 w-full items-center gap-3 px-4 text-[0.9375rem] font-medium text-rail-muted transition-colors hover:bg-rail-ink/[0.07] hover:text-rail-ink"
           >
             <Icon name="globe" size={19} />
             <span className="min-w-0 truncate">
@@ -198,15 +210,15 @@ export default function NavDrawer({ open, onClose, items }) {
             </span>
           </button>
 
-          <div className="flex items-center gap-3 border-t border-line px-4 py-4">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-bold text-brand">
+          <div className="flex items-center gap-3 border-t border-rail-line px-4 py-4">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-rail-ink/[0.08] text-xs font-bold text-rail-gold">
               {initials(personName(displayName, displayNameHi))}
             </span>
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold leading-tight text-ink">
+              <p className="truncate text-sm font-semibold leading-tight text-rail-ink">
                 {personName(displayName, displayNameHi)}
               </p>
-              <p className="truncate text-xs leading-tight text-ink-subtle">
+              <p className="truncate text-xs leading-tight text-rail-muted">
                 {role ? t(`role.${role}`) : ''}
               </p>
             </div>

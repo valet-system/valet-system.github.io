@@ -66,7 +66,7 @@ const VARIANTS = {
   info: {
     icon: 'info',
     duration: 4000,
-    className: 'bg-brand text-ink-inverse',
+    className: 'bg-brand text-on-brand',
   },
 }
 

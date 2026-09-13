@@ -54,7 +54,19 @@ import { istDayStart, timeAgo } from '@/utils/format'
  */
 const PAGE = 30
 
-export default function NotificationBell() {
+/**
+ * @param placement where this bell lives, which decides two things that cannot
+ *                  be guessed from CSS: what colour its button has to be, and
+ *                  which way its panel opens.
+ *
+ *   'bar'   the phone top bar — light frost, panel drops DOWN and right-aligned.
+ *   'rail'  the desktop navigation rail — near-black, and the bell sits near the
+ *           BOTTOM of it, so a panel dropping down would open off the bottom of
+ *           the window. It opens upward, and leftward from the rail's left edge,
+ *           which puts it over the content area where there is room for 21rem.
+ */
+export default function NotificationBell({ placement = 'bar' }) {
+  const inRail = placement === 'rail'
   const t = useT()
   // The feed's title and body are composed in SQL and stored in English —
   // see i18n/autoTranslate. Car numbers and place names inside them are left
@@ -303,15 +315,34 @@ export default function NotificationBell() {
               ? t('bell.unreadCount', { n: unread })
               : t('bell.title')
         }
-        className="relative flex h-10 w-10 items-center justify-center rounded-lg text-ink-inverse transition-colors hover:bg-white/10"
+        // Neutral ink in the bar, because the phone top bar is a light frost
+        // and near-white on it is invisible. Rail ink in the rail, because
+        // that one is near-black and the reverse is true there.
+        //
+        // OUTSIDE THE RAIL IT IS A PANE, NOT A BARE ICON. On the page the bell
+        // sits directly on the backdrop photograph with nothing else near it,
+        // and a 20px outline floating on a busy image reads as a smudge rather
+        // than a control. `glass` gives it the same frosted pane and lit rim as
+        // every card on the screen, so it is unmistakably a button — and the
+        // opaque ground is what makes the unread badge legible whatever the
+        // photo is doing behind it.
+        className={cn(
+          'relative flex h-10 w-10 items-center justify-center rounded-xl transition-colors',
+          inRail
+            ? 'text-rail-muted hover:bg-white/10 hover:text-rail-ink'
+            : 'border glass glass-hover text-ink-muted hover:text-ink',
+        )}
       >
-        <Icon name={unread > 0 ? 'bell' : 'bell-off'} size={20} />
+        {/* strokeWidth 2.1, up from the 1.75 default. This is the one icon
+            in the app with no label beside it and nothing but a photograph
+            behind it, so it has to carry on its own. */}
+        <Icon name={unread > 0 ? 'bell' : 'bell-off'} size={20} strokeWidth={2.1} />
 
         {/* An amber dot when the feed is broken, so a permanently empty bell is
             distinguishable from a quiet one without opening the panel. */}
         {loadError && (
           <span
-            className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-warning ring-2 ring-brand"
+            className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-warning ring-2 ring-surface-sunken"
             aria-hidden="true"
           />
         )}
@@ -350,7 +381,13 @@ export default function NotificationBell() {
             // ── TABLET AND UP: a normal dropdown under the bell ─────────
             // There is room here, and a full-width sheet on a desktop would
             // look like a mistake.
-            'sm:absolute sm:inset-x-auto sm:right-0 sm:top-12 sm:w-[21rem]',
+            inRail
+              // Upward, and out to the right of the rail. bottom-full because
+              // the bell is near the floor of the rail; left-0 because a 21rem
+              // panel cannot fit inside an 18rem rail, so it deliberately
+              // overhangs into the content area.
+              ? 'sm:absolute sm:inset-x-auto sm:left-0 sm:right-auto sm:top-auto sm:bottom-[calc(100%+0.5rem)] sm:w-[21rem]'
+              : 'sm:absolute sm:inset-x-auto sm:right-0 sm:top-12 sm:w-[21rem]',
 
             // Bounded by the viewport and laid out as a column, so the footer
             // ("Today only — the list clears at 5:30 am") can never be pushed
@@ -358,7 +395,19 @@ export default function NotificationBell() {
             // list below scrolls instead.
             'flex max-h-[calc(var(--app-h,100vh)-5.5rem)] flex-col sm:max-h-[32rem]',
 
-            'z-50 animate-slide-up overflow-hidden rounded-xl border border-line bg-surface shadow-pop',
+            // `glass`, like the cards and the top bar, so the panel belongs to
+            // the same material as everything it opens over.
+            //
+            // NOT glass-fade: that variant drops its edges on purpose because
+            // the top bar spans the window and an edge there reads as a rule
+            // ruled across the page. A dropdown is the opposite case — it is a
+            // floating object and needs its rim and its shadow, or it has no
+            // boundary against the content behind it.
+            //
+            // shadow-pop is gone because glass carries its own shadow; keeping
+            // both stacked two drop shadows and the panel looked like it was
+            // hovering a foot off the page.
+            'z-50 animate-slide-up overflow-hidden rounded-xl border glass',
           )}
         >
           {/* shrink-0: the title row keeps its height and the LIST gives way,
@@ -426,8 +475,19 @@ export default function NotificationBell() {
                       role="menuitem"
                       onClick={() => handleOpenItem(item)}
                       className={cn(
-                        'flex w-full items-start gap-3 px-4 py-3 text-left transition-colors',
-                        item.read_at ? 'hover:bg-surface-sunken' : 'bg-info-soft/40 hover:bg-info-soft',
+                        'glass-row flex w-full items-start gap-3 px-4 py-3 text-left',
+                        // UNREAD keeps its own tint and its own stronger
+                        // hover. That tint is the only thing marking a
+                        // notification as unread, so glass-row must not be
+                        // allowed to wash over it — a read and an unread row
+                        // looking alike under the pointer is the one confusion
+                        // this list cannot afford.
+                        //
+                        // The read rows used to hover to bg-surface-sunken,
+                        // which is an OPAQUE cream. On a frosted panel that
+                        // punched a solid block through the glass. glass-row
+                        // brightens against the pane instead.
+                        !item.read_at && 'bg-info-soft/40 hover:bg-info-soft',
                       )}
                     >
                       <span

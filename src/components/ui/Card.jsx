@@ -39,6 +39,16 @@ export default function Card({
   as: Tag = 'div',
   padded = true,
   interactive = false,
+  /**
+   * Whether the pane responds to the pointer at all. On by default, so every
+   * card in the app reacts without each page having to remember to ask.
+   *
+   * Pass `hover={false}` for a card that is pure container and nothing else —
+   * a single full-width form panel, say, where brightening as the mouse
+   * crosses it is noise carrying no information. A LIST of cards is the case
+   * this default is for: the response tells you which row you are on.
+   */
+  hover = true,
   urgent = false,
   accent,
   ...rest
@@ -46,10 +56,28 @@ export default function Card({
   return (
     <Tag
       className={cn(
-        'rounded-card border border-line bg-surface shadow-card',
+        // `glass`, not bg-surface: a frosted pane over the backdrop photograph
+        // rather than an opaque box on it. The rule — tint, lit rim, blur,
+        // Safari prefix and the no-backdrop-filter fallback — lives in
+        // index.css so Card, StatTile and the filter chips cannot drift apart.
+        // It carries its own shadow, so shadow-card is gone from here.
+        'rounded-card border glass',
         padded && 'p-4 sm:p-5',
-        interactive &&
-          'cursor-pointer transition-shadow duration-150 hover:shadow-raised focus-visible:shadow-raised',
+        // ── TWO STRENGTHS, AND THE DIFFERENCE IS A PROMISE ───────────────
+        // Both replace the old hover:shadow-raised, which barely registered
+        // once the card had a shadow and a lit rim of its own from `glass`.
+        //
+        //   interactive  the pane brightens AND zooms 2%. Only for cards that
+        //                actually do something when clicked — a surface that
+        //                comes toward you and then ignores the click is a lie
+        //                told by the whole card, not by one small icon.
+        //   hover        it brightens and its rim catches, nothing more. An
+        //                affordance ("you are on this one"), not an offer.
+        //
+        // Ordered so `interactive` wins: it comes second, and both write the
+        // same properties, so the zoom is added rather than fought over.
+        hover && !interactive && 'glass-lift',
+        interactive && 'glass-hover cursor-pointer focus-visible:shadow-raised',
         urgent && 'border-danger/40 animate-pulse-ring',
         // A 3px left rail is a cheap, quiet way to colour-code a card without
         // tinting the whole background (which hurts text contrast).
@@ -103,7 +131,13 @@ export function SectionHeading({ title, count, action, icon, className = '', id 
     // prop is silently dropped and getElementById finds nothing — a dead tap
     // with no error anywhere.
     <div id={id} className={cn('mb-3 flex items-center justify-between gap-3', className)}>
-      <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-ink-subtle">
+      {/* FULL INK. These headings are the one piece of text on most screens
+          with no card behind them — they sit directly on the backdrop
+          photograph, and both quieter steps in the palette washed out over the
+          bright parts of the image. ink-subtle went first, then ink-muted; the
+          uppercase, the letter-spacing and the size already say "label", so the
+          colour does not also have to be quiet to carry that. */}
+      <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-ink">
         {icon && <Icon name={icon} size={16} />}
         {title}
         {typeof count === 'number' && (

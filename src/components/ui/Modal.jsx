@@ -112,7 +112,18 @@ export default function Modal({
     >
       <div
         className={cn(
-          'flex max-h-[88vh] flex-col overflow-hidden bg-surface shadow-pop',
+          // `glass` + border, like every card, panel and dropdown. A solid
+          // white dialog was the last opaque surface left in the app and read
+          // as a piece of the old theme dropped on top of the new one.
+          //
+          // It is legible over the photograph for the same reason a card is:
+          // the blur keeps the image's light and discards its detail. The
+          // scrim below (backdrop:bg-ink/45) does most of the work anyway —
+          // this sits on an already-darkened page, not on the raw photo.
+          //
+          // glass carries its own shadow, so shadow-pop is gone; keeping both
+          // stacked two drop shadows under one dialog.
+          'flex max-h-[88vh] flex-col overflow-hidden border glass',
           'animate-slide-up rounded-t-2xl sm:rounded-2xl',
         )}
       >
@@ -138,8 +149,12 @@ export default function Modal({
 
         <div className="scrollbar-slim flex-1 overflow-y-auto px-5 py-5">{children}</div>
 
+        {/* The footer's tint: bg-surface-sunken WOULD be opaque, which on a
+            frosted dialog punches a solid bar across the bottom — the same
+            mistake the notification rows made. A white wash keeps the footer a
+            shade distinct from the body without breaking the glass. */}
         {footer && (
-          <div className="flex flex-col-reverse gap-2 border-t border-line bg-surface-sunken px-5 py-4 sm:flex-row sm:justify-end">
+          <div className="flex flex-col-reverse gap-2 border-t border-line bg-white/25 px-5 py-4 dark:bg-white/[0.04] sm:flex-row sm:justify-end">
             {footer}
           </div>
         )}

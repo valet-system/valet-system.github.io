@@ -126,6 +126,30 @@ function scrollToSection(id) {
   el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' })
 }
 
+/**
+ * A one-line "there is nothing here" note.
+ *
+ * ── WHY IT HAS A GROUND ───────────────────────────────────────────────────
+ * These used to be bare <p> tags. That was fine when the page had an opaque
+ * background: the text simply sat on the page. It stopped being fine once the
+ * page became a photograph behind glass — every OTHER thing in these sections
+ * is a card, so the one line saying "nobody is waiting" was the only element
+ * floating directly on the image, and it read as a different kind of object
+ * that had failed to load rather than as an answer.
+ *
+ * Still ONE LINE, not an EmptyState. The tall empty card was right when a
+ * section was the whole page; there are four more sections below this one, and
+ * a big empty box is just distance between the reader and the cars that matter.
+ */
+function QuietNote({ icon, children }) {
+  return (
+    <div className="flex items-center gap-2 rounded-card border px-4 py-3 text-sm text-ink-subtle glass">
+      {icon && <Icon name={icon} size={15} className="shrink-0" />}
+      <span className="min-w-0">{children}</span>
+    </div>
+  )
+}
+
 export default function Dashboard() {
   const t = useT()
   const { propertyId, propertyName } = useAuth()
@@ -563,15 +587,7 @@ export default function Dashboard() {
           }
         />
       ) : pending.length === 0 ? (
-        /* One line, not an EmptyState.
-           The big empty card was right when this section was the whole page —
-           it filled a screen that would otherwise look broken. It is not the
-           whole page any more: four more sections sit below it, so a tall empty
-           box is just distance between the reader and the cars that matter. */
-        <p className="flex items-center gap-2 px-1 text-sm text-ink-subtle">
-          <Icon name="check-circle" size={15} />
-          {t('queue.nobodyIsWaiting')}
-        </p>
+        <QuietNote icon="check-circle">{t('queue.nobodyIsWaiting')}</QuietNote>
       ) : (
         <div className="space-y-3">
           {pending.map((task) => (
@@ -702,18 +718,20 @@ export default function Dashboard() {
                 makes the page crawl, and silently showing forty would read as
                 "that is all the cars", which is worse than a slow page. */}
             {available.length > SHOW_ON_SITE && (
-              <p className="mt-3 px-1 text-sm text-ink-subtle">
-                {t('queue.andMoreOnSite', { n: available.length - SHOW_ON_SITE })}
-              </p>
+              <div className="mt-3">
+                <QuietNote>
+                  {t('queue.andMoreOnSite', { n: available.length - SHOW_ON_SITE })}
+                </QuietNote>
+              </div>
             )}
           </>
         ) : (
           /* Two different nothings, and they must not read the same. A search
              that matched nothing is the admin's next move; an empty car park is
              just a quiet evening. */
-          <p className="px-1 text-sm text-ink-subtle">
+          <QuietNote icon="search">
             {t(carQuery.trim() ? 'queue.noParkedMatch' : 'queue.noCarsOnSite')}
-          </p>
+          </QuietNote>
         )}
       </div>
 
