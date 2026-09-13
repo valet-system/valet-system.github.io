@@ -317,7 +317,7 @@ export default function Records() {
     // the one region marked overflow below is the only thing that moves. The
     // search box and the period filters stay put — on this screen especially,
     // since they are what you adjust WHILE reading the table.
-    <div className="flex h-full min-w-0 flex-col">
+    <div className="flex min-w-0 flex-col md:h-full">
       <PageHeader
         title={t('records.title')}
         subtitle={t('records.subtitle')}
@@ -427,12 +427,12 @@ export default function Records() {
         // match it, so the card ran straight past main's padding and out of the
         // window instead of stopping at the margin and scrolling INSIDE its own
         // card. It looked like the layout was overlapping the right edge.
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="flex min-w-0 flex-col md:min-h-0 md:flex-1">
           {/* THE ONLY THING ON THIS PAGE THAT SCROLLS — in BOTH directions.
               The table is min-w-[72rem], so it already scrolled sideways; now
               it scrolls down inside its own card too, and the pagination below
               stays on screen instead of being chased down a long page. */}
-          <Card padded={false} className="scrollbar-slim min-h-0 flex-1 overflow-auto">
+          <Card padded={false} className="scrollbar-slim overflow-x-auto md:min-h-0 md:flex-1 md:overflow-auto">
             <table className="w-full min-w-[72rem] text-sm">
               <thead>
                 {/* text-INK and the cells below carry font-bold: these are the

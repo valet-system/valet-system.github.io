@@ -345,7 +345,7 @@ export default function Properties() {
     // scroll, and the one region marked overflow-y-auto below becomes the
     // only thing on the page that moves. The title, the tabs and the stat
     // tiles stay put where they can be read at a glance.
-    <div className="flex h-full flex-col">
+    <div className="flex flex-col md:h-full">
       <PageHeader
         // "Overview", not the reference's "DASHBOARD". This screen is not the
         // dashboard — /admin/dashboard is — and an eyebrow that names the
@@ -511,7 +511,7 @@ export default function Properties() {
               reveals the BLURRED backdrop the card was frosting, and the
               bottom of the list turned into a smear. A clean cut at the
               scroller's edge is honest and reads better. */}
-          <div className="scrollbar-slim min-h-0 flex-1 space-y-2.5 overflow-y-auto pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
+          <div className="scrollbar-slim space-y-2.5 pb-[calc(0.5rem+env(safe-area-inset-bottom))] md:min-h-0 md:flex-1 md:overflow-y-auto">
             {visible.map((property) => (
               <PropertyRow
                 key={property.id}

@@ -370,7 +370,7 @@ export default function Spaces() {
        screen's bell and account menu stopped 73rem from the left while every
        other screen's sat against the window edge. The header is chrome and
        belongs in the same place on every page. */
-    <div className="flex h-full flex-col">
+    <div className="flex flex-col md:h-full">
       <PageHeader
         title={t('spaces.title')}
         // A valet_admin has one site and the subtitle names it. A system_admin
@@ -384,7 +384,7 @@ export default function Spaces() {
           columns, the facts box — is inside here, so they still share one
           right-hand edge and cannot drift apart. Only the page header is
           outside it, which is the point. */}
-      <div className="flex min-h-0 w-full flex-1 flex-col">
+      <div className="flex w-full flex-col md:min-h-0 md:flex-1">
 
       {/* ── CHIPS, not a dropdown ─────────────────────────────────────────
           A select costs two taps and hides the options until the first one.
@@ -438,7 +438,7 @@ export default function Spaces() {
           begins directly under the filters, and a prompt floating in the middle
           of the window broke that rhythm. */}
       {isSystemAdmin && !chosen && (
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="md:min-h-0 md:flex-1 md:overflow-y-auto">
           <EmptyState
             icon="building"
             title={t('spaces.pickASite')}
@@ -449,7 +449,7 @@ export default function Spaces() {
 
       {/* Everything below the tabs scrolls; the tabs and the title do not. */}
       {target && (
-        <div className="scrollbar-slim min-h-0 flex-1 overflow-y-auto pb-[calc(1rem+env(safe-area-inset-bottom))]">
+        <div className="scrollbar-slim pb-[calc(1rem+env(safe-area-inset-bottom))] md:min-h-0 md:flex-1 md:overflow-y-auto">
       {/* No cap. The tiles span the content width like every other block on
           the page — on request, and it is the same right-hand edge as the two
           columns below them, so the old objection (two different edges on one

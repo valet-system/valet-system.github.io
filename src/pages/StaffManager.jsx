@@ -530,7 +530,7 @@ export default function StaffManager() {
     // moves. The title, the counts and the whole filter row stay put —
     // which is the point on this screen, because the search box and the
     // role filters are what you use WHILE reading the list.
-    <div className="flex h-full flex-col">
+    <div className="flex flex-col md:h-full">
       <PageHeader
         title={t(isSystemAdmin ? 'staff.usersTitle' : 'staff.valetTitle')}
         subtitle={
@@ -796,7 +796,7 @@ export default function StaffManager() {
               card's own frosted background and left a blurred, half-transparent
               band across the bottom of the list. The card's own bottom edge
               already cuts cleanly, so it needs no fade and no padding for one. */}
-          <div className="scrollbar-slim min-h-0 flex-1 overflow-y-auto rounded-2xl border glass pb-[env(safe-area-inset-bottom)]">
+          <div className="scrollbar-slim rounded-2xl border glass pb-[env(safe-area-inset-bottom)] md:min-h-0 md:flex-1 md:overflow-y-auto">
             {visible.map((person, i) => (
               <StaffRow
                 key={person.id}
