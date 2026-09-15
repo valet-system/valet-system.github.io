@@ -366,17 +366,28 @@ export default function Properties() {
 
           items-start, not items-center — with a wrapped multi-line tab strip,
           centring would float the button down into the middle of the block. */}
-      <div className="mb-4 flex shrink-0 items-start justify-between gap-3">
+      {/* STACKS ON A PHONE, for the same reason the site rows do. As one row
+          the wrapping tab strip and a shrink-0 button could not both fit in
+          390px, so the button ran off the right edge and took the whole page
+          with it — the stat tiles below were cut off by the sideways scroll it
+          created, which looked like a separate bug.
+
+          min-w-0 on the tab strip's wrapper matters as much as the stacking: a
+          flex item will not shrink below its content without it, so the chips
+          would keep the row wide whatever the button did. */}
+      <div className="mb-4 flex shrink-0 flex-col items-stretch gap-3 sm:flex-row sm:items-start">
         {properties.length > 0 ? (
-          <PropertyTabs properties={properties} value={activeTab} onChange={setTab} />
+          <div className="min-w-0 flex-1">
+            <PropertyTabs properties={properties} value={activeTab} onChange={setTab} />
+          </div>
         ) : (
-          <span />
+          <span className="flex-1" />
         )}
         <Button
           icon="plus"
           size="md"
           onClick={() => setAddOpen(true)}
-          className="ml-auto shrink-0"
+          className="shrink-0 sm:ml-auto"
         >
           {t('props.add')}
         </Button>
@@ -863,7 +874,16 @@ function PropertyRow({ property, cars, operators, onEdit, onToggle, onDelete, on
       // into the component, and those are what drift.
       className={cn('rounded-2xl p-4', !property.is_active && 'opacity-60')}
     >
-      <div className="flex items-start gap-3.5">
+      {/* ── STACKS ON A PHONE ─────────────────────────────────────────
+          A single row here needs 56px of thumbnail, four 40px icon buttons and
+          their gaps — about 230px of the 390px a phone has — which left the
+          site name roughly 120px. It wrapped mid-word and the edit pencil
+          landed on top of it.
+
+          So below sm the actions drop to their own line, right-aligned, and
+          the name gets the full width. From sm up it is the one row it was. */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-3.5">
+        <div className="flex min-w-0 flex-1 items-start gap-3.5">
         {/* ── A THUMBNAIL-SHAPED TILE, NOT A PHOTOGRAPH ────────────────
             The reference shows a photo of each building here. There is no
             photo to show: `properties` has name, address, phone and
@@ -907,7 +927,11 @@ function PropertyRow({ property, cars, operators, onEdit, onToggle, onDelete, on
           </p>
         </div>
 
-        <div className="flex shrink-0 items-center gap-1">
+        </div>
+
+        {/* justify-end so the buttons sit under the right edge of the card on a
+            phone rather than under the thumbnail. */}
+        <div className="flex shrink-0 items-center justify-end gap-1">
           <Button
             variant="ghost"
             size="icon-md"

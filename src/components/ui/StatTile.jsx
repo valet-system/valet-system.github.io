@@ -103,7 +103,15 @@ export default function StatTile({
         // left behind when the cards were first made translucent — the stat row
         // stayed opaque white and read as an older component. Sharing the rule
         // in index.css is what stops that happening again.
-        'group flex flex-col rounded-2xl border p-5 text-left glass',
+        // min-w-0 is what lets a phone lay these out at all. A CSS grid
+        // column is minmax(AUTO, 1fr) by default, and `auto` means it cannot
+        // be narrower than its content's min-content width — here that is a
+        // footer link like "Manage operators ->", around 200px. Two of those
+        // in grid-cols-2 forced the row past 390px, which made <main> scroll
+        // sideways and dragged every other block on the page out with it:
+        // the tab chips and the site rows were cut off by an overflow they
+        // had no part in.
+        'group flex min-w-0 flex-col rounded-2xl border p-5 text-left glass',
         // Matches Card: every tile lifts, a clickable one also zooms.
         // glass-hover/-lift rather than hover:shadow-raised, because the tile
         // already carries a shadow and a lit rim from `glass` — a slightly

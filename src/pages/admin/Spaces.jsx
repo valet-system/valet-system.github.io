@@ -398,11 +398,14 @@ export default function Spaces() {
         <div
           role="tablist"
           aria-label={t('spaces.chooseSiteLabel')}
-          // Scrolls rather than wraps: the Add property button has no limit on
-          // it, and a second row of chips would push the list below the fold on
-          // a phone. -mx-1 px-1 gives the focus ring on the first and last chip
-          // room to draw outside the scroll container.
-          className="shrink-0 scrollbar-none -mx-1 mb-4 flex gap-2 overflow-x-auto px-1 pb-1"
+          // WRAPS, it does not scroll sideways. It used to be a horizontal
+          // scroller on the grounds that a second row of chips costs height on
+          // a phone — but a chip you have to discover by swiping is a site you
+          // may not know exists, and this row is how you choose which site you
+          // are setting up. Height is the cheaper thing to spend.
+          //
+          // Same shape as the Properties tabs, which already wrap.
+          className="shrink-0 mb-4 flex flex-wrap gap-2"
         >
           {properties.map((prop) => {
             const active = prop.id === chosen
