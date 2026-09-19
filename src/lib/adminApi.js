@@ -144,6 +144,10 @@ const MISSING_MIGRATION = {
     'Hindi names are not set up in the database yet. Run migration 0022 (staff_name_hi) in the Supabase SQL Editor.',
   admin_delete_staff:
     'Deleting a user is not set up in the database yet. Run migration 0063 (delete_inactive_staff) in the Supabase SQL Editor.',
+  admin_search_staff_pool:
+    'Reusing an existing operator is not set up in the database yet. Run migration 0070 (staff_pool_reuse) in the Supabase SQL Editor.',
+  admin_attach_operator:
+    'Reusing an existing operator is not set up in the database yet. Run migration 0070 (staff_pool_reuse) in the Supabase SQL Editor.',
   default:
     'That feature is not set up in the database yet. Run the pending migrations in supabase/migrations in the Supabase SQL Editor.',
 }
@@ -376,6 +380,28 @@ export function setStaffRole(userRoleId, role, propertyId) {
   return call('admin_set_staff_role', {
     p_user_role_id: userRoleId,
     p_role: role,
+    p_property_id: propertyId ?? null,
+  })
+}
+
+/**
+ * Every operator that exists anywhere, active or not, for the "already have
+ * an account" picker Add Staff opens with. Resolves { ok, rows }.
+ */
+export function searchStaffPool(query) {
+  return call('admin_search_staff_pool', { p_query: query ?? '' })
+}
+
+/**
+ * Points an EXISTING operator row at (possibly a new) property and
+ * reactivates it — no new row, no new phone number, no PHONE_TAKEN.
+ *
+ * propertyId is required for a system admin and ignored for a valet admin,
+ * who can only ever land someone on their own property.
+ */
+export function attachOperator(userRoleId, propertyId) {
+  return call('admin_attach_operator', {
+    p_user_role_id: userRoleId,
     p_property_id: propertyId ?? null,
   })
 }

@@ -77,11 +77,13 @@ import { Skeleton } from '@/components/ui/Spinner'
 import { Field, Input, SearchInput, Select } from '@/components/ui/Field'
 import HindiInput from '@/components/ui/HindiInput'
 import {
+  attachOperator,
   createStaff,
   changeStaffPhone,
   deleteStaff,
   getStaffPin,
   renameStaff,
+  searchStaffPool,
   setStaffActive,
   setStaffNameHi,
   setStaffPin,
@@ -140,7 +142,9 @@ export default function StaffManager() {
   // it carries the list, so the dialog can state exactly who and how many.
   const [allOffTarget, setAllOffTarget] = useState(null)
 
+  const [poolOpen, setPoolOpen] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
+  const [attachTarget, setAttachTarget] = useState(null)
   const [editTarget, setEditTarget] = useState(null)
   const [deactivateTarget, setDeactivateTarget] = useState(null)
   // Holds the LIST being deleted, not one person: the button acts on the
@@ -315,6 +319,17 @@ export default function StaffManager() {
     // a warning and not a failure. Said out loud so it does not go unnoticed:
     // the admin would otherwise find the name in English later and not know why.
     if (nameHiFailed) toast.error(t('hindiName.notSaved'))
+    await load()
+  }
+
+  async function handleAttached(result, person, propertyName) {
+    setAttachTarget(null)
+    setPoolOpen(false)
+    toast.success(
+      result.moved
+        ? t('staff.attachedMoved', { name: person.name, property: propertyName })
+        : t('staff.attachedReactivated', { name: person.name, property: propertyName }),
+    )
     await load()
   }
 
@@ -582,7 +597,7 @@ export default function StaffManager() {
         <Button
           icon="plus"
           size="md"
-          onClick={() => setAddOpen(true)}
+          onClick={() => setPoolOpen(true)}
           className="col-span-2 sm:ml-auto"
         >
           {t(isSystemAdmin ? 'staff.addUser' : 'staff.addValet')}
@@ -698,7 +713,7 @@ export default function StaffManager() {
           }
           action={
             staff.length === 0 ? (
-              <Button icon="plus" size="md" onClick={() => setAddOpen(true)}>
+              <Button icon="plus" size="md" onClick={() => setPoolOpen(true)}>
                 {t(isSystemAdmin ? 'staff.addUser' : 'staff.addValet')}
               </Button>
             ) : null
@@ -816,6 +831,28 @@ export default function StaffManager() {
       )}
 
       {/* ── modals ──────────────────────────────────────────────────── */}
+      <StaffPoolModal
+        open={poolOpen}
+        onClose={() => setPoolOpen(false)}
+        onAddNew={() => {
+          setPoolOpen(false)
+          setAddOpen(true)
+        }}
+        onPick={(person) => setAttachTarget(person)}
+        isSystemAdmin={isSystemAdmin}
+        propertyId={propertyId}
+        propertyName={propertyName}
+      />
+
+      <AttachOperatorModal
+        target={attachTarget}
+        onClose={() => setAttachTarget(null)}
+        onAttached={handleAttached}
+        isSystemAdmin={isSystemAdmin}
+        properties={properties}
+        defaultPropertyFilter={propertyFilter}
+      />
+
       <AddStaffModal
         open={addOpen}
         onClose={() => setAddOpen(false)}
@@ -1092,6 +1129,229 @@ function StaffRow({
         />
       </div>
     </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// POOL — "already have an account?" comes first, a blank form second.
+//
+// A phone number is unique across the whole system (migration 0004), so
+// re-adding someone who already exists at another venue — or who was
+// deactivated here — always collided on it. This picks the same row instead
+// of filling the create form again.
+// ═══════════════════════════════════════════════════════════════════════
+
+function StaffPoolModal({ open, onClose, onAddNew, onPick, isSystemAdmin, propertyId, propertyName }) {
+  const t = useT()
+  const [rows, setRows] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [loadError, setLoadError] = useState(null)
+  const [search, setSearch] = useState('')
+
+  useEffect(() => {
+    if (!open) return
+    setSearch('')
+    setLoadError(null)
+    setLoading(true)
+    let stale = false
+    ;(async () => {
+      const result = await searchStaffPool('')
+      if (stale) return
+      setLoading(false)
+      if (!result.ok) {
+        setLoadError(result.error)
+        return
+      }
+      setRows(result.rows ?? [])
+    })()
+    return () => {
+      stale = true
+    }
+  }, [open])
+
+  const visible = useMemo(() => {
+    const needle = search.trim().toLowerCase()
+    const digits = normalisePhone(search)
+    return rows
+      .filter((r) => {
+        // A valet_admin gains nothing from seeing someone already active on
+        // their own roster — Edit is the tool for that row, not this list.
+        if (!isSystemAdmin && r.property_id === propertyId && r.is_active) return false
+        if (!needle) return true
+        return (
+          r.name?.toLowerCase().includes(needle) ||
+          (digits.length >= 3 && r.phone?.includes(digits))
+        )
+      })
+      .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''))
+  }, [rows, search, isSystemAdmin, propertyId])
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={t('staff.addFromPool')}
+      description={t('staff.addFromPoolHint')}
+      size="md"
+      footer={
+        <Button variant="secondary" size="md" onClick={onClose}>
+          {t('common.cancel')}
+        </Button>
+      }
+    >
+      <div className="space-y-3">
+        <SearchInput
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onClear={() => setSearch('')}
+          placeholder={t('staff.searchPlaceholder')}
+        />
+
+        <Button variant="secondary" size="md" icon="plus" fullWidth onClick={onAddNew}>
+          {t('staff.addSomeoneNew')}
+        </Button>
+
+        {loading ? (
+          <div className="space-y-2">
+            {[0, 1].map((i) => (
+              <Skeleton key={i} className="h-16 rounded-xl" />
+            ))}
+          </div>
+        ) : loadError ? (
+          <p className="rounded-lg bg-danger-soft px-3.5 py-3 text-sm font-medium text-danger">
+            {loadError}
+          </p>
+        ) : visible.length === 0 ? (
+          <p className="px-1 py-4 text-center text-sm text-ink-subtle">
+            {t('staff.poolEmpty')}
+          </p>
+        ) : (
+          <div className="scrollbar-slim max-h-80 space-y-1.5 overflow-y-auto">
+            {visible.map((person) => (
+              <button
+                key={person.id}
+                type="button"
+                onClick={() => onPick(person)}
+                className="flex w-full items-center gap-3 rounded-xl border border-line-strong px-3.5 py-2.5 text-left transition-colors hover:border-brand hover:bg-brand-soft/40"
+              >
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-soft text-sm font-bold text-ink-muted">
+                  {initials(person.name)}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-ink">{person.name}</p>
+                  <p className="tnum truncate text-xs text-ink-muted">
+                    +91 {formatPhone(person.phone)}
+                  </p>
+                </div>
+                <div className="shrink-0 text-right">
+                  {!person.is_active && (
+                    <Badge tone="warning" size="sm" dot>
+                      {t('staff.inactive')}
+                    </Badge>
+                  )}
+                  {person.property_name && (
+                    <p className="mt-0.5 text-[0.6875rem] text-ink-subtle">{person.property_name}</p>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ATTACH — confirms landing an existing operator on this (or a chosen)
+// property, and does it through the same row rather than a new one.
+// ═══════════════════════════════════════════════════════════════════════
+
+function AttachOperatorModal({ target, onClose, onAttached, isSystemAdmin, properties, defaultPropertyFilter }) {
+  const t = useT()
+  const [property, setProperty] = useState('')
+  const [error, setError] = useState(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (!target) return
+    setProperty(defaultPropertyFilter && defaultPropertyFilter !== 'all' ? defaultPropertyFilter : '')
+    setError(null)
+    setBusy(false)
+  }, [target, defaultPropertyFilter])
+
+  if (!target) return null
+
+  async function handleConfirm() {
+    if (isSystemAdmin && !property) {
+      setError(t('staff.chooseProperty'))
+      return
+    }
+    setBusy(true)
+    const result = await attachOperator(target.id, isSystemAdmin ? property : null)
+    setBusy(false)
+
+    if (!result.ok) {
+      setError(result.error)
+      return
+    }
+
+    await onAttached(result, target, result.property_name)
+  }
+
+  const movingFromElsewhere = target.is_active && target.property_name
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={t('staff.attachTitle', { name: target.name })}
+      size="sm"
+      closeOnBackdrop={false}
+      footer={
+        <>
+          <Button variant="secondary" size="md" onClick={onClose}>
+            {t('common.cancel')}
+          </Button>
+          <Button variant="primary" size="md" onClick={handleConfirm} loading={busy}>
+            {t('staff.attachConfirm')}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {error && (
+          <div
+            role="alert"
+            className="flex items-start gap-2.5 rounded-lg bg-danger-soft px-3.5 py-3 text-sm font-medium text-danger"
+          >
+            <Icon name="alert" size={17} className="mt-0.5" strokeWidth={2} />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {movingFromElsewhere && (
+          <p className="flex items-start gap-2 rounded-lg bg-warning-soft px-3.5 py-3 text-sm leading-relaxed text-warning">
+            <Icon name="alert" size={15} className="mt-0.5 shrink-0" />
+            <span>{t('staff.attachMovesWarning', { name: target.name, property: target.property_name })}</span>
+          </p>
+        )}
+
+        {isSystemAdmin && (
+          <Select
+            label={t('staff.property')}
+            value={property}
+            onChange={(e) => {
+              setProperty(e.target.value)
+              setError(null)
+            }}
+            placeholder={t('staff.chooseProperty')}
+            options={properties.map((p) => ({ value: p.id, label: p.name }))}
+            required
+          />
+        )}
+      </div>
+    </Modal>
   )
 }
 
