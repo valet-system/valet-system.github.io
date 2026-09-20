@@ -109,6 +109,7 @@ export default function CheckIn() {
   const [recent, setRecent] = useState([])
   const [todayCount, setTodayCount] = useState(null)
   const [range, setRange] = useState(null)
+  const [openTokens, setOpenTokens] = useState([])
   const [loadError, setLoadError] = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -126,10 +127,10 @@ export default function CheckIn() {
     if (!propertyId) return
     const today = istToday()
 
-    // Three independent reads, so they go out together rather than one
+    // Four independent reads, so they go out together rather than one
     // after another — on hotel wifi that is the difference between the
     // panel appearing at once and appearing in stages.
-    const [recentRes, countRes, rangeRes, unparkedRes] = await Promise.all([
+    const [recentRes, countRes, rangeRes, openRes, unparkedRes] = await Promise.all([
       supabase
         .from('parked_vehicles')
         .select('id, token_number, car_number, car_tier, guest_name, guest_name_hi, status, parked_at')
@@ -142,15 +143,27 @@ export default function CheckIn() {
         .select('id', { count: 'exact', head: true })
         .eq('property_id', propertyId)
         .eq('service_date', today),
+      operatorId
+        ? supabase
+            .from('operator_token_ranges')
+            .select('range_start, range_end')
+            .eq('property_id', propertyId)
+            .eq('operator_id', operatorId)
+            .eq('service_date', today)
+            .eq('is_active', true)
+            // maybeSingle: no range yet is normal until the admin assigns one
+            // for tonight — see migration 0071. Information, not a fault.
+            .maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+      // Every currently-open (non-delivered) car at the property, just the
+      // token number. Cheap and small — intersected client-side against this
+      // operator's own range below, rather than adding a read RPC purely to
+      // join two small sets.
       supabase
-        .from('token_ranges')
-        .select('range_start, range_end, next_token')
+        .from('parked_vehicles')
+        .select('token_number')
         .eq('property_id', propertyId)
-        .eq('range_date', today)
-        // maybeSingle: no range yet is normal first thing in the morning.
-        // allocate_token() creates one on demand, so this is information,
-        // not a fault.
-        .maybeSingle(),
+        .neq('status', 'delivered'),
       // Open parking tasks held by THIS operator. Not filtered by service_date:
       // a car checked in at 11pm and still unparked at 00:30 is the same loose
       // end, and dropping it at midnight would lose the only record of where a
@@ -169,7 +182,7 @@ export default function CheckIn() {
         : Promise.resolve({ data: [], error: null }),
     ])
 
-    const failure = recentRes.error || countRes.error || rangeRes.error || unparkedRes.error
+    const failure = recentRes.error || countRes.error || rangeRes.error || openRes.error || unparkedRes.error
     if (failure) {
       setLoadError(describeDbError(failure, t('common.couldNotLoad')))
     } else {
@@ -180,6 +193,7 @@ export default function CheckIn() {
     if (!unparkedRes.error) setUnparked(unparkedRes.data ?? [])
     if (!countRes.error) setTodayCount(countRes.count ?? 0)
     if (!rangeRes.error) setRange(rangeRes.data ?? null)
+    if (!openRes.error) setOpenTokens(openRes.data ?? [])
     setLoading(false)
     // t is a dep so a language switch mid-error re-renders the message in the
     // new language on the next load, rather than keeping the stale one.
@@ -189,13 +203,23 @@ export default function CheckIn() {
     loadSummary()
   }, [loadSummary])
 
-  // Another operator checking a car in changes the count and the next token,
-  // so this panel has to follow the property, not just this operator.
+  // Another operator checking a car in or a delivery freeing up a slot
+  // changes the count and how much of this operator's own range is open.
   useRealtime({
     channel: `checkin-vehicles:${propertyId}`,
     table: 'parked_vehicles',
     filter: propertyId ? `property_id=eq.${propertyId}` : undefined,
     enabled: Boolean(propertyId),
+    onRefetch: loadSummary,
+  })
+  // The admin assigning or extending THIS operator's range mid-shift — the
+  // exact fix path for TOKEN_RANGE_EXHAUSTED — has to reach this screen live,
+  // or the operator keeps seeing "range full" after the admin already fixed it.
+  useRealtime({
+    channel: `checkin-range:${operatorId}`,
+    table: 'operator_token_ranges',
+    filter: operatorId ? `operator_id=eq.${operatorId}` : undefined,
+    enabled: Boolean(operatorId),
     onRefetch: loadSummary,
   })
 
@@ -332,7 +356,15 @@ export default function CheckIn() {
     )
   }
 
-  const remaining = range ? Math.max(0, range.range_end - range.next_token + 1) : null
+  // How many of the operator's own slots are currently occupied by a car that
+  // has not been delivered yet — the same "lowest free slot" occupancy check
+  // allocate_operator_token() runs server-side, done here just to show a
+  // count. See migration 0071.
+  const openInRange = range
+    ? openTokens.filter((v) => v.token_number >= range.range_start && v.token_number <= range.range_end).length
+    : 0
+  const rangeSize = range ? range.range_end - range.range_start + 1 : null
+  const remaining = range ? Math.max(0, rangeSize - openInRange) : null
 
   return (
     <>
@@ -518,13 +550,15 @@ export default function CheckIn() {
 
             <div className="border-t border-line pt-3">
               <div className="flex items-baseline justify-between">
-                <span className="text-sm font-medium text-ink-muted">{t('checkin.nextToken')}</span>
+                <span className="text-sm font-medium text-ink-muted">{t('checkin.yourRange')}</span>
                 {loading ? (
                   <Skeleton className="h-7 w-14" />
                 ) : range ? (
-                  <span className="tnum text-2xl font-bold text-ink">{range.next_token}</span>
+                  <span className="tnum text-2xl font-bold text-ink">
+                    {range.range_start}–{range.range_end}
+                  </span>
                 ) : (
-                  <span className="text-sm text-ink-subtle">{t('checkin.notStarted')}</span>
+                  <span className="text-sm text-ink-subtle">{t('checkin.noRangeTonight')}</span>
                 )}
               </div>
 
@@ -538,7 +572,7 @@ export default function CheckIn() {
                 >
                   {t('checkin.tokensLeft', {
                     left: remaining,
-                    total: range.range_end - range.range_start + 1,
+                    total: rangeSize,
                   })}
                   {remaining <= 20 && t('checkin.rangeLow')}
                 </p>

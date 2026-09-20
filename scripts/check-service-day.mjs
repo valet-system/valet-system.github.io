@@ -106,62 +106,20 @@ for (const [label, utc, expected] of cases) {
   }
 }
 
-// ── the cron has to run AFTER the boundary, not before it ─────────────
-
-const cron = sql.match(/'daily-token-reset',\s*\n\s*'([^']+)'/)
-if (!cron) {
-  failed += 1
-  console.error('Could not find the daily-token-reset schedule in the migration.')
-} else {
-  const [minute, hour] = cron[1].split(' ')
-  const utcMinutes = Number(hour) * 60 + Number(minute)
-  // The job creates the NEXT range, so it must fire after the day has turned.
-  // 05:30 IST is 00:00 UTC, so anything in the first few minutes of UTC is right.
-  const istMinutes = (utcMinutes + IST_OFFSET_MIN) % (24 * 60)
-  if (istMinutes < sqlMinutes || istMinutes > sqlMinutes + 60) {
-    failed += 1
-    console.error(
-      `FAIL  daily-token-reset runs at ${cron[1]} UTC = ` +
-        `${String(Math.floor(istMinutes / 60)).padStart(2, '0')}:` +
-        `${String(istMinutes % 60).padStart(2, '0')} IST, ` +
-        `which is not just after the ${sqlMinutes / 60}:00-ish boundary.`,
-    )
-  }
-}
-
-// ── the UI must name the same time the cron actually runs ─────────────
+// ── the daily-token-reset cron, and the UI that once quoted its time ──
 //
-// It did not, once: the job moved to 05:35 IST and Token Management went on
-// telling the admin "created automatically at 00:05 IST", in both languages.
-// A screen that states a fact confidently and wrongly is worse than one that
-// says nothing at all.
-if (cron) {
-  const [minute, hour] = cron[1].split(' ')
-  const istMinutes = (Number(hour) * 60 + Number(minute) + IST_OFFSET_MIN) % (24 * 60)
-  const hhmm =
-    `${String(Math.floor(istMinutes / 60)).padStart(2, '0')}:` +
-    `${String(istMinutes % 60).padStart(2, '0')}`
-
-  const dict = readFileSync('src/i18n/translations.js', 'utf8')
-  for (const key of ['tokens.readyBody', 'tokens.noRangeTomorrowBody']) {
-    // Both language blocks carry the key, so both copies get checked.
-    const matches = [...dict.matchAll(new RegExp(`'${key}':([^\\n]*\\n?[^\\n]*)`, 'g'))]
-    if (matches.length !== 2) {
-      failed += 1
-      console.error(`FAIL  expected ${key} in both language blocks, found ${matches.length}`)
-      continue
-    }
-    for (const m of matches) {
-      if (!m[1].includes(hhmm)) {
-        failed += 1
-        console.error(
-          `FAIL  ${key} does not mention ${hhmm} IST, which is when the cron runs:\n` +
-            `      ${m[1].trim()}`,
-        )
-      }
-    }
-  }
-}
+// Retired by migration 0071 (operator_token_ranges): token ranges are now
+// assigned per operator, per night, by an admin — nothing auto-creates one
+// any more, so daily-token-reset is unscheduled and Token Management no
+// longer has copy naming when it used to run. The checks that used to live
+// here (the cron fires just after the 05:30 boundary; tokens.readyBody and
+// tokens.noRangeTomorrowBody quote that same time) went with it — both
+// halves of what they compared are gone, not just one, so there is nothing
+// left for them to catch out of step.
+//
+// The SQL/JS boundary-agreement check above is untouched: ist_today() and
+// istToday() still have to agree, since operator_token_ranges.service_date
+// and allocate_operator_token()'s own occupancy check both key off it.
 
 if (failed) {
   console.error(`\n${failed} failure(s).`)

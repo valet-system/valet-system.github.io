@@ -113,9 +113,17 @@ const CODE_MESSAGES = {
   ALREADY_REQUESTED: ['This car has already been requested.', 'इस गाड़ी की माँग पहले ही दर्ज है।'],
   BAD_OPERATOR: ['That person cannot take this car.', 'यह व्यक्ति यह गाड़ी नहीं ले सकता।'],
   OPERATOR_BUSY: ['That operator is already on another car.', 'यह ऑपरेटर पहले से दूसरी गाड़ी पर है।'],
+  // The SQL almost always raises this WITH a detail naming the caller's own
+  // range ("your range (1 to 5) is full..."), which the withDetail branch
+  // above shows verbatim in English. This bare pair is only the fallback for
+  // the rare case that detail is missing, and for Hindi.
   TOKEN_RANGE_EXHAUSTED: [
-    "Today's token range is finished. Ask your admin to extend it in Token Management.",
-    'आज की टोकन रेंज खत्म हो गई है। एडमिन से टोकन मैनेजमेंट में बढ़वाइए।',
+    'Your token range is full right now. Ask your admin to extend it.',
+    'आपकी टोकन रेंज अभी भरी है। एडमिन से बढ़वाइए।',
+  ],
+  NO_TOKEN_RANGE: [
+    'You have not been given a token range for tonight. Ask your admin to assign you one.',
+    'आज रात के लिए आपको अभी तक टोकन रेंज नहीं दी गई है। एडमिन से रेंज दिलवाइए।',
   ],
 }
 
@@ -200,7 +208,7 @@ function describeRpcError(fn, error) {
     if (raw.includes('one_open_retrieval')) {
       return { code: 'ALREADY_REQUESTED', error: codeMessage('ALREADY_REQUESTED') }
     }
-    if (raw.includes('token_per_day')) {
+    if (raw.includes('token_per_day') || raw.includes('active_token')) {
       return {
         code: 'TOKEN_CLASH',
         error: pickLang('That token was just taken. Try again.', 'यह टोकन अभी-अभी किसी और को चला गया। दोबारा कोशिश कीजिए।'),

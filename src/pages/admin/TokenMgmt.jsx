@@ -3,57 +3,56 @@
  * │ FILE: src/pages/admin/TokenMgmt.jsx                                 │
  * │                                                                     │
  * │ WHAT THIS FILE IS                                                   │
- * │   Today's token range: how many numbers are left, and the controls   │
- * │   to widen it or to set up tomorrow's.                               │
+ * │   Tonight's token roster: which numbers each on-duty operator hands   │
+ * │   out, and the controls to assign one or extend it.                  │
  * │                                                                     │
- * │ WHY RUNNING OUT MATTERS                                              │
- * │   allocate_token() refuses once next_token passes range_end, so      │
- * │   check-in stops dead at the porch with a car already blocking the   │
- * │   entrance. That is why "remaining" is the biggest number here and   │
- * │   turns red early rather than at zero.                               │
+ * │ THE PIVOT — see migration 0071                                       │
+ * │   Token numbers used to be one shared counter for the whole property. │
+ * │   Now each operator gets their OWN small range and reuses a number    │
+ * │   the moment the car it was written on is delivered. This screen is   │
+ * │   the admin's nightly roster: who has a range, how far they have run  │
+ * │   through it, and who still needs one before they can check in a car. │
  * │                                                                     │
- * │ THE RANGE CAN ONLY EVER GROW                                         │
- * │   Extend is an update guarded by `.gt('range_end', …)` on the        │
- * │   server side of the query, so a smaller number simply matches no    │
- * │   rows. Shrinking below next_token would strand tokens that are      │
- * │   already written on guests' stubs — the paper in someone's pocket   │
- * │   cannot be migrated.                                                │
+ * │ RANGES RESET EVERY NIGHT                                             │
+ * │   Nothing auto-creates a range any more — an admin assigns one to     │
+ * │   each on-duty operator every service day. That is deliberate: who is │
+ * │   on duty changes night to night, so there is no sane default to      │
+ * │   fall back on. See admin_assign_token_range in the migration.        │
  * │                                                                     │
- * │   range_start is never editable after creation for the same reason.  │
- * │                                                                     │
- * │ WHY THERE IS NO "TOKENS USED" WRITE PATH HERE                        │
- * │   next_token belongs to allocate_token() alone. Editing it by hand   │
- * │   would hand two guests the same number. This screen reads it.       │
+ * │ A RANGE CAN ONLY EVER GROW                                           │
+ * │   admin_assign_token_range() refuses to shrink range_end or move       │
+ * │   range_start once a row exists — a number already handed out cannot  │
+ * │   retroactively belong to someone else.                              │
  * │                                                                     │
  * │ DEPENDS ON                                                          │
- * │   src/supabase, hooks/useRealtime, ui/BarChart, ui/StatTile,         │
- * │   utils/format, types                                                │
+ * │   src/supabase, lib/tokenApi, hooks/useRealtime, ui/BarChart,         │
+ * │   ui/Card, ui/Modal, utils/format                                    │
  * └─────────────────────────────────────────────────────────────────────┘
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { PageHeader } from '@/components/AppShell'
 import { BarChart } from '@/components/ui/BarChart'
+import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
 import Card, { CardHeader, SectionHeading } from '@/components/ui/Card'
 import EmptyState from '@/components/ui/EmptyState'
-import { Field, Input } from '@/components/ui/Field'
+import { Input } from '@/components/ui/Field'
 import Icon from '@/components/ui/Icon'
+import Modal from '@/components/ui/Modal'
 import {
   CardSkeleton,
   ChartSkeleton,
   HeaderSkeleton,
   SectionHeadingSkeleton,
-  StatRowSkeleton,
 } from '@/components/ui/PageSkeleton'
-import StatTile, { ProgressBar, StatRow } from '@/components/ui/StatTile'
 import { useAuth } from '@/context/AuthContext'
 import { useT } from '@/i18n'
 import { useToast } from '@/context/ToastContext'
 import useRealtime from '@/hooks/useRealtime'
 import { supabase, describeDbError } from '@/supabase'
-import { formatDate, istHour, istToday } from '@/utils/format'
-import { DEFAULT_TOKEN_END, DEFAULT_TOKEN_START } from '@/types'
+import { assignTokenRange, removeTokenRange, tokenRoster } from '@/lib/tokenApi'
+import { formatDate, initials, istHour, istToday, personName } from '@/utils/format'
 import { cn } from '@/utils/cn'
 
 /**
@@ -92,38 +91,35 @@ export function busyWindow(hours) {
   return { from, to }
 }
 
-/** Tomorrow's business date, in IST, as YYYY-MM-DD. */
-function istTomorrow() {
-  const [y, m, d] = istToday().split('-').map(Number)
-  // Date.UTC + noon avoids every DST and month-length edge case; we only ever
-  // read the date parts back out.
-  const next = new Date(Date.UTC(y, m - 1, d + 1, 12))
-  return next.toISOString().slice(0, 10)
-}
-
 export default function TokenMgmt() {
   const t = useT()
   const { propertyId, propertyName } = useAuth()
   const toast = useToast()
 
-  const [today, setToday] = useState(null)
-  const [tomorrow, setTomorrow] = useState(null)
+  const [roster, setRoster] = useState([])
+  const [operators, setOperators] = useState([])
   const [hours, setHours] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  // { operator: { id, name, name_hi }, existingRange: roster row | null }
+  const [assignTarget, setAssignTarget] = useState(null)
+  const [removingId, setRemovingId] = useState(null)
+
   const todayDate = istToday()
-  const tomorrowDate = istTomorrow()
 
   const load = useCallback(async () => {
     if (!propertyId) return
 
-    const [rangesRes, carsRes] = await Promise.all([
+    const [rosterRes, operatorsRes, carsRes] = await Promise.all([
+      tokenRoster(propertyId, todayDate),
       supabase
-        .from('token_ranges')
-        .select('id, range_date, range_start, range_end, next_token')
+        .from('user_roles')
+        .select('id, name, name_hi')
         .eq('property_id', propertyId)
-        .in('range_date', [todayDate, tomorrowDate]),
+        .eq('role', 'operator')
+        .eq('is_active', true)
+        .order('name'),
       supabase
         .from('parked_vehicles')
         .select('parked_at')
@@ -131,16 +127,20 @@ export default function TokenMgmt() {
         .eq('service_date', todayDate),
     ])
 
-    if (rangesRes.error) {
-      setError(describeDbError(rangesRes.error, t('tokens.couldNotLoad')))
+    if (!rosterRes.ok) {
+      setError(rosterRes.error)
+      setLoading(false)
+      return
+    }
+    if (operatorsRes.error) {
+      setError(describeDbError(operatorsRes.error, t('tokens.couldNotLoad')))
       setLoading(false)
       return
     }
 
-    const rows = rangesRes.data ?? []
     setError(null)
-    setToday(rows.find((r) => r.range_date === todayDate) ?? null)
-    setTomorrow(rows.find((r) => r.range_date === tomorrowDate) ?? null)
+    setRoster(rosterRes.rows ?? [])
+    setOperators(operatorsRes.data ?? [])
 
     // Bucket by IST hour, not the device's — a laptop left on UTC would shift
     // the whole evening peak by five and a half hours.
@@ -148,17 +148,26 @@ export default function TokenMgmt() {
     for (const car of carsRes.data ?? []) buckets[istHour(car.parked_at)] += 1
     setHours(buckets)
     setLoading(false)
-  }, [propertyId, todayDate, tomorrowDate, t])
+  }, [propertyId, todayDate, t])
 
   useEffect(() => {
     load()
   }, [load])
 
-  // Another operator checking a car in moves next_token, so this screen has to
-  // follow the property rather than only reloading on demand.
+  // Two independent things move this screen: a check-in/delivery changes a
+  // row's issued/open/delivered counts, and another admin assigning or
+  // extending a range elsewhere adds or changes a roster row. Both need their
+  // own watch, or the screen goes stale mid-shift.
   useRealtime({
     channel: `tokens-vehicles:${propertyId}`,
     table: 'parked_vehicles',
+    filter: propertyId ? `property_id=eq.${propertyId}` : undefined,
+    enabled: Boolean(propertyId),
+    onRefetch: load,
+  })
+  useRealtime({
+    channel: `tokens-ranges:${propertyId}`,
+    table: 'operator_token_ranges',
     filter: propertyId ? `property_id=eq.${propertyId}` : undefined,
     enabled: Boolean(propertyId),
     onRefetch: load,
@@ -182,69 +191,37 @@ export default function TokenMgmt() {
     }
   }, [hours])
 
-  async function createRange(date, start, end) {
-    const { error: err } = await supabase.from('token_ranges').insert({
-      property_id: propertyId,
-      range_date: date,
-      range_start: start,
-      range_end: end,
-      // Must start AT range_start, not at the column default of 1 — otherwise
-      // a range beginning at 500 would hand out token 1.
-      next_token: start,
-    })
+  // Active operators with no row at all tonight — not even a removed one —
+  // are the ones who still need a range before they can check in a car.
+  const unassigned = useMemo(
+    () => operators.filter((op) => !roster.some((row) => row.operator_id === op.id)),
+    [operators, roster],
+  )
 
-    if (err) {
-      toast.error(describeDbError(err, t('tokens.couldNotCreate')))
-      return false
+  async function handleRemove(row) {
+    setRemovingId(row.operator_id)
+    const result = await removeTokenRange({ operatorId: row.operator_id })
+    setRemovingId(null)
+
+    if (!result.ok) {
+      toast.error(result.error)
+      return
     }
-    toast.success(t('tokens.created', { date: formatDate(`${date}T12:00:00+05:30`) }))
+    toast.success(t('tokens.removed', { name: row.operator_name }))
     load()
-    return true
-  }
-
-  async function extendRange(range, newEnd) {
-    const { data, error: err } = await supabase
-      .from('token_ranges')
-      .update({ range_end: newEnd })
-      .eq('id', range.id)
-      // Only ever upward. A number below the current end matches nothing, so
-      // the guard is in the query rather than in a check we could forget.
-      .lt('range_end', newEnd)
-      .select('id')
-
-    if (err) {
-      toast.error(describeDbError(err, t('tokens.couldNotExtend')))
-      return false
-    }
-    if (!data || data.length === 0) {
-      toast.error(t('tokens.onlyBigger'))
-      return false
-    }
-
-    toast.success(t('tokens.extended', { end: newEnd }))
-    load()
-    return true
   }
 
   if (loading) {
     return (
       <>
         <HeaderSkeleton />
-        <StatRowSkeleton />
-        <div className="mb-5 grid gap-5 lg:grid-cols-2">
-          <CardSkeleton lines={4} />
-          <CardSkeleton lines={2} />
-        </div>
+        <SectionHeadingSkeleton />
+        <CardSkeleton lines={4} />
         <SectionHeadingSkeleton />
         <ChartSkeleton height={240} bars={13} />
       </>
     )
   }
-
-  const used = today ? today.next_token - today.range_start : 0
-  const size = today ? today.range_end - today.range_start + 1 : 0
-  const remaining = today ? Math.max(0, today.range_end - today.next_token + 1) : 0
-  const low = today && remaining <= 20
 
   return (
     <>
@@ -264,96 +241,56 @@ export default function TokenMgmt() {
             </Button>
           }
         />
-      ) : !today ? (
-        // No range today means no stats and no chart worth drawing, so this
-        // branch is just the two set-up forms, at a form's width.
-        <div className="max-w-3xl">
-          <SectionHeading title={t('tokens.today')} icon="ticket" />
-          <NoRangeYet date={todayDate} onCreate={createRange} label="today" />
-          <Tomorrow
-            range={tomorrow}
-            date={tomorrowDate}
-            onCreate={createRange}
-          />
-        </div>
       ) : (
         <>
-          {/* Every tile carries a hint. Four tiles across a wide monitor with
-              nothing but a label and a two-digit number read as an unfinished
-              page; the hint is also the line that makes each number mean
-              something to someone who has not used this screen before. */}
-          <StatRow className="mb-5">
-            <StatTile
-              label={t('tokens.nextToken')}
-              value={today.next_token}
-              icon="ticket"
-              hint={t('tokens.goesToNext')}
-            />
-            <StatTile
-              label={t('tokens.used')}
-              value={used}
-              icon="car"
-              tone="info"
-              hint={t('tokens.ofToday', { n: size })}
-            />
-            <StatTile
-              label={t('tokens.remaining')}
-              value={remaining}
-              icon={low ? 'alert' : 'check-circle'}
-              tone={low ? 'danger' : 'success'}
-              hint={t(low ? 'tokens.extendNow' : 'tokens.enough')}
-            />
-            <StatTile
-              label={t('tokens.range')}
-              value={`${today.range_start}–${today.range_end}`}
-              icon="grid"
-              hint={formatDate(`${todayDate}T12:00:00+05:30`)}
-            />
-          </StatRow>
-
-          {low && (
-            <p className="mb-5 flex max-w-3xl items-start gap-2.5 rounded-lg bg-danger-soft px-3.5 py-3 text-sm font-medium text-danger">
-              <Icon name="alert" size={17} className="mt-0.5 shrink-0" strokeWidth={2} />
-              <span>
-                {t(remaining === 1 ? 'tokens.lowWarning' : 'tokens.lowWarning_plural', {
-                  n: remaining,
-                })}
-              </span>
-            </p>
+          <SectionHeading title={t('tokens.roster')} icon="ticket" count={roster.length} />
+          {roster.length === 0 ? (
+            <Card className="mb-5">
+              <CardHeader
+                icon="ticket"
+                title={t('tokens.rosterEmpty')}
+                subtitle={t('tokens.rosterEmptyBody')}
+              />
+            </Card>
+          ) : (
+            <Card padded={false} className="mb-5 overflow-hidden">
+              {roster.map((row, index) => (
+                <RosterRow
+                  key={row.operator_id}
+                  row={row}
+                  isFirst={index === 0}
+                  busy={removingId === row.operator_id}
+                  onExtend={() =>
+                    setAssignTarget({
+                      operator: { id: row.operator_id, name: row.operator_name, name_hi: row.operator_name_hi },
+                      existingRange: row,
+                    })
+                  }
+                  onRemove={() => handleRemove(row)}
+                />
+              ))}
+            </Card>
           )}
 
-          {/* Today and Tomorrow side by side, chart full width beneath.
-              The previous attempt paired a narrow controls column with the
-              chart, and those two are nothing alike in height — whichever
-              ran short left a hole beside the other. Today and Tomorrow are
-              the same kind of thing and come out roughly the same size, so
-              they pair cleanly; the chart then gets the whole width, which is
-              what a chart actually wants.
-              h-full on both cards so the shorter one squares off rather than
-              leaving a step between them. */}
-          <div className="mb-5 grid gap-5 lg:grid-cols-2">
-            <div className="flex flex-col">
-              <SectionHeading title={t('tokens.today')} icon="ticket" />
-              <Card className="flex-1">
-                <ProgressBar
-                  value={used}
-                  max={size}
-                  tone={low ? 'danger' : 'info'}
-                  label={t('tokens.issuedToday')}
-                />
-                <ExtendForm range={today} onExtend={extendRange} />
-              </Card>
-            </div>
-
-            <div className="flex flex-col">
-              <Tomorrow
-                range={tomorrow}
-                date={tomorrowDate}
-                onCreate={createRange}
-                cardClassName="flex-1"
+          {unassigned.length > 0 && (
+            <>
+              <SectionHeading
+                title={t('tokens.unassignedTitle')}
+                icon="alert"
+                count={unassigned.length}
               />
-            </div>
-          </div>
+              <Card padded={false} className="mb-5 overflow-hidden">
+                {unassigned.map((op, index) => (
+                  <UnassignedRow
+                    key={op.id}
+                    operator={op}
+                    isFirst={index === 0}
+                    onAssign={() => setAssignTarget({ operator: op, existingRange: null })}
+                  />
+                ))}
+              </Card>
+            </>
+          )}
 
           <SectionHeading title={t('tokens.byHour')} icon="chart" />
           <Card className="mb-5">
@@ -370,200 +307,237 @@ export default function TokenMgmt() {
           </Card>
         </>
       )}
+
+      <AssignRangeModal target={assignTarget} onClose={() => setAssignTarget(null)} onDone={load} />
     </>
   )
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// TOMORROW
-//
-// One component because it appears in two places — beside today's controls
-// once a range exists, and under the set-up form when it does not. Two copies
-// of it drifted the moment the layout changed.
+// ROSTER ROW — one operator's range for tonight, plus their three counts.
 // ═══════════════════════════════════════════════════════════════════
 
-function Tomorrow({ range, date, onCreate, cardClassName = 'mb-5' }) {
+function RosterRow({ row, isFirst, busy, onExtend, onRemove }) {
   const t = useT()
 
   return (
-    <>
-      <SectionHeading title={t('tokens.tomorrow')} icon="clock" />
-      {range ? (
-        <Card className={cardClassName}>
-          <CardHeader
-            icon="check-circle"
-            title={t('tokens.ready', { start: range.range_start, end: range.range_end })}
-            subtitle={formatDate(`${date}T12:00:00+05:30`)}
-          />
-          <p className="mt-3 text-sm leading-relaxed text-ink-subtle">
-            {t('tokens.readyBody', { start: range.range_start })}
-          </p>
-        </Card>
-      ) : (
-        <NoRangeYet
-          date={date}
-          onCreate={onCreate}
-          label="tomorrow"
-          className={cardClassName}
-        />
+    <div
+      className={cn(
+        'flex flex-wrap items-center gap-4 px-5 py-4',
+        !isFirst && 'border-t border-line',
+        !row.is_active && 'opacity-50',
       )}
-    </>
+    >
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-sm font-bold text-ink-muted">
+        {initials(row.operator_name)}
+      </span>
+
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-[0.9375rem] font-semibold leading-snug text-ink">
+            {personName(row.operator_name, row.operator_name_hi)}
+          </p>
+          {!row.is_active && (
+            <Badge tone="warning" size="sm" dot>
+              {t('tokens.removedBadge')}
+            </Badge>
+          )}
+        </div>
+        <p className="tnum mt-0.5 text-[0.8125rem] font-medium text-ink-muted">
+          {row.range_start}–{row.range_end}
+        </p>
+        <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[0.6875rem] font-medium text-ink-subtle">
+          <span>
+            {t('tokens.issuedTonight')}: {row.issued_count}
+          </span>
+          <span>
+            {t('tokens.currentlyOut')}: {row.open_count}
+          </span>
+          <span>
+            {t('tokens.deliveredTonight')}: {row.delivered_count}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex shrink-0 items-center gap-1">
+        <Button variant="secondary" size="sm" icon="plus" onClick={onExtend}>
+          {t('tokens.extend')}
+        </Button>
+        {row.is_active && (
+          <Button
+            variant="ghost"
+            size="icon-md"
+            icon="x-circle"
+            onClick={onRemove}
+            disabled={busy}
+            aria-label={t('tokens.remove')}
+            title={t('tokens.remove')}
+            className="hover:bg-danger-soft hover:text-danger"
+          />
+        )}
+      </div>
+    </div>
   )
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// CREATE
+// UNASSIGNED ROW — an active operator with no range yet tonight.
 // ═══════════════════════════════════════════════════════════════════
 
-function NoRangeYet({ date, onCreate, label, className = 'mb-5' }) {
+function UnassignedRow({ operator, isFirst, onAssign }) {
   const t = useT()
-  const [start, setStart] = useState(String(DEFAULT_TOKEN_START))
-  const [end, setEnd] = useState(String(DEFAULT_TOKEN_END))
+
+  return (
+    <div className={cn('flex items-center gap-4 px-5 py-4', !isFirst && 'border-t border-line')}>
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-sm font-bold text-ink-muted">
+        {initials(operator.name)}
+      </span>
+      <p className="min-w-0 flex-1 truncate text-[0.9375rem] font-semibold text-ink">
+        {personName(operator.name, operator.name_hi)}
+      </p>
+      <Button variant="secondary" size="sm" icon="plus" onClick={onAssign} className="shrink-0">
+        {t('tokens.assign')}
+      </Button>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ASSIGN / EXTEND — one modal, two modes depending on whether the
+// operator already has a row tonight.
+// ═══════════════════════════════════════════════════════════════════
+
+function AssignRangeModal({ target, onClose, onDone }) {
+  const t = useT()
+  const toast = useToast()
+
+  const [start, setStart] = useState('')
+  const [end, setEnd] = useState('')
   const [error, setError] = useState(null)
 
-  const submit = async () => {
-    const s = Number(start)
+  const isExtend = Boolean(target?.existingRange)
+
+  useEffect(() => {
+    if (!target) return
+    setStart('')
+    setEnd('')
+    setError(null)
+  }, [target])
+
+  if (!target) return null
+
+  const { operator, existingRange } = target
+
+  async function submit() {
     const e = Number(end)
 
-    if (!Number.isInteger(s) || s < 1) return setError(t('tokens.startTooSmall'))
-    if (!Number.isInteger(e) || e <= s) return setError(t('tokens.endTooSmall'))
-    if (e - s + 1 > 5000) return setError(t('tokens.rangeTooBig'))
+    if (isExtend) {
+      if (!Number.isInteger(e) || e <= existingRange.range_end) {
+        setError(t('tokens.enterAbove', { end: existingRange.range_end }))
+        return
+      }
+    } else {
+      const s = Number(start)
+      if (!Number.isInteger(s) || s < 1) {
+        setError(t('tokens.startTooSmall'))
+        return
+      }
+      if (!Number.isInteger(e) || e <= s) {
+        setError(t('tokens.endTooSmall'))
+        return
+      }
+    }
 
-    setError(null)
-    await onCreate(date, s, e)
-    return undefined
+    const result = await assignTokenRange({
+      operatorId: operator.id,
+      rangeEnd: e,
+      rangeStart: isExtend ? undefined : Number(start),
+    })
+
+    if (!result.ok) {
+      setError(result.error)
+      return
+    }
+
+    toast.success(
+      isExtend
+        ? t('tokens.extended', { end: e })
+        : t('tokens.assigned', { name: operator.name, start: Number(start), end: e }),
+    )
+    onDone()
+    onClose()
   }
 
   return (
-    <Card className={className}>
-      <CardHeader
-        icon="ticket"
-        title={t(label === 'today' ? 'tokens.noRangeToday' : 'tokens.noRangeTomorrow')}
-        subtitle={
-          label === 'today'
-            ? t('tokens.noRangeTodayBody', {
-                start: DEFAULT_TOKEN_START,
-                end: DEFAULT_TOKEN_END,
-              })
-            : t('tokens.noRangeTomorrowBody')
-        }
-      />
+    <Modal
+      open
+      onClose={onClose}
+      title={t('tokens.assignTitle')}
+      description={personName(operator.name, operator.name_hi)}
+      size="sm"
+      closeOnBackdrop={false}
+      footer={
+        <>
+          <Button variant="secondary" size="md" onClick={onClose}>
+            {t('common.cancel')}
+          </Button>
+          <Button variant="primary" size="md" onClick={submit}>
+            {isExtend ? t('tokens.extend') : t('tokens.assign')}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {error && (
+          <div
+            role="alert"
+            className="flex items-start gap-2.5 rounded-lg bg-danger-soft px-3.5 py-3 text-sm font-medium text-danger"
+          >
+            <Icon name="alert" size={17} className="mt-0.5" strokeWidth={2} />
+            <span>{error}</span>
+          </div>
+        )}
 
-      {/* The button goes UNDER the fields, not beside them. This card renders
-          both full width and inside a 26rem column, and three controls in a
-          row do not survive the narrow case. Two short number fields side by
-          side always fit. */}
-      <div className="mt-4 space-y-3">
-        <div className="flex gap-3">
+        {isExtend ? (
           <Input
-            label={t('tokens.firstToken')}
-            type="tel"
-            inputMode="numeric"
-            value={start}
-            onChange={(e) => setStart(e.target.value.replace(/\D/g, '').slice(0, 5))}
-            containerClassName="min-w-0 flex-1"
-          />
-          <Input
-            label={t('tokens.lastToken')}
+            label={t('tokens.extendTo')}
+            hint={t('tokens.extendHint', { end: existingRange.range_end })}
             type="tel"
             inputMode="numeric"
             value={end}
-            onChange={(e) => setEnd(e.target.value.replace(/\D/g, '').slice(0, 5))}
-            containerClassName="min-w-0 flex-1"
-          />
-        </div>
-        <Button variant="primary" icon="plus" onClick={submit} fullWidth>
-          {t('tokens.create')}
-        </Button>
-      </div>
-
-      {error && (
-        <p role="alert" className="mt-2 flex items-start gap-1.5 text-sm font-medium text-danger">
-          <Icon name="alert" size={15} className="mt-0.5" />
-          <span>{error}</span>
-        </p>
-      )}
-    </Card>
-  )
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// EXTEND
-// ═══════════════════════════════════════════════════════════════════
-
-function ExtendForm({ range, onExtend }) {
-  const t = useT()
-  const [value, setValue] = useState('')
-  const [error, setError] = useState(null)
-
-  const submit = async () => {
-    const next = Number(value)
-    if (!Number.isInteger(next) || next <= range.range_end) {
-      return setError(t('tokens.enterAbove', { end: range.range_end }))
-    }
-    if (next - range.range_start + 1 > 5000) {
-      return setError(t('tokens.rangeTooBigOne'))
-    }
-
-    setError(null)
-    const ok = await onExtend(range, next)
-    if (ok) setValue('')
-    return undefined
-  }
-
-  return (
-    <div className="mt-5 border-t border-line pt-4">
-      {/* The button lives INSIDE the Field, in a row with the input.
-          The obvious layout — <Input> beside <Button> with items-end — aligns
-          the button to the bottom of the whole FIELD, and a field is label +
-          input + hint. So the button sat level with the hint text, one line
-          below the box it belongs to, and dropped further the moment an error
-          replaced the hint. Same pattern as PinSection in StaffManager. */}
-      <Field
-        label={t('tokens.extendTo')}
-        htmlFor="extend-token"
-        error={error}
-        hint={!error ? t('tokens.extendHint', { end: range.range_end }) : undefined}
-      >
-        <div className="flex items-start gap-2">
-          <input
-            id="extend-token"
-            value={value}
             onChange={(e) => {
-              setValue(e.target.value.replace(/\D/g, '').slice(0, 5))
+              setEnd(e.target.value.replace(/\D/g, '').slice(0, 5))
               if (error) setError(null)
             }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault()
-                submit()
-              }
-            }}
-            type="tel"
-            inputMode="numeric"
-            placeholder={String(range.range_end + 100)}
-            aria-invalid={error ? true : undefined}
-            className={cn(
-              // min-w-0 so the input yields to the button instead of pushing
-              // it off the row — see the note in ui/BarChart for the same trap.
-              'tnum h-touch min-w-0 flex-1 rounded-xl border bg-surface px-4',
-              'text-base text-ink outline-none placeholder:text-ink-subtle',
-              error
-                ? 'border-danger focus:border-danger'
-                : 'border-line-strong focus:border-brand focus:ring-2 focus:ring-brand/20',
-            )}
+            placeholder={String(existingRange.range_end + 5)}
           />
-          <Button
-            variant="secondary"
-            icon="plus"
-            onClick={submit}
-            disabled={!value}
-            className="shrink-0"
-          >
-            {t('tokens.extend')}
-          </Button>
-        </div>
-      </Field>
-    </div>
+        ) : (
+          <div className="flex gap-3">
+            <Input
+              label={t('tokens.firstToken')}
+              type="tel"
+              inputMode="numeric"
+              value={start}
+              onChange={(e) => {
+                setStart(e.target.value.replace(/\D/g, '').slice(0, 5))
+                if (error) setError(null)
+              }}
+              containerClassName="min-w-0 flex-1"
+            />
+            <Input
+              label={t('tokens.lastToken')}
+              type="tel"
+              inputMode="numeric"
+              value={end}
+              onChange={(e) => {
+                setEnd(e.target.value.replace(/\D/g, '').slice(0, 5))
+                if (error) setError(null)
+              }}
+              containerClassName="min-w-0 flex-1"
+            />
+          </div>
+        )}
+      </div>
+    </Modal>
   )
 }
