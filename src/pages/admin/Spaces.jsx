@@ -62,8 +62,9 @@ import { useT } from '@/i18n'
 import { useToast } from '@/context/ToastContext'
 import useRealtime from '@/hooks/useRealtime'
 import { hindiNameFor } from '@/lib/hindiText'
-import { supabase, describeDbError } from '@/supabase'
+import { supabase, describeDbError, selectOptional } from '@/supabase'
 import { cn } from '@/utils/cn'
+import { siteName } from '@/utils/format'
 
 /**
  * The heading row and every place row share this, so the number boxes line up
@@ -121,11 +122,20 @@ export default function Spaces() {
     if (!isSystemAdmin) return
     let cancelled = false
     ;(async () => {
-      const { data } = await supabase
-        .from('properties')
-        .select('id, name')
-        .eq('is_active', true)
-        .order('name')
+      // selectOptional: name_hi arrives with migration 0073, and this list is
+      // how a system_admin chooses which site to set up. A 42703 here would
+      // leave them with no sites at all on a database that has not had it yet.
+      const { data } = await selectOptional(
+        () =>
+          supabase
+            .from('properties')
+            .select('id, name, name_hi')
+            .eq('is_active', true)
+            .order('name'),
+        () =>
+          supabase.from('properties').select('id, name').eq('is_active', true).order('name'),
+        'properties.name_hi',
+      )
       if (!cancelled) setProperties(data ?? [])
     })()
     return () => {
@@ -425,7 +435,7 @@ export default function Spaces() {
                     : 'border-line-strong bg-surface text-ink-muted hover:text-ink',
                 )}
               >
-                {prop.name}
+                {siteName(prop.name, prop.name_hi)}
               </button>
             )
           })}

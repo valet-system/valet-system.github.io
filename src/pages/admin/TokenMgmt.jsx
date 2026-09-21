@@ -4,7 +4,7 @@
  * │                                                                     │
  * │ WHAT THIS FILE IS                                                   │
  * │   Tonight's token roster: which numbers each on-duty operator hands   │
- * │   out, and the controls to assign one or extend it.                  │
+ * │   out, and the controls to give them a range or add another.         │
  * │                                                                     │
  * │ THE PIVOT — see migration 0071                                       │
  * │   Token numbers used to be one shared counter for the whole property. │
@@ -19,10 +19,12 @@
  * │   on duty changes night to night, so there is no sane default to      │
  * │   fall back on. See admin_assign_token_range in the migration.        │
  * │                                                                     │
- * │ A RANGE CAN ONLY EVER GROW                                           │
- * │   admin_assign_token_range() refuses to shrink range_end or move       │
- * │   range_start once a row exists — a number already handed out cannot  │
- * │   retroactively belong to someone else.                              │
+ * │ AN OPERATOR CAN HOLD SEVERAL RANGES — see migration 0074              │
+ * │   "Extend" is gone: it could only grow a range at its top edge, which  │
+ * │   does nothing when the numbers just above are already someone        │
+ * │   else's. "Add another range" always creates a new block instead, and │
+ * │   the roster card shows every range an operator holds as its own      │
+ * │   chip, individually removable once there is more than one.           │
  * │                                                                     │
  * │ DEPENDS ON                                                          │
  * │   src/supabase, lib/tokenApi, hooks/useRealtime, ui/BarChart,         │
@@ -51,7 +53,7 @@ import { useT } from '@/i18n'
 import { useToast } from '@/context/ToastContext'
 import useRealtime from '@/hooks/useRealtime'
 import { supabase, describeDbError } from '@/supabase'
-import { assignTokenRange, removeTokenRange, tokenRoster } from '@/lib/tokenApi'
+import { assignTokenRange, dropTokenRange, removeTokenRange, tokenRoster } from '@/lib/tokenApi'
 import { formatDate, initials, istHour, istToday, personName } from '@/utils/format'
 import { cn } from '@/utils/cn'
 
@@ -102,7 +104,10 @@ export default function TokenMgmt() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  // { operator: { id, name, name_hi }, existingRange: roster row | null }
+  // { operator: { id, name, name_hi }, hasRanges: does this operator already
+  // have at least one active range tonight? } — only changes the modal's
+  // title and submit label; the form itself is the same from/to entry either
+  // way. See migration 0074.
   const [assignTarget, setAssignTarget] = useState(null)
   const [removingId, setRemovingId] = useState(null)
 
@@ -198,16 +203,51 @@ export default function TokenMgmt() {
     [operators, roster],
   )
 
-  async function handleRemove(row) {
-    setRemovingId(row.operator_id)
-    const result = await removeTokenRange({ operatorId: row.operator_id })
+  // admin_token_roster returns one ROW PER RANGE now (migration 0074), since
+  // an operator can hold several. The screen still shows one card per
+  // operator, so their ranges are grouped back together here rather than in
+  // SQL — see that migration's note on why the split lives on this side.
+  const groupedRoster = useMemo(() => {
+    const byOperator = new Map()
+    for (const row of roster) {
+      let group = byOperator.get(row.operator_id)
+      if (!group) {
+        group = {
+          operatorId: row.operator_id,
+          name: row.operator_name,
+          nameHi: row.operator_name_hi,
+          ranges: [],
+        }
+        byOperator.set(row.operator_id, group)
+      }
+      group.ranges.push(row)
+    }
+    return [...byOperator.values()]
+  }, [roster])
+
+  async function handleRemove(group) {
+    setRemovingId(group.operatorId)
+    const result = await removeTokenRange({ operatorId: group.operatorId })
     setRemovingId(null)
 
     if (!result.ok) {
       toast.error(result.error)
       return
     }
-    toast.success(t('tokens.removed', { name: row.operator_name }))
+    toast.success(t('tokens.removed', { name: group.name }))
+    load()
+  }
+
+  async function handleDropRange(range) {
+    setRemovingId(range.range_id)
+    const result = await dropTokenRange({ rangeId: range.range_id })
+    setRemovingId(null)
+
+    if (!result.ok) {
+      toast.error(result.error)
+      return
+    }
+    toast.success(t('tokens.rangeRemoved', { start: range.range_start, end: range.range_end }))
     load()
   }
 
@@ -243,8 +283,8 @@ export default function TokenMgmt() {
         />
       ) : (
         <>
-          <SectionHeading title={t('tokens.roster')} icon="ticket" count={roster.length} />
-          {roster.length === 0 ? (
+          <SectionHeading title={t('tokens.roster')} icon="ticket" count={groupedRoster.length} />
+          {groupedRoster.length === 0 ? (
             <Card className="mb-5">
               <CardHeader
                 icon="ticket"
@@ -254,19 +294,21 @@ export default function TokenMgmt() {
             </Card>
           ) : (
             <Card padded={false} className="mb-5 overflow-hidden">
-              {roster.map((row, index) => (
+              {groupedRoster.map((group, index) => (
                 <RosterRow
-                  key={row.operator_id}
-                  row={row}
+                  key={group.operatorId}
+                  group={group}
                   isFirst={index === 0}
-                  busy={removingId === row.operator_id}
-                  onExtend={() =>
+                  busy={removingId === group.operatorId}
+                  droppingId={removingId}
+                  onAddRange={() =>
                     setAssignTarget({
-                      operator: { id: row.operator_id, name: row.operator_name, name_hi: row.operator_name_hi },
-                      existingRange: row,
+                      operator: { id: group.operatorId, name: group.name, name_hi: group.nameHi },
+                      hasRanges: group.ranges.some((r) => r.is_active),
                     })
                   }
-                  onRemove={() => handleRemove(row)}
+                  onDropRange={handleDropRange}
+                  onRemove={() => handleRemove(group)}
                 />
               ))}
             </Card>
@@ -285,7 +327,7 @@ export default function TokenMgmt() {
                     key={op.id}
                     operator={op}
                     isFirst={index === 0}
-                    onAssign={() => setAssignTarget({ operator: op, existingRange: null })}
+                    onAssign={() => setAssignTarget({ operator: op, hasRanges: false })}
                   />
                 ))}
               </Card>
@@ -314,56 +356,96 @@ export default function TokenMgmt() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// ROSTER ROW — one operator's range for tonight, plus their three counts.
+// ROSTER ROW — one operator's ranges for tonight, plus their combined
+// counts. An operator can hold several ranges at once (migration 0074),
+// each shown as its own chip so an admin can tell 1-5 from 41-45 rather
+// than reading one merged span that implies a single block of numbers.
 // ═══════════════════════════════════════════════════════════════════
 
-function RosterRow({ row, isFirst, busy, onExtend, onRemove }) {
+function RosterRow({ group, isFirst, busy, droppingId, onAddRange, onDropRange, onRemove }) {
   const t = useT()
+
+  const anyActive = group.ranges.some((r) => r.is_active)
+  const totals = group.ranges.reduce(
+    (acc, r) => ({
+      issued: acc.issued + r.issued_count,
+      open: acc.open + r.open_count,
+      delivered: acc.delivered + r.delivered_count,
+    }),
+    { issued: 0, open: 0, delivered: 0 },
+  )
+  const activeCount = group.ranges.filter((r) => r.is_active).length
 
   return (
     <div
       className={cn(
         'flex flex-wrap items-center gap-4 px-5 py-4',
         !isFirst && 'border-t border-line',
-        !row.is_active && 'opacity-50',
+        !anyActive && 'opacity-50',
       )}
     >
       <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-sm font-bold text-ink-muted">
-        {initials(row.operator_name)}
+        {initials(group.name)}
       </span>
 
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <p className="text-[0.9375rem] font-semibold leading-snug text-ink">
-            {personName(row.operator_name, row.operator_name_hi)}
+            {personName(group.name, group.nameHi)}
           </p>
-          {!row.is_active && (
+          {!anyActive && (
             <Badge tone="warning" size="sm" dot>
               {t('tokens.removedBadge')}
             </Badge>
           )}
         </div>
-        <p className="tnum mt-0.5 text-[0.8125rem] font-medium text-ink-muted">
-          {row.range_start}–{row.range_end}
-        </p>
+
+        <div className="mt-1 flex flex-wrap gap-1.5">
+          {group.ranges.map((r) => (
+            <span
+              key={r.range_id}
+              className={cn(
+                'tnum inline-flex items-center gap-1 rounded-full border border-line-strong bg-surface-sunken px-2 py-0.5 text-[0.8125rem] font-medium text-ink-muted',
+                !r.is_active && 'line-through opacity-60',
+              )}
+            >
+              {r.range_start}–{r.range_end}
+              {/* Only when there is more than one active range to tell apart —
+                  with a single range, "Remove from roster" already does this. */}
+              {r.is_active && activeCount > 1 && (
+                <button
+                  type="button"
+                  onClick={() => onDropRange(r)}
+                  disabled={droppingId === r.range_id}
+                  aria-label={t('tokens.dropRange')}
+                  title={t('tokens.dropRange')}
+                  className="rounded-full p-0.5 text-ink-subtle hover:bg-danger-soft hover:text-danger"
+                >
+                  <Icon name="x" size={10} />
+                </button>
+              )}
+            </span>
+          ))}
+        </div>
+
         <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[0.6875rem] font-medium text-ink-subtle">
           <span>
-            {t('tokens.issuedTonight')}: {row.issued_count}
+            {t('tokens.issuedTonight')}: {totals.issued}
           </span>
           <span>
-            {t('tokens.currentlyOut')}: {row.open_count}
+            {t('tokens.currentlyOut')}: {totals.open}
           </span>
           <span>
-            {t('tokens.deliveredTonight')}: {row.delivered_count}
+            {t('tokens.deliveredTonight')}: {totals.delivered}
           </span>
         </div>
       </div>
 
       <div className="flex shrink-0 items-center gap-1">
-        <Button variant="secondary" size="sm" icon="plus" onClick={onExtend}>
-          {t('tokens.extend')}
+        <Button variant="secondary" size="sm" icon="plus" onClick={onAddRange}>
+          {t('tokens.addRange')}
         </Button>
-        {row.is_active && (
+        {anyActive && (
           <Button
             variant="ghost"
             size="icon-md"
@@ -403,8 +485,10 @@ function UnassignedRow({ operator, isFirst, onAssign }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// ASSIGN / EXTEND — one modal, two modes depending on whether the
-// operator already has a row tonight.
+// ASSIGN A RANGE — always a from/to entry, whether it is an operator's
+// first range tonight or another one alongside ranges they already hold.
+// See migration 0074: an operator can hold several ranges, so there is no
+// more "extend the last one" mode — every range is created the same way.
 // ═══════════════════════════════════════════════════════════════════
 
 function AssignRangeModal({ target, onClose, onDone }) {
@@ -415,8 +499,6 @@ function AssignRangeModal({ target, onClose, onDone }) {
   const [end, setEnd] = useState('')
   const [error, setError] = useState(null)
 
-  const isExtend = Boolean(target?.existingRange)
-
   useEffect(() => {
     if (!target) return
     setStart('')
@@ -426,32 +508,25 @@ function AssignRangeModal({ target, onClose, onDone }) {
 
   if (!target) return null
 
-  const { operator, existingRange } = target
+  const { operator, hasRanges } = target
 
   async function submit() {
+    const s = Number(start)
     const e = Number(end)
 
-    if (isExtend) {
-      if (!Number.isInteger(e) || e <= existingRange.range_end) {
-        setError(t('tokens.enterAbove', { end: existingRange.range_end }))
-        return
-      }
-    } else {
-      const s = Number(start)
-      if (!Number.isInteger(s) || s < 1) {
-        setError(t('tokens.startTooSmall'))
-        return
-      }
-      if (!Number.isInteger(e) || e <= s) {
-        setError(t('tokens.endTooSmall'))
-        return
-      }
+    if (!Number.isInteger(s) || s < 1) {
+      setError(t('tokens.startTooSmall'))
+      return
+    }
+    if (!Number.isInteger(e) || e <= s) {
+      setError(t('tokens.endTooSmall'))
+      return
     }
 
     const result = await assignTokenRange({
       operatorId: operator.id,
+      rangeStart: s,
       rangeEnd: e,
-      rangeStart: isExtend ? undefined : Number(start),
     })
 
     if (!result.ok) {
@@ -459,11 +534,7 @@ function AssignRangeModal({ target, onClose, onDone }) {
       return
     }
 
-    toast.success(
-      isExtend
-        ? t('tokens.extended', { end: e })
-        : t('tokens.assigned', { name: operator.name, start: Number(start), end: e }),
-    )
+    toast.success(t('tokens.assigned', { name: operator.name, start: s, end: e }))
     onDone()
     onClose()
   }
@@ -472,7 +543,7 @@ function AssignRangeModal({ target, onClose, onDone }) {
     <Modal
       open
       onClose={onClose}
-      title={t('tokens.assignTitle')}
+      title={hasRanges ? t('tokens.addRangeTitle') : t('tokens.assignTitle')}
       description={personName(operator.name, operator.name_hi)}
       size="sm"
       closeOnBackdrop={false}
@@ -482,7 +553,7 @@ function AssignRangeModal({ target, onClose, onDone }) {
             {t('common.cancel')}
           </Button>
           <Button variant="primary" size="md" onClick={submit}>
-            {isExtend ? t('tokens.extend') : t('tokens.assign')}
+            {hasRanges ? t('tokens.addRange') : t('tokens.assign')}
           </Button>
         </>
       }
@@ -498,10 +569,20 @@ function AssignRangeModal({ target, onClose, onDone }) {
           </div>
         )}
 
-        {isExtend ? (
+        <div className="flex gap-3">
           <Input
-            label={t('tokens.extendTo')}
-            hint={t('tokens.extendHint', { end: existingRange.range_end })}
+            label={t('tokens.firstToken')}
+            type="tel"
+            inputMode="numeric"
+            value={start}
+            onChange={(e) => {
+              setStart(e.target.value.replace(/\D/g, '').slice(0, 5))
+              if (error) setError(null)
+            }}
+            containerClassName="min-w-0 flex-1"
+          />
+          <Input
+            label={t('tokens.lastToken')}
             type="tel"
             inputMode="numeric"
             value={end}
@@ -509,34 +590,9 @@ function AssignRangeModal({ target, onClose, onDone }) {
               setEnd(e.target.value.replace(/\D/g, '').slice(0, 5))
               if (error) setError(null)
             }}
-            placeholder={String(existingRange.range_end + 5)}
+            containerClassName="min-w-0 flex-1"
           />
-        ) : (
-          <div className="flex gap-3">
-            <Input
-              label={t('tokens.firstToken')}
-              type="tel"
-              inputMode="numeric"
-              value={start}
-              onChange={(e) => {
-                setStart(e.target.value.replace(/\D/g, '').slice(0, 5))
-                if (error) setError(null)
-              }}
-              containerClassName="min-w-0 flex-1"
-            />
-            <Input
-              label={t('tokens.lastToken')}
-              type="tel"
-              inputMode="numeric"
-              value={end}
-              onChange={(e) => {
-                setEnd(e.target.value.replace(/\D/g, '').slice(0, 5))
-                if (error) setError(null)
-              }}
-              containerClassName="min-w-0 flex-1"
-            />
-          </div>
-        )}
+        </div>
       </div>
     </Modal>
   )

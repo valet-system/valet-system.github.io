@@ -5,16 +5,25 @@
  * │ WHAT THIS FILE IS                                                   │
  * │   Tonight's token roster, from the admin side:                      │
  * │     tokenRoster(propertyId, serviceDate)                            │
- * │     assignTokenRange({ operatorId, rangeEnd, rangeStart, ... })     │
+ * │     assignTokenRange({ operatorId, rangeStart, rangeEnd, ... })     │
+ * │     dropTokenRange({ rangeId })                                     │
  * │     removeTokenRange({ operatorId, ... })                           │
  * │                                                                     │
  * │   Each resolves to { ok, error, code, ...data } and NEVER throws,   │
  * │   exactly like adminApi.js. Callers render `error`.                 │
  * │                                                                     │
+ * │ ONE OPERATOR, SEVERAL RANGES — see migration 0074                   │
+ * │   assignTokenRange ALWAYS creates a new range; there is no more      │
+ * │   "extend the existing one" mode, because there is no longer a       │
+ * │   single existing one to extend — an operator can hold several       │
+ * │   ranges at once and their numbers are the union. dropTokenRange     │
+ * │   removes ONE range by id; removeTokenRange takes the operator OFF   │
+ * │   DUTY entirely, deactivating every range they hold tonight.         │
+ * │                                                                     │
  * │ WHY AN RPC AND NOT .from('operator_token_ranges')                   │
  * │   Assigning a range has real business logic — overlap checking      │
- * │   against every other operator on duty tonight, and "extend only,   │
- * │   start never moves" — that has to be enforced server-side, in the  │
+ * │   against every other range on duty tonight, including the same     │
+ * │   operator's own — that has to be enforced server-side, in the      │
  * │   same transaction as the write, or two admins racing each other    │
  * │   could both write ranges that collide. See migration 0071.         │
  * │                                                                     │
@@ -50,11 +59,14 @@ const CODE_MESSAGES = {
   BAD_RANGE: 'Enter a valid range.',
   ONLY_BIGGER: 'The range can only be made bigger, never smaller.',
   RANGE_OVERLAP: 'That range overlaps another operator working tonight.',
+  TOO_MANY_RANGES: 'This operator already has too many ranges tonight — remove one before adding another.',
 }
 
 const MISSING_MIGRATION = {
   default:
     'Per-operator token ranges are not set up in the database yet. Run migration 0071 (operator_token_ranges) in the Supabase SQL Editor.',
+  admin_drop_token_range:
+    'Multiple token ranges per operator are not set up in the database yet. Run migration 0074 (multiple_token_ranges) in the Supabase SQL Editor.',
 }
 
 function describeRpcError(fn, error) {
@@ -94,21 +106,35 @@ export function tokenRoster(propertyId, serviceDate) {
 }
 
 /**
- * Create or extend one operator's range. Omit rangeStart to extend an
- * existing row — the server ignores it once a row exists, since a range's
- * start can never move.
+ * Give an operator a new range. Always creates — see the file header. Both
+ * rangeStart and rangeEnd are required; there is no "extend" shorthand any
+ * more, because there is no longer a single existing row to extend.
  */
-export function assignTokenRange({ operatorId, rangeEnd, rangeStart, serviceDate, propertyId }) {
+export function assignTokenRange({ operatorId, rangeStart, rangeEnd, serviceDate, propertyId }) {
   return call('admin_assign_token_range', {
     p_operator_id: operatorId,
+    p_range_start: rangeStart,
     p_range_end: rangeEnd,
-    p_range_start: rangeStart ?? null,
     p_service_date: serviceDate ?? null,
     p_property_id: propertyId ?? null,
   })
 }
 
-/** Takes an operator off tonight's roster without deleting the audit row. */
+/**
+ * Removes ONE range by id. Deletes it outright if nothing was ever issued
+ * from it, otherwise deactivates it — the server decides which, since only
+ * it knows whether any car was checked in against those numbers.
+ */
+export function dropTokenRange({ rangeId }) {
+  return call('admin_drop_token_range', {
+    p_range_id: rangeId,
+  })
+}
+
+/**
+ * Takes an operator OFF DUTY for the night — deactivates every range they
+ * hold, not just one. Use dropTokenRange to remove a single range instead.
+ */
 export function removeTokenRange({ operatorId, serviceDate, propertyId }) {
   return call('admin_remove_token_range', {
     p_operator_id: operatorId,

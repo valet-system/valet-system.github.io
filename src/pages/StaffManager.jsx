@@ -96,6 +96,7 @@ import {
   initials,
   normalisePhone,
   personName,
+  siteName,
   skipPhoneSeparator,
 } from '@/utils/format'
 import { DEFAULT_PIN, PIN_LENGTH, ROLES, ROLE_META } from '@/types'
@@ -199,7 +200,7 @@ export default function StaffManager() {
       selectOptional(
         () =>
           staffQuery(
-            `id, user_id, name, name_hi, phone, role, property_id, is_active, created_at, deleted_at, properties(id, name)`,
+            `id, user_id, name, name_hi, phone, role, property_id, is_active, created_at, deleted_at, properties(id, name, name_hi)`,
             { hideDeleted: true },
           ),
         () => staffQuery(COLUMNS),
@@ -207,7 +208,17 @@ export default function StaffManager() {
       ),
       // Only the system admin picks a property; everyone else has exactly one.
       isSystemAdmin
-        ? supabase.from('properties').select('id, name').eq('is_active', true).order('name')
+        ? selectOptional(
+            () =>
+              supabase
+                .from('properties')
+                .select('id, name, name_hi')
+                .eq('is_active', true)
+                .order('name'),
+            () =>
+              supabase.from('properties').select('id, name').eq('is_active', true).order('name'),
+            'properties.name_hi',
+          )
         : Promise.resolve({ data: [], error: null }),
     ])
 
@@ -646,7 +657,7 @@ export default function StaffManager() {
                   { value: 'all', label: t('staff.allProperties') },
                   ...properties.map((property) => ({
                     value: property.id,
-                    label: property.name,
+                    label: siteName(property.name, property.name_hi),
                   })),
                 ]}
               />
@@ -1077,7 +1088,7 @@ function StaffRow({
               <Icon name="location" size={10} />
               {person.role === ROLES.VALET_VENDOR
                 ? t('staff.everyVenue')
-                : person.properties.name}
+                : siteName(person.properties.name, person.properties.name_hi)}
             </span>
           )}
         </div>
@@ -1346,7 +1357,7 @@ function AttachOperatorModal({ target, onClose, onAttached, isSystemAdmin, prope
               setError(null)
             }}
             placeholder={t('staff.chooseProperty')}
-            options={properties.map((p) => ({ value: p.id, label: p.name }))}
+            options={properties.map((p) => ({ value: p.id, label: siteName(p.name, p.name_hi) }))}
             required
           />
         )}
@@ -1607,7 +1618,7 @@ function AddStaffModal({
             onChange={(e) => setProperty(e.target.value)}
             error={errors.property}
             placeholder={t('staff.chooseProperty')}
-            options={properties.map((p) => ({ value: p.id, label: p.name }))}
+            options={properties.map((p) => ({ value: p.id, label: siteName(p.name, p.name_hi) }))}
             required
           />
         )}
@@ -2068,7 +2079,7 @@ function EditStaffModal({
                 error={errors.property}
                 options={[
                   { value: '', label: t('staff.choosePropertyDots') },
-                  ...properties.map((p) => ({ value: p.id, label: p.name })),
+                  ...properties.map((p) => ({ value: p.id, label: siteName(p.name, p.name_hi) })),
                 ]}
                 required
               />

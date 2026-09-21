@@ -368,8 +368,35 @@ export function timeAgo(value) {
  * @param nameHi the Hindi spelling, or null
  */
 export function personName(name, nameHi) {
-  if (getActiveLang() === 'hi' && nameHi && nameHi.trim()) return nameHi.trim()
-  return name ?? ''
+  return inReadingLanguage(name, nameHi)
+}
+
+/**
+ * THE ONE RULE, for every stored pair of "English text + its Hindi spelling".
+ *
+ * personName, placeName and siteName are all this function — they exist as
+ * separate names because a call site reads better saying what KIND of thing it
+ * is showing, and because each carries its own note about why that particular
+ * field is stored rather than translated.
+ *
+ * The fallback is the important half: no Hindi spelling means show the English
+ * one. A missing translation is normal — an admin simply has not got to it —
+ * and a blank label would be far worse than an untranslated one.
+ */
+export function inReadingLanguage(value, valueHi) {
+  if (getActiveLang() === 'hi' && valueHi && valueHi.trim()) return valueHi.trim()
+  return value ?? ''
+}
+
+/**
+ * A site's name or address in the reading language.
+ *
+ * Stored, not translated: a venue name is a brand, and nothing turns
+ * "Pushpanjali" into Devanagari reliably — what is wanted is a transliteration,
+ * and translating it outright gives nonsense. See migration 0073.
+ */
+export function siteName(value, valueHi) {
+  return inReadingLanguage(value, valueHi)
 }
 
 /**
@@ -381,8 +408,7 @@ export function personName(name, nameHi) {
  * untranslated one.
  */
 export function placeName(label, labelHi) {
-  if (getActiveLang() === 'hi' && labelHi && labelHi.trim()) return labelHi.trim()
-  return label ?? ''
+  return inReadingLanguage(label, labelHi)
 }
 
 /**

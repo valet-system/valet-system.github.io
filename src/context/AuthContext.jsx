@@ -51,6 +51,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { pickLang } from '@/i18n/activeLang'
+import { siteName } from '@/utils/format'
 import { useI18n } from '@/i18n'
 import { supabase, describeDbError, selectOptional } from '@/supabase'
 import { phoneToAuthEmail } from '@/lib/phoneAuth'
@@ -159,19 +160,24 @@ export function AuthProvider({ children }) {
       // "this login has no user_roles row yet" is a normal provisioning state
       // that deserves a clear message, not a stack trace.
       const BASE = 'id, user_id, property_id, role, name, phone, is_active'
-      const JOIN = 'properties(id, name, address, phone, is_active)'
+      const JOIN = 'properties(id, name, name_hi, address, address_hi, phone, is_active)'
+      const JOIN_PLAIN = 'properties(id, name, address, phone, is_active)'
       const read = (columns) =>
         supabase.from('user_roles').select(columns).eq('user_id', userId).maybeSingle()
 
-      // name_hi (migration 0022) is asked for optimistically and its absence is
-      // survivable. THIS query in particular must never hard-fail on it: it is
-      // the profile read behind every screen, so a missing optional column
+      // name_hi is asked for optimistically and its absence is survivable —
+      // user_roles.name_hi from migration 0022, properties.name_hi/address_hi
+      // from 0073. THIS query in particular must never hard-fail on either: it
+      // is the profile read behind every screen, so a missing optional column
       // would lock every user out of a database that is otherwise fine — which
       // is exactly what happened once. See selectOptional in src/supabase.
+      //
+      // One fallback for both, not a ladder: the two migrations ship together
+      // from here on, and a database missing one is a database missing both.
       const { data, error } = await selectOptional(
         () => read(`${BASE}, name_hi, ${JOIN}`),
-        () => read(`${BASE}, ${JOIN}`),
-        'user_roles.name_hi',
+        () => read(`${BASE}, ${JOIN_PLAIN}`),
+        'user_roles.name_hi or properties.name_hi',
       )
 
       if (stale) return
@@ -482,19 +488,40 @@ export function AuthProvider({ children }) {
       // property scope
       propertyId: userRole?.property_id ?? null,
       property,
-      // A property NAME is a proper noun ("Ambria Exotica") and is never
-      // translated. The stand-in shown to a system_admin IS a phrase, so it
-      // goes through pickLang — and `lang` is in this memo's dependency list
-      // below, which is what makes it follow the EN/हिं toggle rather than
-      // freezing at whatever was active when the profile loaded.
+      // A property NAME is a proper noun ("Ambria Exotica"), so it is never
+      // TRANSLATED — but it can be TRANSLITERATED, and siteName reads the
+      // spelling an admin typed into properties.name_hi (migration 0073),
+      // falling back to the English column when there is none. The stand-in
+      // shown to a system_admin IS a phrase, so it goes through pickLang — and
+      // `lang` is in this memo's dependency list below, which is what makes
+      // both of them follow the EN/हिं toggle rather than freezing at whatever
+      // was active when the profile loaded.
+      //
+      // `||`, not `??`: siteName returns '' for a missing name, and an empty
+      // string has to fall through to the stand-in the same way a null did.
       // A vendor sees every venue's bookings, so the header says so rather
       // than sitting blank under their name — the same words a system admin
       // gets, because it is the same fact.
       propertyName:
-        property?.name ??
+        siteName(property?.name, property?.name_hi) ||
         (role === ROLES.SYSTEM_ADMIN || role === ROLES.VALET_VENDOR
           ? pickLang('All properties', 'सभी प्रॉपर्टी')
           : ''),
+
+      /**
+       * The site's name in ENGLISH, always, whatever the reading language.
+       *
+       * For FILENAMES, not for display. propertyName above follows the EN/हिं
+       * toggle, which is right on screen and wrong in a download: a CSV called
+       * reviews-अम्ब्रिया-एक्सोटिका-2026-09-15.csv is a file somebody has to
+       * forward, upload and keep, and a Devanagari filename survives that trip
+       * far less reliably than an ASCII one.
+       *
+       * Empty when there is no property, so the caller supplies its own
+       * stand-in rather than getting the translated "All properties" phrase
+       * inside a filename.
+       */
+      propertyNameEn: property?.name ?? '',
 
       // role predicates — clearer at a call site than role === '...'
       isOperator: role === ROLES.OPERATOR,

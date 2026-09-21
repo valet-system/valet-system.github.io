@@ -54,7 +54,7 @@ import { RatingBadge, TierBadge, VehicleStatusBadge } from '@/components/ui/Badg
 import { useToast } from '@/context/ToastContext'
 import RangePicker, { PRESETS, presetRange } from '@/components/ui/RangePicker'
 import { useT } from '@/i18n'
-import { supabase, describeDbError } from '@/supabase'
+import { supabase, describeDbError, selectOptional } from '@/supabase'
 import {
   downloadCsv,
   formatDate,
@@ -62,6 +62,7 @@ import {
   istToday,
   personName,
   prettyCarNumber,
+  siteName,
 } from '@/utils/format'
 
 const PAGE = 100
@@ -133,11 +134,14 @@ export default function Records() {
   useEffect(() => setPage(0), [range, propertyId])
 
   useEffect(() => {
-    supabase
-      .from('properties')
-      .select('id, name')
-      .order('name')
-      .then(({ data }) => setProperties(data ?? []))
+    // selectOptional: name_hi arrives with migration 0073. This only feeds the
+    // site filter, so a 42703 would not blank the page — but it would silently
+    // empty the dropdown, which reads as "there are no sites".
+    selectOptional(
+      () => supabase.from('properties').select('id, name, name_hi').order('name'),
+      () => supabase.from('properties').select('id, name').order('name'),
+      'properties.name_hi',
+    ).then(({ data }) => setProperties(data ?? []))
   }, [])
 
   const args = useMemo(
@@ -373,7 +377,7 @@ export default function Records() {
             <option value="all">{t('records.allProperties')}</option>
             {properties.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.name}
+                {siteName(p.name, p.name_hi)}
               </option>
             ))}
           </select>

@@ -51,6 +51,7 @@ import EmptyState from '@/components/ui/EmptyState'
 import { Input } from '@/components/ui/Field'
 import Icon from '@/components/ui/Icon'
 import Modal, { ConfirmModal } from '@/components/ui/Modal'
+import HindiInput from '@/components/ui/HindiInput'
 import {
   HeaderSkeleton,
   RowsSkeleton,
@@ -61,9 +62,9 @@ import StatTile, { StatRow } from '@/components/ui/StatTile'
 import Badge from '@/components/ui/Badge'
 import { useToast } from '@/context/ToastContext'
 import { useT } from '@/i18n'
-import { supabase, describeDbError } from '@/supabase'
+import { supabase, describeDbError, selectOptional } from '@/supabase'
 import { cn } from '@/utils/cn'
-import { formatPhone, initials, istToday, personName, prettyCarNumber } from '@/utils/format'
+import { formatPhone, initials, istToday, personName, prettyCarNumber, siteName } from '@/utils/format'
 // For the ?role= links on the two staff tiles. The constant, not the string, so
 // a rename of a role value cannot leave a link pointing at nothing.
 import { ROLES, VEHICLE_STATUS_META } from '@/types'
@@ -123,6 +124,20 @@ export default function Properties() {
    * something — StatTile lifts its border — but that is an affordance saying
    * "this is clickable", not the feature itself.
    */
+  /**
+   * Whether this database actually HAS properties.name_hi / address_hi.
+   *
+   * The read survives their absence through selectOptional, but a WRITE cannot
+   * fall back the same way without quietly dropping what the admin typed. So
+   * the load records what came back and the dialog hides the two Hindi fields
+   * on a database that has not had it yet — a field that cannot save is worse
+   * than no field at all.
+   *
+   * Defaults to true: with no rows yet there is nothing to inspect, and a
+   * fresh database is one that has had every migration run.
+   */
+  const [hasHindiNames, setHasHindiNames] = useState(true)
+
   const [detail, setDetail] = useState(null)
   const [detailRows, setDetailRows] = useState([])
   const [detailLoading, setDetailLoading] = useState(false)
@@ -134,11 +149,25 @@ export default function Properties() {
     // properties — 4000 rows on a busy event day — to produce four integers,
     // plus the whole user_roles table for two more. Postgres counts next to
     // the data and sends back four rows. See migration 0012.
+    // selectOptional, because migration 0073 may not have been run on this
+    // database yet. Asking for a column that does not exist is a 42703, and
+    // that error takes the WHOLE screen down — not just the Hindi labels. The
+    // fallback drops the two new columns, every reader falls back to English,
+    // and the page is exactly what it was before the migration.
     const [propRes, overviewRes] = await Promise.all([
-      supabase
-        .from('properties')
-        .select('id, name, address, phone, is_active, created_at')
-        .order('name'),
+      selectOptional(
+        () =>
+          supabase
+            .from('properties')
+            .select('id, name, name_hi, address, address_hi, phone, is_active, created_at')
+            .order('name'),
+        () =>
+          supabase
+            .from('properties')
+            .select('id, name, address, phone, is_active, created_at')
+            .order('name'),
+        'properties.name_hi / properties.address_hi',
+      ),
       supabase.rpc('property_overview'),
     ])
 
@@ -149,7 +178,12 @@ export default function Properties() {
     }
 
     setError(null)
-    setProperties(propRes.data ?? [])
+    const rows = propRes.data ?? []
+    setProperties(rows)
+    // `in`, not a truthiness test: a site with no Hindi spelling has
+    // name_hi === null, which is present-but-empty and not the same thing as
+    // the column being absent from the response entirely.
+    setHasHindiNames(rows.length === 0 || 'name_hi' in rows[0])
 
     const byId = {}
     for (const row of overviewRes.data ?? []) byId[row.property_id] = row
@@ -226,9 +260,19 @@ export default function Properties() {
     }
   }, [properties, stats])
 
-  async function save({ id, name, address, phone, reviewLink }) {
+  async function save({ id, name, nameHi, address, addressHi, phone, reviewLink }) {
     const payload = {
       name: name.trim(),
+      // Only when the columns exist. Sending them to a database that has not had it yet
+      // is a 42703 that fails the whole save, including the English name the
+      // admin came to change.
+      //
+      // Trimmed to NULL, never ''. NULL is what every reader treats as "no
+      // Hindi spelling yet" and falls back on; an empty string would pass that
+      // test and render a blank label. See migration 0073.
+      ...(hasHindiNames
+        ? { name_hi: nameHi?.trim() || null, address_hi: addressHi?.trim() || null }
+        : null),
       address: address.trim() || null,
       phone: phone.trim() || null,
       // Trimmed to null, never ''. The CHECK constraint rejects a value that
@@ -275,7 +319,15 @@ export default function Properties() {
       // rather than as "something went wrong".
       toast.error(describeDbError(err, t('props.couldNotDelete')))
     } else {
-      toast.success(t('props.deleted', { name: data?.name ?? deleteTarget.name }))
+      toast.success(
+        t('props.deleted', {
+          // The RPC returns the English name it deleted; the row we still hold
+          // is where the Hindi spelling is.
+          name: data?.name
+            ? siteName(data.name, deleteTarget.name === data.name ? deleteTarget.name_hi : null)
+            : siteName(deleteTarget.name, deleteTarget.name_hi),
+        }),
+      )
       await load()
     }
     setDeleteTarget(null)
@@ -550,6 +602,7 @@ export default function Properties() {
           setEditTarget(null)
         }}
         onSave={save}
+        hindi={hasHindiNames}
       />
 
       <ConfirmModal
@@ -558,7 +611,7 @@ export default function Properties() {
         onConfirm={toggleActive}
         tone={toggleTarget?.is_active ? 'danger' : 'success'}
         title={t(toggleTarget?.is_active ? 'props.closeQ' : 'props.reopenQ', {
-          name: toggleTarget?.name,
+          name: siteName(toggleTarget?.name, toggleTarget?.name_hi),
         })}
         description={
           toggleTarget?.is_active
@@ -579,7 +632,7 @@ export default function Properties() {
         onClose={() => setDeleteTarget(null)}
         onConfirm={deleteProperty}
         tone="danger"
-        title={t('props.deleteQ', { name: deleteTarget?.name })}
+        title={t('props.deleteQ', { name: siteName(deleteTarget?.name, deleteTarget?.name_hi) })}
         description={t('props.deleteBody')}
         confirmLabel={t('props.deleteSite')}
       />
@@ -681,7 +734,13 @@ function PropertyTabs({ properties, value, onChange }) {
     { id: 'all', label: t('props.allSites') },
     ...properties.map((p, i) => ({
       id: p.id,
-      label: labels[i],
+      // trimHouseWord strips the shared first word off the ENGLISH names, and
+      // that logic does not carry over: the house word is spelled differently
+      // in Devanagari and trimming it would be guesswork. So a site with a
+      // Hindi spelling shows that spelling whole, untrimmed. It is a couple of
+      // characters wider than its neighbours and that is the right trade —
+      // these chips wrap, they do not have to fit one fixed row.
+      label: siteName(p.name, p.name_hi) === p.name ? labels[i] : siteName(p.name, p.name_hi),
       // The full name, so the trim never hides which site this is from
       // somebody who wants to check.
       title: p.name,
@@ -901,7 +960,7 @@ function PropertyRow({ property, cars, operators, onEdit, onToggle, onDelete, on
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-semibold text-ink">{property.name}</span>
+            <span className="font-semibold text-ink">{siteName(property.name, property.name_hi)}</span>
             {!property.is_active && (
               <Badge tone="warning" size="sm">
                 {t('props.closed')}
@@ -910,7 +969,7 @@ function PropertyRow({ property, cars, operators, onEdit, onToggle, onDelete, on
           </div>
 
           <p className="mt-0.5 truncate text-sm text-ink-subtle">
-            {property.address || t('props.noAddress')}
+            {siteName(property.address, property.address_hi) || t('props.noAddress')}
             {property.phone && <span className="tnum"> · {property.phone}</span>}
           </p>
 
@@ -937,7 +996,7 @@ function PropertyRow({ property, cars, operators, onEdit, onToggle, onDelete, on
             size="icon-md"
             icon="edit"
             onClick={onEdit}
-            aria-label={t('props.editNamed', { name: property.name })}
+            aria-label={t('props.editNamed', { name: siteName(property.name, property.name_hi) })}
             title={t('props.editDetails')}
           />
           <Button
@@ -946,7 +1005,7 @@ function PropertyRow({ property, cars, operators, onEdit, onToggle, onDelete, on
             icon={property.is_active ? 'x-circle' : 'check-circle'}
             onClick={onToggle}
             aria-label={t(property.is_active ? 'props.closeNamed' : 'props.reopenNamed', {
-              name: property.name,
+              name: siteName(property.name, property.name_hi),
             })}
             title={t(property.is_active ? 'props.closeThis' : 'props.reopenThis')}
             className={
@@ -965,7 +1024,7 @@ function PropertyRow({ property, cars, operators, onEdit, onToggle, onDelete, on
             size="icon-md"
             icon="trash"
             onClick={onDelete}
-            aria-label={t('props.deleteNamed', { name: property.name })}
+            aria-label={t('props.deleteNamed', { name: siteName(property.name, property.name_hi) })}
             title={t('props.deleteThis')}
             className="hover:bg-danger-soft hover:text-danger"
           />
@@ -986,7 +1045,7 @@ function PropertyRow({ property, cars, operators, onEdit, onToggle, onDelete, on
             size="icon-md"
             icon="chevron-right"
             onClick={onOpen}
-            aria-label={t('props.openNamed', { name: property.name })}
+            aria-label={t('props.openNamed', { name: siteName(property.name, property.name_hi) })}
             title={t('props.openThis')}
           />
         </div>
@@ -997,10 +1056,12 @@ function PropertyRow({ property, cars, operators, onEdit, onToggle, onDelete, on
 
 // ═══════════════════════════════════════════════════════════════════
 
-function PropertyModal({ open, target, onClose, onSave }) {
+function PropertyModal({ open, target, onClose, onSave, hindi = true }) {
   const t = useT()
   const [name, setName] = useState('')
+  const [nameHi, setNameHi] = useState('')
   const [address, setAddress] = useState('')
+  const [addressHi, setAddressHi] = useState('')
   const [phone, setPhone] = useState('')
   const [reviewLink, setReviewLink] = useState('')
   const [error, setError] = useState(null)
@@ -1009,7 +1070,9 @@ function PropertyModal({ open, target, onClose, onSave }) {
   useEffect(() => {
     if (!open) return
     setName(target?.name ?? '')
+    setNameHi(target?.name_hi ?? '')
     setAddress(target?.address ?? '')
+    setAddressHi(target?.address_hi ?? '')
     setPhone(target?.phone ?? '')
     setReviewLink(target?.review_link ?? '')
     setError(null)
@@ -1026,7 +1089,15 @@ function PropertyModal({ open, target, onClose, onSave }) {
     setNameError(null)
     setError(null)
 
-    const failure = await onSave({ id: target?.id, name, address, phone, reviewLink })
+    const failure = await onSave({
+      id: target?.id,
+      name,
+      nameHi,
+      address,
+      addressHi,
+      phone,
+      reviewLink,
+    })
     if (failure) {
       // A duplicate name is a problem with the name field, not the form.
       if (failure.toLowerCase().includes('name')) setNameError(failure)
@@ -1077,12 +1148,42 @@ function PropertyModal({ open, target, onClose, onSave }) {
           placeholder={t('props.namePlaceholder')}
         />
 
+        {/* Directly under the English field it follows, not in a section of
+            its own. HindiInput offers a machine transliteration as a FIRST
+            DRAFT and stops following the moment the admin edits it — see the
+            component. storedSource/storedValue are what the database holds, so
+            it can tell "untouched" from "deliberately left as it is"; they are
+            omitted when adding, where there is nothing stored yet. */}
+        {hindi && (
+          <HindiInput
+            id="property-name-hi"
+            label={t('props.nameHi')}
+            source={name}
+            value={nameHi}
+            onChange={setNameHi}
+            storedSource={target?.name ?? null}
+            storedValue={target?.name_hi ?? null}
+          />
+        )}
+
         <Input
           label={t('props.address')}
           value={address}
           onChange={(e) => setAddress(e.target.value)}
           placeholder={t('props.addressPlaceholder')}
         />
+
+        {hindi && (
+          <HindiInput
+            id="property-address-hi"
+            label={t('props.addressHi')}
+            source={address}
+            value={addressHi}
+            onChange={setAddressHi}
+            storedSource={target?.address ?? null}
+            storedValue={target?.address_hi ?? null}
+          />
+        )}
 
         <Input
           label={t('props.landline')}

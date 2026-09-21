@@ -108,7 +108,10 @@ export default function CheckIn() {
   const [unparked, setUnparked] = useState([])
   const [recent, setRecent] = useState([])
   const [todayCount, setTodayCount] = useState(null)
-  const [range, setRange] = useState(null)
+  // Every active range this operator holds tonight, not just one — an
+  // operator can hold several since migration 0074. Ordered by range_start,
+  // the same order the admin roster shows them in.
+  const [ranges, setRanges] = useState([])
   const [openTokens, setOpenTokens] = useState([])
   const [loadError, setLoadError] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -143,6 +146,10 @@ export default function CheckIn() {
         .select('id', { count: 'exact', head: true })
         .eq('property_id', propertyId)
         .eq('service_date', today),
+      // Not .maybeSingle(): an operator can hold several active ranges at
+      // once since migration 0074, so more than one row here is normal, not
+      // an error. Zero rows is also normal — no range yet, until the admin
+      // assigns one for tonight. See migration 0071.
       operatorId
         ? supabase
             .from('operator_token_ranges')
@@ -151,10 +158,8 @@ export default function CheckIn() {
             .eq('operator_id', operatorId)
             .eq('service_date', today)
             .eq('is_active', true)
-            // maybeSingle: no range yet is normal until the admin assigns one
-            // for tonight — see migration 0071. Information, not a fault.
-            .maybeSingle()
-        : Promise.resolve({ data: null, error: null }),
+            .order('range_start')
+        : Promise.resolve({ data: [], error: null }),
       // Every currently-open (non-delivered) car at the property, just the
       // token number. Cheap and small — intersected client-side against this
       // operator's own range below, rather than adding a read RPC purely to
@@ -192,7 +197,7 @@ export default function CheckIn() {
     if (!recentRes.error) setRecent(recentRes.data ?? [])
     if (!unparkedRes.error) setUnparked(unparkedRes.data ?? [])
     if (!countRes.error) setTodayCount(countRes.count ?? 0)
-    if (!rangeRes.error) setRange(rangeRes.data ?? null)
+    if (!rangeRes.error) setRanges(rangeRes.data ?? [])
     if (!openRes.error) setOpenTokens(openRes.data ?? [])
     setLoading(false)
     // t is a dep so a language switch mid-error re-renders the message in the
@@ -212,9 +217,9 @@ export default function CheckIn() {
     enabled: Boolean(propertyId),
     onRefetch: loadSummary,
   })
-  // The admin assigning or extending THIS operator's range mid-shift — the
-  // exact fix path for TOKEN_RANGE_EXHAUSTED — has to reach this screen live,
-  // or the operator keeps seeing "range full" after the admin already fixed it.
+  // The admin giving THIS operator another range mid-shift — the exact fix
+  // path for TOKEN_RANGE_EXHAUSTED — has to reach this screen live, or the
+  // operator keeps seeing "range full" after the admin already fixed it.
   useRealtime({
     channel: `checkin-range:${operatorId}`,
     table: 'operator_token_ranges',
@@ -356,15 +361,20 @@ export default function CheckIn() {
     )
   }
 
-  // How many of the operator's own slots are currently occupied by a car that
-  // has not been delivered yet — the same "lowest free slot" occupancy check
-  // allocate_operator_token() runs server-side, done here just to show a
-  // count. See migration 0071.
-  const openInRange = range
-    ? openTokens.filter((v) => v.token_number >= range.range_start && v.token_number <= range.range_end).length
+  // How many of the operator's own slots — across EVERY range they hold — are
+  // currently occupied by a car that has not been delivered yet. Same
+  // occupancy check allocate_operator_token() runs server-side across all of
+  // an operator's ranges, done here just to show a count. See migrations
+  // 0071 and 0074.
+  const rangeSize = ranges.length ? ranges.reduce((sum, r) => sum + (r.range_end - r.range_start + 1), 0) : null
+  const openInRange = ranges.length
+    ? ranges.reduce(
+        (sum, r) =>
+          sum + openTokens.filter((v) => v.token_number >= r.range_start && v.token_number <= r.range_end).length,
+        0,
+      )
     : 0
-  const rangeSize = range ? range.range_end - range.range_start + 1 : null
-  const remaining = range ? Math.max(0, rangeSize - openInRange) : null
+  const remaining = ranges.length ? Math.max(0, rangeSize - openInRange) : null
 
   return (
     <>
@@ -549,20 +559,29 @@ export default function CheckIn() {
             </div>
 
             <div className="border-t border-line pt-3">
-              <div className="flex items-baseline justify-between">
-                <span className="text-sm font-medium text-ink-muted">{t('checkin.yourRange')}</span>
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="shrink-0 text-sm font-medium text-ink-muted">{t('checkin.yourRange')}</span>
                 {loading ? (
                   <Skeleton className="h-7 w-14" />
-                ) : range ? (
-                  <span className="tnum text-2xl font-bold text-ink">
-                    {range.range_start}–{range.range_end}
+                ) : ranges.length ? (
+                  // A single range reads as one number pair, same as always.
+                  // More than one wraps onto its own line below the label
+                  // rather than fighting it for the same row — "1–5, 41–45"
+                  // beside "Your range" does not fit a phone-width card.
+                  <span
+                    className={cn(
+                      'tnum font-bold text-ink',
+                      ranges.length === 1 ? 'text-2xl' : 'text-right text-base leading-tight',
+                    )}
+                  >
+                    {ranges.map((r) => `${r.range_start}–${r.range_end}`).join(', ')}
                   </span>
                 ) : (
                   <span className="text-sm text-ink-subtle">{t('checkin.noRangeTonight')}</span>
                 )}
               </div>
 
-              {range && (
+              {ranges.length > 0 && (
                 <p
                   className={
                     remaining <= 20

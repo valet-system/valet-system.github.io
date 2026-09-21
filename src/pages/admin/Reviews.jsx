@@ -81,7 +81,9 @@ const REVIEW_LIMIT = 500
 
 export default function Reviews() {
   const t = useT()
-  const { propertyId, propertyName } = useAuth()
+  // propertyNameEn, not propertyName: it names the downloaded FILE. See the
+  // note beside it in AuthContext.
+  const { propertyId, propertyName, propertyNameEn } = useAuth()
 
   const [rows, setRows] = useState([])
   const [operators, setOperators] = useState([])
@@ -214,7 +216,7 @@ export default function Reviews() {
 
   function exportCsv() {
     downloadCsv(
-      `reviews-${propertyName?.toLowerCase().replace(/\s+/g, '-') ?? 'property'}-${istToday()}.csv`,
+      `reviews-${propertyNameEn ? propertyNameEn.toLowerCase().replace(/\s+/g, '-') : 'property'}-${istToday()}.csv`,
       visible.map((row) => ({
         Date: formatDateTime(row.created_at),
         Token: row.valet_tasks?.parked_vehicles?.token_number ?? '',
