@@ -242,7 +242,18 @@ export default function CheckIn() {
   function validate() {
     const next = {}
 
-    if (!form.guestName.trim()) next.guestName = t('checkin.guestNameError')
+    // The guest NAME is deliberately optional, on request.
+    //
+    // The phone and the plate are what the system actually runs on — the
+    // phone is who gets the WhatsApp, the plate is what identifies the car
+    // to anyone standing in the car park. The name is a courtesy on top of
+    // those, and at a busy porch it is the field most likely to be a guess:
+    // an operator who did not catch it types "sir" or a spelling nobody can
+    // use. Nothing downstream needs it — every screen that shows a guest name
+    // already falls back to "Guest", and so does the WhatsApp greeting.
+    //
+    // So no check here. It is still the first field on the form, because it
+    // is the first thing said at a car window.
 
     const phone = normalisePhone(form.guestPhone)
     if (!phone) next.guestPhone = t('checkin.guestPhoneError')
@@ -425,7 +436,6 @@ export default function CheckIn() {
           <Input
             ref={nameRef}
             label={t('checkin.guestName')}
-            required
             icon="user"
             autoComplete="off"
             autoCapitalize="words"
