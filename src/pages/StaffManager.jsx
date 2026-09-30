@@ -589,7 +589,7 @@ export default function StaffManager() {
             </span>
             <div>
               <p className="text-xl font-bold leading-none text-ink">{counts.operators}</p>
-              <p className="mt-0.5 text-xs font-medium text-ink-subtle">Operators</p>
+              <p className="mt-0.5 text-xs font-medium text-ink-subtle">Drivers</p>
             </div>
           </div>
         )}

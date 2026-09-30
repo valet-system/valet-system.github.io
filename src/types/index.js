@@ -61,8 +61,8 @@ export const ROLES = {
 
 export const ROLE_META = {
   [ROLES.SYSTEM_ADMIN]: { label: 'System Admin', icon: 'shield', home: '/system/properties' },
-  [ROLES.VALET_ADMIN]: { label: 'Valet Admin', icon: 'users', home: '/admin/dashboard' },
-  [ROLES.OPERATOR]: { label: 'Operator', icon: 'key', home: '/operator/checkin' },
+  [ROLES.VALET_ADMIN]: { label: 'Key Operator', icon: 'users', home: '/admin/dashboard' },
+  [ROLES.OPERATOR]: { label: 'Driver', icon: 'key', home: '/operator/checkin' },
   [ROLES.VALET_VENDOR]: {
     label: 'Valet Vendor',
     // The calendar, because that one screen is the whole of their account.

@@ -112,7 +112,7 @@ const CODE_MESSAGES = {
   NOT_PARKED: ['That car is not parked right now.', 'यह गाड़ी अभी पार्क नहीं है।'],
   ALREADY_REQUESTED: ['This car has already been requested.', 'इस गाड़ी की माँग पहले ही दर्ज है।'],
   BAD_OPERATOR: ['That person cannot take this car.', 'यह व्यक्ति यह गाड़ी नहीं ले सकता।'],
-  OPERATOR_BUSY: ['That operator is already on another car.', 'यह ऑपरेटर पहले से दूसरी गाड़ी पर है।'],
+  OPERATOR_BUSY: ['That driver is already on another car.', 'यह ड्राइवर पहले से दूसरी गाड़ी पर है।'],
   // The SQL almost always raises this WITH a detail naming the caller's own
   // range ("your range (1 to 5) is full..."), which the withDetail branch
   // above shows verbatim in English. This bare pair is only the fallback for

@@ -53,20 +53,20 @@ const CODE_MESSAGES = {
   FORBIDDEN: 'You do not have permission to do that.',
   PROPERTY_REQUIRED: 'Choose a property.',
   BAD_DATE: 'Choose today or tomorrow.',
-  NOT_FOUND: 'That operator no longer exists.',
-  BAD_OPERATOR: 'That person is not an active operator at this property.',
-  RANGE_REQUIRED: "Enter the first token in this operator's range.",
+  NOT_FOUND: 'That driver no longer exists.',
+  BAD_OPERATOR: 'That person is not an active driver at this property.',
+  RANGE_REQUIRED: "Enter the first token in this driver's range.",
   BAD_RANGE: 'Enter a valid range.',
   ONLY_BIGGER: 'The range can only be made bigger, never smaller.',
-  RANGE_OVERLAP: 'That range overlaps another operator working tonight.',
-  TOO_MANY_RANGES: 'This operator already has too many ranges tonight — remove one before adding another.',
+  RANGE_OVERLAP: 'That range overlaps another driver working tonight.',
+  TOO_MANY_RANGES: 'This driver already has too many ranges tonight — remove one before adding another.',
 }
 
 const MISSING_MIGRATION = {
   default:
-    'Per-operator token ranges are not set up in the database yet. Run migration 0071 (operator_token_ranges) in the Supabase SQL Editor.',
+    'Per-driver token ranges are not set up in the database yet. Run migration 0071 (operator_token_ranges) in the Supabase SQL Editor.',
   admin_drop_token_range:
-    'Multiple token ranges per operator are not set up in the database yet. Run migration 0074 (multiple_token_ranges) in the Supabase SQL Editor.',
+    'Multiple token ranges per driver are not set up in the database yet. Run migration 0074 (multiple_token_ranges) in the Supabase SQL Editor.',
 }
 
 function describeRpcError(fn, error) {

@@ -106,7 +106,7 @@ const CODE_MESSAGES = {
   SELF: 'You cannot do that to your own account.',
   USE_CHANGE_PIN: 'Use Change PIN to change your own PIN.',
   WRONG_PIN: 'Your current PIN is wrong.',
-  HAS_ACTIVE_TASKS: 'That operator has tasks in progress. Finish or reassign them first.',
+  HAS_ACTIVE_TASKS: 'That driver has tasks in progress. Finish or reassign them first.',
   // Both of these arrive with a detailed server message that names the person
   // and the count, which describeRpcError prefers over these fallbacks. They
   // exist for the case where the message shape ever changes.
@@ -145,9 +145,9 @@ const MISSING_MIGRATION = {
   admin_delete_staff:
     'Deleting a user is not set up in the database yet. Run migration 0063 (delete_inactive_staff) in the Supabase SQL Editor.',
   admin_search_staff_pool:
-    'Reusing an existing operator is not set up in the database yet. Run migration 0070 (staff_pool_reuse) in the Supabase SQL Editor.',
+    'Reusing an existing driver is not set up in the database yet. Run migration 0070 (staff_pool_reuse) in the Supabase SQL Editor.',
   admin_attach_operator:
-    'Reusing an existing operator is not set up in the database yet. Run migration 0070 (staff_pool_reuse) in the Supabase SQL Editor.',
+    'Reusing an existing driver is not set up in the database yet. Run migration 0070 (staff_pool_reuse) in the Supabase SQL Editor.',
   default:
     'That feature is not set up in the database yet. Run the pending migrations in supabase/migrations in the Supabase SQL Editor.',
 }
