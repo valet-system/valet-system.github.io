@@ -136,7 +136,17 @@ export default function Spaces() {
           supabase.from('properties').select('id, name').eq('is_active', true).order('name'),
         'properties.name_hi',
       )
-      if (!cancelled) setProperties(data ?? [])
+      if (cancelled) return
+      const list = data ?? []
+      setProperties(list)
+
+      // Ambria Exotica is opened by default so a system_admin lands on a real
+      // list rather than an empty "pick a site" prompt. Matched by name, since
+      // ids differ per database. Functional update: it only fills an EMPTY
+      // choice, so a site picked while this list was loading is never
+      // overridden. No Exotica in the list leaves the prompt as it was.
+      const exotica = list.find((p) => /exotica/i.test(p.name))
+      if (exotica) setChosen((current) => current || exotica.id)
     })()
     return () => {
       cancelled = true
