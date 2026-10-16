@@ -86,3 +86,13 @@ verify_jwt = false
 # Note it sends NO CORS headers, deliberately: a browser must not be able to
 # call this, because the key would then have to live in a public bundle.
 verify_jwt = false
+
+
+[functions.guest-export]
+# Emails last month's guest list (name + phone) to sales@ambria.in. Invoked by
+# pg_cron over pg_net on the 2nd of each month, which sends no Authorization
+# header — so verification must be off. It is safe to expose because it is
+# idempotent per month (guest_export_log), its recipient is fixed in a secret,
+# and its reply carries no guest data. Choosing a month, forcing a resend or a
+# dry run needs the x-export-key header. Details in the function's own header.
+verify_jwt = false
