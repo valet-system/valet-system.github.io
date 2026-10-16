@@ -5,7 +5,7 @@
  * │                                                                     │
  * │ WHAT THIS FILE IS                                                   │
  * │   Emails sales@ambria.in a CSV of every guest who came last month —  │
- * │   name and phone, phone as +91XXXXXXXXXX. Run by pg_cron on the 2nd  │
+ * │   phone then name, phone as 91XXXXXXXXXX. Run by pg_cron on the 2nd  │
  * │   of each month (migration 0076).                                    │
  * │                                                                     │
  * │ ONE ROW PER PERSON, NOT PER VISIT                                    │
@@ -98,17 +98,17 @@ function monthSpan(y: number, m: number) {
 }
 
 /**
- * Normalises a stored phone to +91XXXXXXXXXX, or null if it is not a valid
+ * Normalises a stored phone to 91XXXXXXXXXX (no +), or null if it is not a valid
  * Indian mobile. Mirrors the shapes operator_check_in() sheds, because rows
  * from before that function normalised may still carry a country code.
  */
-function toE164(raw: unknown): string | null {
+function toIndianPhone(raw: unknown): string | null {
   let p = String(raw ?? '').replace(/\D/g, '')
   if (p.length === 14 && p.startsWith('0091')) p = p.slice(-10)
   else if (p.length === 13 && p.startsWith('910')) p = p.slice(-10)
   else if (p.length === 12 && p.startsWith('91')) p = p.slice(-10)
   else if (p.length === 11 && p.startsWith('0')) p = p.slice(-10)
-  return /^[6-9]\d{9}$/.test(p) ? `+91${p}` : null
+  return /^[6-9]\d{9}$/.test(p) ? `91${p}` : null
 }
 
 /**
@@ -229,7 +229,7 @@ Deno.serve(async (req) => {
     }
     for (const row of data ?? []) {
       visits++
-      const phone = toE164(row.guest_phone)
+      const phone = toIndianPhone(row.guest_phone)
       if (!phone) {
         skippedBadPhone++
         continue
@@ -267,11 +267,11 @@ Deno.serve(async (req) => {
   }
 
   // ── build the CSV ─────────────────────────────────────────────────
-  // The phone column is NOT defused: it is generated here, always +91 then ten
+  // The phone column is NOT defused: it is generated here, always 91 then ten
   // digits, so it cannot carry a formula. Defusing it would put an apostrophe
   // in front of every number.
-  const rows = ['Guest Name,Phone']
-  for (const [phone, name] of people) rows.push(`${field(name)},${field(phone, false)}`)
+  const rows = ['Phone,Guest Name']
+  for (const [phone, name] of people) rows.push(`${field(phone, false)},${field(name)}`)
   // BOM so Excel reads Hindi names as UTF-8; CRLF because that is what CSV is.
   const csv = '﻿' + rows.join('\r\n') + '\r\n'
 
