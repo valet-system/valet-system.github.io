@@ -470,7 +470,7 @@ export default function Login() {
             </Button>
           </form>
 
-          <InstallPrompt className="mt-4" />
+          <InstallPrompt className="mt-4 md:hidden" />
 
           <p className="mt-6 text-center text-xs leading-relaxed text-ink-subtle">
             {t('login.setByAdmin')}

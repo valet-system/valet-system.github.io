@@ -699,6 +699,9 @@ function UserMenu({ displayName, phone, onSignOut, placement = 'bar' }) {
   const t = useT()
   const [open, setOpen] = useState(false)
   const [canInstall, setCanInstall] = useState(false)
+  // Install is offered on phones only. Desktop uses the same bar placement, so
+  // this has to follow the screen width, not the placement.
+  const isDesktop = useMediaQuery('(min-width: 768px)')
   const ref = useRef(null)
   const location = useLocation()
   const navigate = useNavigate()
@@ -835,7 +838,8 @@ function UserMenu({ displayName, phone, onSignOut, placement = 'bar' }) {
             {/* Only rendered when the browser says an install is possible, and
                 never once already installed. A dead "Install" item that does
                 nothing is worse than no item. */}
-            {canInstall && !isStandalone() && (
+            {/* Phones only: the desktop rail never offers it (on request). */}
+            {canInstall && !isStandalone() && !isDesktop && (
               <Button
                 variant="ghost"
                 size="md"
