@@ -4,7 +4,7 @@
  * │                                                                     │
  * │ WHAT THIS FILE IS                                                   │
  * │   Every write in the car lifecycle:                                  │
- * │     checkIn({ guestName, guestPhone, carNumber, carTier, notes })    │
+ * │     checkIn({ guestPhone, carNumber, carTier, notes })                  │
  * │     completeParking(taskId, location)                                │
  * │     assignRetrieval(taskId, operatorId)                              │
  * │     dispatchVehicle(vehicleId, operatorId)                           │
@@ -254,43 +254,20 @@ function capitalise(text) {
  * Resolves { ok: true, token_number, vehicle_id, task_id, car_number, ... }.
  */
 export async function checkIn({
-  guestName,
-  guestNameHi,
   guestPhone,
   carNumber,
   carTier,
   notes,
 }) {
   const result = await call('operator_check_in', {
-    p_guest_name: guestName,
+    // No name is collected at check-in any more. NULL is what every reader and
+    // the WhatsApp sender already treat as "Guest".
+    p_guest_name: null,
     p_guest_phone: guestPhone,
     p_car_number: carNumber,
     p_car_tier: carTier,
     p_notes: notes || null,
   })
-
-  // ── the Hindi spelling, AFTER the token is issued and NOT awaited ──
-  //
-  // Sent as a SECOND call rather than as an argument to operator_check_in,
-  // because that function allocates a token, creates the vehicle and opens the
-  // parking task in one transaction — the piece that guarantees a burnt token
-  // cannot exist without a car behind it. Restating it to thread one more
-  // argument through is not worth the risk. See migration 0030.
-  //
-  // Not awaited, so the token is on screen before this runs. It carries no
-  // network conversion — the value came from the FORM, where it was generated
-  // while the operator was still typing the phone number — so all this does is
-  // one small write. A failure leaves guest_name_hi NULL and every screen shows
-  // the English name, which is the intended fallback.
-  if (result.ok && result.vehicle_id && guestNameHi) {
-    supabase
-      .rpc('set_guest_name_hi', { p_vehicle_id: result.vehicle_id, p_name_hi: guestNameHi })
-      .then(({ error }) => {
-        // Logged, never surfaced. The operator has moved on to the next car and
-        // there is nothing for them to do about it.
-        if (error) console.info('[checkin] could not store the Hindi name:', error.message)
-      })
-  }
 
   return result
 }
