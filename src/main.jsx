@@ -69,6 +69,13 @@ registerServiceWorker()
 // work on browsers without dvh support too. Ships — this is not a dev tool.
 trackAppHeight()
 
+// No pinch-zoom. The viewport meta asks for it, but Safari ignores that in the
+// browser, so the gesture itself is cancelled here. An accidental pinch used to
+// leave the page zoomed out with black bars on both sides.
+for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
+  document.addEventListener(type, (event) => event.preventDefault())
+}
+
 // Development only, and dropped from the production bundle. The root now clips
 // horizontal overflow so an operator never gets a page that slides sideways —
 // this is what keeps the CAUSE visible to whoever is building.

@@ -6,10 +6,18 @@
     <!--
       viewport-fit=cover  -> lets us pad around the iPhone notch and home
                              indicator using env(safe-area-inset-*) in CSS.
-      No maximum-scale     -> pinch-zoom stays available. Blocking it is an
-                             accessibility failure, and iOS ignores it anyway.
+      maximum-scale=1,
+      user-scalable=no     -> pinch-zoom is OFF, on request. An operator's
+                             accidental pinch left the page zoomed out with
+                             black bars either side. Safari ignores these two
+                             in the browser, so src/main.jsx also cancels the
+                             pinch gesture itself. Inputs are 16px, so iOS does
+                             not zoom on focus either.
     -->
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
 
     <title>Ambria Valet</title>
     <meta name="description" content="Valet parking management for Ambria properties." />
